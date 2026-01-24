@@ -1,0 +1,137 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Form BDC-2 - Schedule of Establishment Entry template.
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+
+{% block title %}{{ form_title }} - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:establishment_list' %}">Establishment</a></li>
+        <li class="breadcrumb-item active">{{ form_title }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-people"></i> {{ form_title }}</h5>
+    </div>
+    <div class="card-body">
+        {% if fiscal_year %}
+            <div class="alert alert-info mb-4">
+                <strong>Fiscal Year:</strong> {{ fiscal_year }}
+            </div>
+        {% endif %}
+        
+        <form method="post" novalidate>
+            {% csrf_token %}
+            
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="{{ form.department.id_for_label }}" class="form-label">
+                        {{ form.department.label }} <span class="text-danger">*</span>
+                    </label>
+                    {{ form.department }}
+                    {% if form.department.errors %}
+                        <div class="invalid-feedback d-block">{{ form.department.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="{{ form.designation.id_for_label }}" class="form-label">
+                        {{ form.designation.label }} <span class="text-danger">*</span>
+                    </label>
+                    {{ form.designation }}
+                    {% if form.designation.errors %}
+                        <div class="invalid-feedback d-block">{{ form.designation.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="col-md-4">
+                    <label for="{{ form.bps_scale.id_for_label }}" class="form-label">
+                        {{ form.bps_scale.label }} <span class="text-danger">*</span>
+                    </label>
+                    {{ form.bps_scale }}
+                    {% if form.bps_scale.errors %}
+                        <div class="invalid-feedback d-block">{{ form.bps_scale.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="col-md-4">
+                    <label for="{{ form.sanctioned_posts.id_for_label }}" class="form-label">
+                        {{ form.sanctioned_posts.label }} <span class="text-danger">*</span>
+                    </label>
+                    {{ form.sanctioned_posts }}
+                    {% if form.sanctioned_posts.errors %}
+                        <div class="invalid-feedback d-block">{{ form.sanctioned_posts.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="col-md-4">
+                    <label for="{{ form.occupied_posts.id_for_label }}" class="form-label">
+                        {{ form.occupied_posts.label }}
+                    </label>
+                    {{ form.occupied_posts }}
+                    {% if form.occupied_posts.errors %}
+                        <div class="invalid-feedback d-block">{{ form.occupied_posts.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="{{ form.annual_salary.id_for_label }}" class="form-label">
+                        {{ form.annual_salary.label }} <span class="text-danger">*</span>
+                    </label>
+                    <div class="input-group">
+                        <span class="input-group-text">Rs</span>
+                        {{ form.annual_salary }}
+                    </div>
+                    {% if form.annual_salary.errors %}
+                        <div class="invalid-feedback d-block">{{ form.annual_salary.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="{{ form.budget_head.id_for_label }}" class="form-label">
+                        {{ form.budget_head.label }} <span class="text-danger">*</span>
+                    </label>
+                    {{ form.budget_head }}
+                    {% if form.budget_head.errors %}
+                        <div class="invalid-feedback d-block">{{ form.budget_head.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="col-12">
+                    <div class="form-check">
+                        {{ form.is_pugf }}
+                        <label class="form-check-label" for="{{ form.is_pugf.id_for_label }}">
+                            {{ form.is_pugf.label }}
+                        </label>
+                    </div>
+                    <div class="form-text">Check if this is a Provincial cadre post (TMO, TO, etc.)</div>
+                </div>
+            </div>
+            
+            <hr class="my-4">
+            
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'budgeting:establishment_list' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg"></i> Save Establishment Entry
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

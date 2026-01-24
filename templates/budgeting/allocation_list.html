@@ -1,0 +1,130 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Budget Allocation List template.
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Budget Allocations - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-list-ul"></i> Budget Allocations</h2>
+    <div>
+        <a href="{% url 'budgeting:receipt_create' %}" class="btn btn-outline-success">
+            <i class="bi bi-plus-lg"></i> Receipt
+        </a>
+        <a href="{% url 'budgeting:expenditure_create' %}" class="btn btn-outline-danger">
+            <i class="bi bi-plus-lg"></i> Expenditure
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <select name="fiscal_year" class="form-select">
+                    <option value="">All Fiscal Years</option>
+                    {% for fy in fiscal_years %}
+                        <option value="{{ fy.pk }}" {% if request.GET.fiscal_year == fy.pk|stringformat:"i" %}selected{% endif %}>
+                            {{ fy.year_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="account_type" class="form-select">
+                    <option value="">All Types</option>
+                    <option value="EXP" {% if request.GET.account_type == 'EXP' %}selected{% endif %}>Expenditure</option>
+                    <option value="REV" {% if request.GET.account_type == 'REV' %}selected{% endif %}>Revenue</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <input type="text" name="search" class="form-control" placeholder="Search..." value="{{ request.GET.search }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-cfms w-100">
+                    <i class="bi bi-search"></i> Filter
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Allocations Table -->
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Description</th>
+                    <th class="text-end">Original</th>
+                    <th class="text-end">Released</th>
+                    <th class="text-end">Spent</th>
+                    <th class="text-end">Available</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alloc in allocations %}
+                <tr>
+                    <td>
+                        <code>{{ alloc.budget_head.tma_sub_object }}</code>
+                    </td>
+                    <td>
+                        {{ alloc.budget_head.tma_description|truncatewords:8 }}
+                        <br>
+                        <small class="text-muted">{{ alloc.fiscal_year }}</small>
+                    </td>
+                    <td class="text-end">Rs {{ alloc.original_allocation|floatformat:2|intcomma }}</td>
+                    <td class="text-end">Rs {{ alloc.released_amount|floatformat:2|intcomma }}</td>
+                    <td class="text-end">Rs {{ alloc.spent_amount|floatformat:2|intcomma }}</td>
+                    <td class="text-end">
+                        {% with available=alloc.get_available_budget %}
+                            <span class="{% if available > 0 %}text-success{% elif available == 0 %}text-warning{% else %}text-danger{% endif %}">
+                                Rs {{ available|floatformat:2|intcomma }}
+                            </span>
+                        {% endwith %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                        No allocations found. Create budget entries to see them here.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer">
+        <nav>
+            <ul class="pagination mb-0 justify-content-center">
+                {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode }}">Previous</a>
+                    </li>
+                {% endif %}
+                <li class="page-item disabled">
+                    <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                </li>
+                {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode }}">Next</a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

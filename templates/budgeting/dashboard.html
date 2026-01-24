@@ -1,0 +1,164 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Budgeting module dashboard template.
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Dashboard - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-speedometer2"></i> Budget Dashboard</h2>
+    {% if active_fiscal_year %}
+        <span class="badge bg-primary fs-6">FY {{ active_fiscal_year.year_name }}</span>
+    {% endif %}
+</div>
+
+{% if active_fiscal_year %}
+    <!-- Budget Summary Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <div class="stat-label">Total Receipts</div>
+                    <div class="stat-value text-success">Rs {{ total_receipts|floatformat:2|intcomma }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card danger">
+                <div class="card-body">
+                    <div class="stat-label">Total Expenditure</div>
+                    <div class="stat-value text-danger">Rs {{ total_expenditure|floatformat:2|intcomma }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card warning">
+                <div class="card-body">
+                    <div class="stat-label">Contingency (2%)</div>
+                    <div class="stat-value text-warning">Rs {{ contingency|floatformat:2|intcomma }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="stat-label">Balance</div>
+                    {% with balance=total_receipts|add:"-"|add:total_expenditure %}
+                        <div class="stat-value {% if total_receipts >= total_expenditure %}text-success{% else %}text-danger{% endif %}">
+                            Rs {{ total_receipts|floatformat:2|intcomma }}
+                        </div>
+                    {% endwith %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Validation Status -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <i class="bi bi-check-circle"></i> Budget Validation Status
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>2% Reserve Requirement</span>
+                            {% if reserve_valid %}
+                                <span class="badge bg-success"><i class="bi bi-check-lg"></i> Valid</span>
+                            {% else %}
+                                <span class="badge bg-danger"><i class="bi bi-x-lg"></i> Failed</span>
+                            {% endif %}
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Zero Deficit Check</span>
+                            {% if deficit_valid %}
+                                <span class="badge bg-success"><i class="bi bi-check-lg"></i> Valid</span>
+                            {% else %}
+                                <span class="badge bg-danger"><i class="bi bi-x-lg"></i> Failed</span>
+                            {% endif %}
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>Pending Quarterly Releases</span>
+                            <span class="badge bg-info">{{ pending_releases }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <i class="bi bi-lightning"></i> Quick Actions
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'budgeting:receipt_create' %}" class="btn btn-outline-success">
+                            <i class="bi bi-plus-lg"></i> Add Receipt Estimate (BDR-1)
+                        </a>
+                        <a href="{% url 'budgeting:expenditure_create' %}" class="btn btn-outline-danger">
+                            <i class="bi bi-plus-lg"></i> Add Expenditure Estimate (BDC-1)
+                        </a>
+                        <a href="{% url 'budgeting:establishment_create' %}" class="btn btn-outline-primary">
+                            <i class="bi bi-plus-lg"></i> Add Establishment Entry (BDC-2)
+                        </a>
+                        {% if active_fiscal_year.can_edit_budget %}
+                            <a href="{% url 'budgeting:budget_approval' active_fiscal_year.pk %}" class="btn btn-cfms">
+                                <i class="bi bi-check2-square"></i> Finalize Budget
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fiscal Year Status -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-calendar3"></i> Fiscal Year Status</span>
+            <a href="{% url 'budgeting:fiscal_year_list' %}" class="btn btn-sm btn-outline-secondary">View All</a>
+        </div>
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h5>{{ active_fiscal_year }}</h5>
+                    <p class="text-muted mb-0">
+                        {{ active_fiscal_year.start_date|date:"F j, Y" }} - {{ active_fiscal_year.end_date|date:"F j, Y" }}
+                    </p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    {% if active_fiscal_year.is_active %}
+                        <span class="badge bg-success me-2">Budget Entry Active</span>
+                    {% endif %}
+                    {% if active_fiscal_year.is_locked %}
+                        <span class="badge bg-danger me-2">Budget Locked</span>
+                    {% endif %}
+                    <span class="badge bg-{{ active_fiscal_year.status|lower }}">
+                        {{ active_fiscal_year.get_status_display }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% else %}
+    <!-- No Active Fiscal Year -->
+    <div class="alert alert-warning">
+        <h4><i class="bi bi-exclamation-triangle"></i> No Active Fiscal Year</h4>
+        <p class="mb-0">Please create and activate a fiscal year to begin budget entry.</p>
+    </div>
+    <a href="{% url 'budgeting:fiscal_year_create' %}" class="btn btn-cfms">
+        <i class="bi bi-plus-lg"></i> Create Fiscal Year
+    </a>
+{% endif %}
+{% endblock %}

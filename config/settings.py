@@ -45,11 +45,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
     
     # KP-CFMS Custom Apps
     'apps.core',
     'apps.users',
     'apps.finance',
+    'apps.budgeting',
 ]
 
 MIDDLEWARE = [
@@ -60,6 +62,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'apps.budgeting.middleware.BudgetLockMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'

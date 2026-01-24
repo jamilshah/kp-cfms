@@ -1,0 +1,121 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Schedule of Establishment List template.
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Schedule of Establishment - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-people"></i> Schedule of Establishment (BDC-2)</h2>
+    <a href="{% url 'budgeting:establishment_create' %}" class="btn btn-cfms">
+        <i class="bi bi-plus-lg"></i> Add Entry
+    </a>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-label">Total Sanctioned Posts</div>
+                <div class="stat-value">{{ total_sanctioned|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card success">
+            <div class="card-body">
+                <div class="stat-label">Occupied Posts</div>
+                <div class="stat-value text-success">{{ total_occupied|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card warning">
+            <div class="card-body">
+                <div class="stat-label">Vacant Posts</div>
+                <div class="stat-value text-warning">{{ total_sanctioned|add:"-"|add:total_occupied|intcomma }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Fiscal Year Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-center">
+            <div class="col-auto">
+                <label class="col-form-label">Fiscal Year:</label>
+            </div>
+            <div class="col-md-3">
+                <select name="fiscal_year" class="form-select" onchange="this.form.submit()">
+                    {% for fy in fiscal_years %}
+                        <option value="{{ fy.pk }}" {% if request.GET.fiscal_year == fy.pk|stringformat:"i" %}selected{% endif %}>
+                            {{ fy.year_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Establishment Table -->
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Department</th>
+                    <th>Designation</th>
+                    <th class="text-center">BPS</th>
+                    <th class="text-center">Sanctioned</th>
+                    <th class="text-center">Occupied</th>
+                    <th class="text-center">Vacant</th>
+                    <th class="text-end">Annual Salary</th>
+                    <th>Budget Head</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in establishment_entries %}
+                <tr>
+                    <td>{{ entry.department }}</td>
+                    <td>
+                        {{ entry.designation }}
+                        {% if entry.is_pugf %}
+                            <span class="badge bg-info ms-1">PUGF</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">{{ entry.bps_scale }}</td>
+                    <td class="text-center">{{ entry.sanctioned_posts }}</td>
+                    <td class="text-center text-success">{{ entry.occupied_posts }}</td>
+                    <td class="text-center">
+                        {% if entry.vacant_posts > 0 %}
+                            <span class="text-warning">{{ entry.vacant_posts }}</span>
+                        {% else %}
+                            <span class="text-success">0</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">Rs {{ entry.annual_salary|floatformat:2|intcomma }}</td>
+                    <td><code>{{ entry.budget_head.tma_sub_object }}</code></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center text-muted py-4">
+                        No establishment entries found.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

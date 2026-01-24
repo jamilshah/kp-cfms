@@ -1,0 +1,90 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Fiscal Year List template.
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+
+{% block title %}Fiscal Years - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-calendar3"></i> Fiscal Years</h2>
+    <a href="{% url 'budgeting:fiscal_year_create' %}" class="btn btn-cfms">
+        <i class="bi bi-plus-lg"></i> New Fiscal Year
+    </a>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Year</th>
+                    <th>Period</th>
+                    <th>Status</th>
+                    <th>Budget Entry</th>
+                    <th>SAE Number</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fy in fiscal_years %}
+                <tr>
+                    <td><strong>{{ fy.year_name }}</strong></td>
+                    <td>{{ fy.start_date|date:"M d, Y" }} - {{ fy.end_date|date:"M d, Y" }}</td>
+                    <td>
+                        {% if fy.status == 'DRAFT' %}
+                            <span class="badge bg-secondary">Draft</span>
+                        {% elif fy.status == 'SUBMITTED' %}
+                            <span class="badge bg-info">Submitted</span>
+                        {% elif fy.status == 'VERIFIED' %}
+                            <span class="badge bg-warning">Verified</span>
+                        {% elif fy.status == 'APPROVED' %}
+                            <span class="badge bg-primary">Approved</span>
+                        {% elif fy.status == 'LOCKED' %}
+                            <span class="badge bg-success">Locked</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if fy.is_active %}
+                            <span class="badge bg-success"><i class="bi bi-unlock"></i> Open</span>
+                        {% elif fy.is_locked %}
+                            <span class="badge bg-danger"><i class="bi bi-lock"></i> Locked</span>
+                        {% else %}
+                            <span class="badge bg-secondary"><i class="bi bi-dash"></i> Closed</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ fy.sae_number|default:"-" }}</td>
+                    <td class="text-end">
+                        <a href="{% url 'budgeting:fiscal_year_detail' fy.pk %}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye"></i> View
+                        </a>
+                        {% if fy.is_active and not fy.is_locked %}
+                            <a href="{% url 'budgeting:budget_approval' fy.pk %}" class="btn btn-sm btn-outline-success">
+                                <i class="bi bi-check2-square"></i> Finalize
+                            </a>
+                        {% endif %}
+                        {% if fy.is_locked %}
+                            <a href="{% url 'budgeting:quarterly_release' fy.pk %}" class="btn btn-sm btn-outline-warning">
+                                <i class="bi bi-cash"></i> Releases
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                        No fiscal years found. Create one to begin budget planning.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

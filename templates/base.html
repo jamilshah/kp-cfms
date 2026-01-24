@@ -1,0 +1,302 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Base template with Bootstrap 5 and navigation.
+-------------------------------------------------------------------------
+-->
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="KP-CFMS - Computerized Financial Management System for TMAs">
+    <title>{% block title %}KP-CFMS{% endblock %}</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.9"></script>
+    
+    <style>
+        :root {
+            --cfms-primary: #1a5276;
+            --cfms-secondary: #2e86ab;
+            --cfms-success: #28a745;
+            --cfms-warning: #ffc107;
+            --cfms-danger: #dc3545;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+        }
+        
+        .navbar-brand {
+            font-weight: 700;
+            color: white !important;
+        }
+        
+        .sidebar {
+            position: fixed;
+            top: 56px;
+            bottom: 0;
+            left: 0;
+            z-index: 100;
+            padding: 20px 0;
+            box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+            background-color: #212529;
+            width: 250px;
+        }
+        
+        .sidebar .nav-link {
+            color: rgba(255, 255, 255, 0.75);
+            padding: 0.75rem 1rem;
+            border-radius: 0.25rem;
+            margin: 0.1rem 0.5rem;
+        }
+        
+        .sidebar .nav-link:hover {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .sidebar .nav-link.active {
+            color: white;
+            background-color: var(--cfms-primary);
+        }
+        
+        .sidebar .nav-link i {
+            margin-right: 0.5rem;
+        }
+        
+        .sidebar-heading {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            padding: 0.5rem 1rem;
+            margin-top: 1rem;
+        }
+        
+        .main-content {
+            margin-left: 250px;
+            padding: 20px;
+            min-height: calc(100vh - 56px);
+        }
+        
+        .card {
+            border: none;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+        
+        .card-header {
+            background-color: white;
+            border-bottom: 1px solid #e9ecef;
+            font-weight: 600;
+        }
+        
+        .stat-card {
+            border-left: 4px solid var(--cfms-primary);
+        }
+        
+        .stat-card.success {
+            border-left-color: var(--cfms-success);
+        }
+        
+        .stat-card.warning {
+            border-left-color: var(--cfms-warning);
+        }
+        
+        .stat-card.danger {
+            border-left-color: var(--cfms-danger);
+        }
+        
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--cfms-primary);
+        }
+        
+        .stat-label {
+            font-size: 0.85rem;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+        
+        .table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+        }
+        
+        .btn-cfms {
+            background-color: var(--cfms-primary);
+            border-color: var(--cfms-primary);
+            color: white;
+        }
+        
+        .btn-cfms:hover {
+            background-color: #154360;
+            border-color: #154360;
+            color: white;
+        }
+        
+        .badge-status {
+            padding: 0.4em 0.8em;
+            font-weight: 500;
+        }
+        
+        .form-label {
+            font-weight: 500;
+        }
+        
+        /* Print styles */
+        @media print {
+            .sidebar, .navbar, .no-print {
+                display: none !important;
+            }
+            .main-content {
+                margin-left: 0 !important;
+            }
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top" style="background-color: var(--cfms-primary);">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{% url 'budgeting:dashboard' %}">
+                <i class="bi bi-bank"></i> KP-CFMS
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle"></i>
+                            {% if user.is_authenticated %}
+                                {{ user.get_full_name }}
+                            {% else %}
+                                Guest
+                            {% endif %}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            {% if user.is_authenticated %}
+                                <li><span class="dropdown-item-text text-muted">{{ user.get_role_display }}</span></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{% url 'admin:index' %}"><i class="bi bi-gear"></i> Admin</a></li>
+                                <li><a class="dropdown-item" href="{% url 'admin:logout' %}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
+                            {% else %}
+                                <li><a class="dropdown-item" href="{% url 'admin:login' %}"><i class="bi bi-box-arrow-in-right"></i> Login</a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'budgeting:dashboard' %}">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </a>
+            </li>
+            
+            <li class="sidebar-heading">Budget Planning</li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'fiscal_year' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:fiscal_year_list' %}">
+                    <i class="bi bi-calendar3"></i> Fiscal Years
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'allocation' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:allocation_list' %}">
+                    <i class="bi bi-list-ul"></i> Budget Allocations
+                </a>
+            </li>
+            
+            <li class="sidebar-heading">Budget Entry</li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'receipt' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:receipt_create' %}">
+                    <i class="bi bi-arrow-down-circle"></i> BDR-1: Receipts
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'expenditure' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:expenditure_create' %}">
+                    <i class="bi bi-arrow-up-circle"></i> BDC-1: Expenditure
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'establishment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:establishment_list' %}">
+                    <i class="bi bi-people"></i> BDC-2: Establishment
+                </a>
+            </li>
+            
+            <li class="sidebar-heading">Reports</li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'sae' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:sae_list' %}">
+                    <i class="bi bi-file-earmark-text"></i> SAE Records
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Messages -->
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+        
+        <!-- Breadcrumb -->
+        {% block breadcrumb %}{% endblock %}
+        
+        <!-- Page Content -->
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Auto-dismiss alerts after 5 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+                var alerts = document.querySelectorAll('.alert');
+                alerts.forEach(function(alert) {
+                    var bsAlert = new bootstrap.Alert(alert);
+                    bsAlert.close();
+                });
+            }, 5000);
+        });
+        
+        // Format currency inputs
+        document.querySelectorAll('input[type="number"][step="0.01"]').forEach(function(input) {
+            input.addEventListener('blur', function() {
+                if (this.value) {
+                    this.value = parseFloat(this.value).toFixed(2);
+                }
+            });
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
