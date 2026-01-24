@@ -7,12 +7,34 @@ Developers: Ali Asghar, Akhtar Munir and Zarif Khan
 Description: Reusable model mixins for audit logging and timestamps.
 -------------------------------------------------------------------------
 """
+import uuid
 from typing import Optional
 from django.db import models
 from django.conf import settings
 
 
-class TimeStampedMixin(models.Model):
+class UUIDMixin(models.Model):
+    """
+    Abstract mixin that adds a public_id UUID field.
+    
+    Used for external references (APIs, URLs) while keeping
+    integer IDs for internal foreign keys.
+    """
+    
+    public_id = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+        verbose_name="Public ID",
+        help_text="Unique UUID for external reference."
+    )
+    
+    class Meta:
+        abstract = True
+
+
+class TimeStampedMixin(UUIDMixin):
     """
     Abstract mixin that adds created_at and updated_at timestamps.
     

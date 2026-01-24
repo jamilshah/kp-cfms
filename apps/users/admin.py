@@ -22,14 +22,17 @@ class CustomUserAdmin(UserAdmin):
     
     list_display = (
         'cnic', 'email', 'first_name', 'last_name',
-        'role', 'designation', 'is_active', 'is_staff'
+        'role', 'designation', 'is_active', 'is_staff', 'public_id'
     )
+    list_display_links = ('cnic', 'email')
     list_filter = ('role', 'is_active', 'is_staff', 'department')
-    search_fields = ('cnic', 'email', 'first_name', 'last_name', 'designation')
+    search_fields = ('cnic', 'email', 'first_name', 'last_name', 'designation', 'public_id')
     ordering = ('first_name', 'last_name')
     
+    readonly_fields = ('public_id',)
+    
     fieldsets = (
-        (None, {'fields': ('cnic', 'password')}),
+        (None, {'fields': ('public_id', 'cnic', 'password')}),
         (_('Personal Info'), {
             'fields': ('first_name', 'last_name', 'email', 'phone')
         }),
@@ -53,3 +56,6 @@ class CustomUserAdmin(UserAdmin):
             ),
         }),
     )
+    
+    class Media:
+        js = ('js/admin_cnic_mask.js',)

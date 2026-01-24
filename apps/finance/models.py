@@ -14,7 +14,7 @@ from django.db import models
 from django.core.validators import RegexValidator
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.mixins import AuditLogMixin, StatusMixin
+from apps.core.mixins import AuditLogMixin, StatusMixin, UUIDMixin
 
 
 class AccountType(models.TextChoices):
@@ -46,7 +46,7 @@ class FundType(models.TextChoices):
     OTHER = 'OTH', _('Other')
 
 
-class FunctionCode(models.Model):
+class FunctionCode(UUIDMixin):
     """
     Functional classification of budget heads.
     

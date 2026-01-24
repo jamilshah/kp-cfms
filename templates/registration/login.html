@@ -1,0 +1,80 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Description: Login page template.
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+
+{% block title %}Login - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white text-center py-3">
+                <h4 class="mb-0"><i class="bi bi-bank"></i> KP-CFMS</h4>
+                <small>Login to access your account</small>
+            </div>
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors|join:", " }}
+                        </div>
+                    {% endif %}
+                    
+                    <div class="mb-3">
+                        <label for="id_username" class="form-label">CNIC</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-person-vcard"></i></span>
+                            <input type="text" name="username" class="form-control" id="id_username" placeholder="12345-1234567-1" required autofocus>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="id_password" class="form-label">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-key"></i></span>
+                            <input type="password" name="password" class="form-control" id="id_password" required>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-box-arrow-in-right"></i> Login
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer text-center bg-light">
+                <small class="text-muted">Local Government Department, KP</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const cnicInput = document.getElementById('id_username');
+    if (cnicInput) {
+        cnicInput.addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+            if (value.length > 13) value = value.slice(0, 13);
+            
+            // Format: XXXXX-XXXXXXX-X
+            if (value.length > 12) {
+                value = value.slice(0, 5) + '-' + value.slice(5, 12) + '-' + value.slice(12);
+            } else if (value.length > 5) {
+                value = value.slice(0, 5) + '-' + value.slice(5);
+            }
+            
+            e.target.value = value;
+        });
+    }
+});
+</script>
+{% endblock %}

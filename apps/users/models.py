@@ -8,6 +8,7 @@ Description: Custom User model with role-based access control (RBAC).
              Implements the Maker/Checker/Approver hierarchy.
 -------------------------------------------------------------------------
 """
+import uuid
 from typing import Optional, List
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
@@ -126,6 +127,15 @@ class CustomUser(AbstractUser):
     
     # Remove username field, use CNIC instead
     username = None
+    
+    public_id = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+        verbose_name=_('Public ID'),
+        help_text=_('Unique UUID for external reference.')
+    )
     
     cnic = models.CharField(
         max_length=15,
