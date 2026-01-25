@@ -4,13 +4,17 @@ System: KP-CFMS (Computerized Financial Management System)
 Client: Local Government Department, Khyber Pakhtunkhwa
 Team Lead: Jamil Shah
 Developers: Ali Asghar, Akhtar Munir and Zarif Khan
-Description: Reusable model mixins for audit logging and timestamps.
+Description: Reusable model mixins for audit logging, timestamps,
+             and multi-tenancy support.
 -------------------------------------------------------------------------
 """
 import uuid
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from django.db import models
 from django.conf import settings
+
+if TYPE_CHECKING:
+    from apps.core.models import Organization
 
 
 class UUIDMixin(models.Model):
@@ -123,3 +127,61 @@ class StatusMixin(models.Model):
     
     class Meta:
         abstract = True
+
+
+class TenantAwareMixin(models.Model):
+    """
+    Abstract mixin for multi-tenancy support.
+    
+    CRITICAL: All transactional models that should be scoped to an
+    organization MUST inherit from this mixin.
+    
+    The TenantMiddleware will automatically filter queries based on
+    the current user's organization. LCB/LGD users (organization=None)
+    can access all records but with restricted write permissions.
+    
+    Attributes:
+        organization: ForeignKey to the owning Organization (tenant).
+                      Nullable to allow data migration. New records should always set this.
+    """
+    
+    organization = models.ForeignKey(
+        'core.Organization',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="%(class)s_records",
+        verbose_name="Organization",
+        help_text="The TMA/Organization that owns this record."
+    )
+    
+    class Meta:
+        abstract = True
+    
+    def is_owned_by(self, org: 'Organization') -> bool:
+        """
+        Check if this record belongs to the given organization.
+        
+        Args:
+            org: The organization to check ownership against.
+            
+        Returns:
+            True if the record belongs to the organization.
+        """
+        return self.organization_id == org.id
+    
+    @classmethod
+    def get_tenant_filtered_queryset(cls, organization: Optional['Organization']):
+        """
+        Get a queryset filtered by organization.
+        
+        Args:
+            organization: The organization to filter by. If None, returns all records.
+            
+        Returns:
+            Filtered queryset.
+        """
+        if organization is None:
+            # LCB/LGD users see all records
+            return cls.objects.all()
+        return cls.objects.filter(organization=organization)

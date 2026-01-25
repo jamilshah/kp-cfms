@@ -218,16 +218,16 @@ class ScheduleOfEstablishmentForm(forms.ModelForm):
     class Meta:
         model = ScheduleOfEstablishment
         fields = [
-            'department', 'designation', 'bps_scale', 
+            'department', 'designation_name', 'bps_scale', 
             'sanctioned_posts', 'occupied_posts', 'annual_salary',
-            'budget_head', 'is_pugf'
+            'budget_head', 'post_type'
         ]
         widgets = {
             'department': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'e.g., Administration'
             }),
-            'designation': forms.TextInput(attrs={
+            'designation_name': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'e.g., Junior Clerk'
             }),
@@ -252,8 +252,8 @@ class ScheduleOfEstablishmentForm(forms.ModelForm):
             'budget_head': forms.Select(attrs={
                 'class': 'form-select'
             }),
-            'is_pugf': forms.CheckboxInput(attrs={
-                'class': 'form-check-input'
+            'post_type': forms.Select(attrs={
+                'class': 'form-select'
             }),
         }
     

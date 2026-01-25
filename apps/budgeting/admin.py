@@ -180,31 +180,35 @@ class ScheduleOfEstablishmentAdmin(admin.ModelAdmin):
     """
     
     list_display = [
-        'designation', 'department', 'bps_scale', 
+        'designation_name', 'department', 'bps_scale', 
         'sanctioned_posts', 'occupied_posts', 'vacant_display',
-        'annual_salary_display', 'is_pugf'
+        'annual_salary_display', 'post_type', 'approval_status'
     ]
-    list_filter = ['fiscal_year', 'department', 'bps_scale', 'is_pugf']
-    search_fields = ['designation', 'department']
+    list_filter = ['fiscal_year', 'department', 'bps_scale', 'post_type', 'approval_status']
+    search_fields = ['designation_name', 'department']
     autocomplete_fields = ['budget_head']
     ordering = ['fiscal_year', 'department', '-bps_scale']
     
     fieldsets = (
         (None, {
-            'fields': ('fiscal_year', 'department', 'designation', 'bps_scale')
+            'fields': ('fiscal_year', 'department', 'designation_name', 'bps_scale', 'post_type')
         }),
         (_('Posts'), {
             'fields': ('sanctioned_posts', 'occupied_posts')
         }),
         (_('Salary'), {
-            'fields': ('annual_salary', 'budget_head', 'is_pugf')
+            'fields': ('annual_salary', 'budget_head')
+        }),
+        (_('Approval'), {
+            'fields': ('approval_status', 'recommended_by', 'recommended_at', 'approved_by', 'approved_at', 'rejection_reason'),
+            'classes': ('collapse',)
         }),
         (_('Audit Trail'), {
             'fields': ('created_at', 'updated_at', 'created_by', 'updated_by'),
             'classes': ('collapse',)
         }),
     )
-    readonly_fields = ['created_at', 'updated_at', 'created_by', 'updated_by']
+    readonly_fields = ['created_at', 'updated_at', 'created_by', 'updated_by', 'recommended_at', 'approved_at']
     
     def vacant_display(self, obj: ScheduleOfEstablishment) -> str:
         """Display vacant posts with color coding."""

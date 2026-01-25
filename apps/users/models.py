@@ -5,7 +5,8 @@ Client: Local Government Department, Khyber Pakhtunkhwa
 Team Lead: Jamil Shah
 Developers: Ali Asghar, Akhtar Munir and Zarif Khan
 Description: Custom User model with role-based access control (RBAC).
-             Implements the Maker/Checker/Approver hierarchy.
+             Implements the Maker/Checker/Approver hierarchy with
+             multi-tenancy support.
 -------------------------------------------------------------------------
 """
 import uuid
@@ -22,9 +23,9 @@ class UserRole(models.TextChoices):
     Based on the KP TMA Budget Rules 2016:
     - Dealing Assistant (Maker): Creates bills and budget entries
     - Accountant (Checker): Pre-audits and verifies transactions
-    - TMO (Approver): Final approval authority
+    - TMO (Approver): Final approval authority for Local posts
     - TO Finance: Budget oversight and releases
-    - LCB Finance Officer: Provincial oversight
+    - LCB Finance Officer: Provincial oversight, approves PUGF posts
     - Cashier: Records payments and collections
     - System Admin: System configuration
     """
@@ -114,12 +115,14 @@ class CustomUser(AbstractUser):
     Custom User model for KP-CFMS.
     
     Uses CNIC (National Identity Card) as the unique identifier
-    instead of username. Implements role-based access control.
+    instead of username. Implements role-based access control
+    with multi-tenancy support.
     
     Attributes:
         cnic: Unique 13-digit CNIC number.
         email: User's email address.
         role: User's role in the TMA hierarchy.
+        organization: The TMA/Organization this user belongs to (nullable for LCB/LGD).
         designation: Official job title.
         department: Associated department/wing.
         phone: Contact phone number.
@@ -154,6 +157,19 @@ class CustomUser(AbstractUser):
         verbose_name=_('Role'),
         help_text=_('User role in the TMA hierarchy.')
     )
+    
+    # Multi-tenancy: Link user to their organization
+    # NULL for LCB/LGD users who have oversight across all organizations
+    organization = models.ForeignKey(
+        'core.Organization',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='users',
+        verbose_name=_('Organization'),
+        help_text=_('TMA this user belongs to. Null for LCB/LGD oversight staff.')
+    )
+    
     designation = models.CharField(
         max_length=100,
         blank=True,
@@ -230,6 +246,43 @@ class CustomUser(AbstractUser):
         """Check if user has LCB Finance Officer role."""
         return self.role == UserRole.LCB_OFFICER
     
+    def is_lcb_admin(self) -> bool:
+        """
+        Check if user is an LCB admin with cross-tenant access.
+        
+        LCB admins have organization=None and role=LCB.
+        They can view all TMAs but have restricted write access.
+        """
+        return self.role == UserRole.LCB_OFFICER and self.organization is None
+    
+    def is_oversight_user(self) -> bool:
+        """
+        Check if user has oversight access (LCB/LGD/Admin without org).
+        
+        Oversight users can view all organizations but have
+        restricted write permissions (only status changes).
+        """
+        return self.organization is None and self.role in [
+            UserRole.LCB_OFFICER,
+            UserRole.SYSTEM_ADMIN
+        ]
+    
+    def can_access_organization(self, org) -> bool:
+        """
+        Check if user can access data from the given organization.
+        
+        Args:
+            org: The Organization to check access for.
+            
+        Returns:
+            True if user can access the organization's data.
+        """
+        # Oversight users can access all orgs
+        if self.is_oversight_user():
+            return True
+        # Regular users can only access their own org
+        return self.organization_id == org.id
+    
     def can_create_bills(self) -> bool:
         """Check if user can create bills (Maker role)."""
         return self.is_maker() or self.is_superuser
@@ -253,3 +306,19 @@ class CustomUser(AbstractUser):
     def can_approve_coa_requests(self) -> bool:
         """Check if user can approve Chart of Accounts requests."""
         return self.is_lcb_officer() or self.is_superuser
+    
+    def can_approve_pugf_posts(self) -> bool:
+        """
+        Check if user can approve PUGF posts (LCB only).
+        
+        PUGF posts require LCB approval, not TMO approval.
+        """
+        return self.is_lcb_officer() or self.is_superuser
+    
+    def can_recommend_pugf_posts(self) -> bool:
+        """
+        Check if user can recommend (not approve) PUGF posts.
+        
+        TMO can recommend PUGF posts but LCB must approve.
+        """
+        return self.is_approver() or self.is_superuser
