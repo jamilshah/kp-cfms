@@ -800,6 +800,108 @@ class ScheduleOfEstablishment(AuditLogMixin, TenantAwareMixin):
                 'establishment_status', 'justification', 
                 'financial_impact', 'updated_at'
             ])
+    
+    def calculate_total_budget_requirement(self) -> dict:
+        """
+        Calculate total budget requirement using employee-wise data.
+        
+        This method performs precise budget estimation based on:
+        1. Filled Posts: Sum of actual employee costs from BudgetEmployee records
+           OR fallback to annual_salary * occupied_posts if no employees added.
+        2. Vacant Posts: Calculated using BPS Stage-0 salary scales
+        
+        Updates:
+            - self.estimated_budget with total calculated amount
+        
+        Returns:
+            Dictionary with breakdown: {
+                'filled_cost': Decimal,
+                'vacant_cost': Decimal,
+                'total_cost': Decimal,
+                'filled_count': int,
+                'vacant_count': int,
+                'mode': str  # 'employee_wise' or 'legacy'
+            }
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Check if we have employee records
+        filled_employees = self.employees.filter(is_vacant=False)
+        employee_count = filled_employees.count()
+        
+        # Determine calculation mode
+        if employee_count > 0:
+            # MODE 1: Employee-wise calculation (Precise)
+            filled_count = employee_count
+            filled_cost = Decimal('0.00')
+            
+            for emp in filled_employees:
+                # Formula: (Basic + Allowances) * 12 + Annual Increment
+                # (Annual increment is added once per year, not monthly)
+                annual_cost = (
+                    (emp.current_basic_pay + emp.monthly_allowances) * 12
+                ) + emp.annual_increment_amount
+                filled_cost += annual_cost
+            
+            filled_cost = filled_cost.quantize(Decimal('0.01'))
+            mode = 'employee_wise'
+            
+        else:
+            # MODE 2: Legacy fallback using occupied_posts and annual_salary
+            filled_count = self.occupied_posts or 0
+            
+            if filled_count > 0 and self.annual_salary:
+                # Use annual_salary as the per-post cost
+                filled_cost = (self.annual_salary * filled_count).quantize(Decimal('0.01'))
+            else:
+                filled_cost = Decimal('0.00')
+            
+            mode = 'legacy'
+        
+        # Calculate Vacant Posts Cost
+        vacant_count = max(0, self.sanctioned_posts - filled_count)
+        
+        vacant_cost = Decimal('0.00')
+        if vacant_count > 0:
+            # Fetch BPS Salary Scale for this grade
+            scale = BPSSalaryScale.objects.filter(bps_grade=self.bps_scale).first()
+            
+            if scale:
+                # Calculate Stage-0 Gross Salary
+                basic = scale.basic_pay_min
+                hra = basic * scale.house_rent_percent
+                adhoc = basic * scale.adhoc_relief_total_percent
+                fixed_allowances = scale.conveyance_allowance + scale.medical_allowance
+                
+                stage_0_gross = basic + hra + adhoc + fixed_allowances
+                
+                # Annual cost for vacant posts
+                vacant_cost = (stage_0_gross * 12 * vacant_count).quantize(Decimal('0.01'))
+            else:
+                # Warn if scale not found
+                logger.warning(
+                    f"BPSSalaryScale not found for grade {self.bps_scale}. "
+                    f"Using 0 for vacant posts cost."
+                )
+        
+        # Calculate Total
+        total_cost = (filled_cost + vacant_cost).quantize(Decimal('0.01'))
+        
+        # Update estimated_budget (don't overwrite occupied_posts in legacy mode)
+        self.estimated_budget = total_cost
+        if mode == 'employee_wise':
+            self.occupied_posts = filled_count
+        self.save(update_fields=['estimated_budget', 'occupied_posts', 'updated_at'])
+        
+        return {
+            'filled_cost': filled_cost,
+            'vacant_cost': vacant_cost,
+            'total_cost': total_cost,
+            'filled_count': filled_count,
+            'vacant_count': vacant_count,
+            'mode': mode,
+        }
 
 
 class QuarterlyRelease(AuditLogMixin, TenantAwareMixin):

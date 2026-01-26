@@ -28,6 +28,7 @@ from apps.budgeting.models import (
     QuarterlyRelease, SAERecord, BudgetStatus, ReleaseQuarter,
     DesignationMaster, Department
 )
+from apps.budgeting.models_employee import BudgetEmployee
 from apps.budgeting.forms import (
     FiscalYearForm, ReceiptEstimateForm, ExpenditureEstimateForm,
     ScheduleOfEstablishmentForm, BudgetApprovalForm, QuarterlyReleaseForm,
@@ -675,14 +676,50 @@ class SmartCalculatorView(LoginRequiredMixin, View):
         })
     
     def post(self, request: HttpRequest, pk: int) -> HttpResponse:
-        """Calculate and save budget estimate."""
+        """
+        Calculate budget estimate using employee-wise data.
+        
+        Triggers the calculate_total_budget_requirement() method and returns
+        the breakdown of filled vs vacant costs.
+        """
         entry = get_object_or_404(ScheduleOfEstablishment, pk=pk)
         
         try:
-            data = json.loads(request.body)
+            data = json.loads(request.body) if request.body else {}
+        except json.JSONDecodeError as e:
+            return JsonResponse({'error': f'Invalid JSON: {e}'}, status=400)
+        
+        # Legacy support: If filled_posts and last_month_bill are provided,
+        # use the old calculation method for backward compatibility
+        if 'filled_posts' in data or 'last_month_bill' in data:
+            return self._legacy_calculate(request, entry, data)
+        
+        # New method: Use employee-wise calculation
+        try:
+            result = entry.calculate_total_budget_requirement()
+            
+            return JsonResponse({
+                'success': True,
+                'saved': True,
+                'method': 'employee_wise',
+                'filled_count': result['filled_count'],
+                'vacant_count': result['vacant_count'],
+                'filled_cost': float(result['filled_cost']),
+                'vacant_cost': float(result['vacant_cost']),
+                'total_cost': float(result['total_cost']),
+                'estimated_budget': float(result['total_cost']),
+                'message': f'Budget calculated: Rs {result["total_cost"]:,.2f} '
+                          f'(Filled: {result["filled_count"]}, Vacant: {result["vacant_count"]})'
+            })
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    def _legacy_calculate(self, request: HttpRequest, entry, data: dict) -> HttpResponse:
+        """Legacy calculation method using lump-sum bill data."""
+        try:
             filled_posts = int(data.get('filled_posts', 0))
             last_month_bill = Decimal(str(data.get('last_month_bill', 0)))
-        except (json.JSONDecodeError, ValueError, TypeError) as e:
+        except (ValueError, TypeError) as e:
             return JsonResponse({'error': f'Invalid input: {e}'}, status=400)
         
         from apps.budgeting.models import BPSSalaryScale
@@ -731,6 +768,7 @@ class SmartCalculatorView(LoginRequiredMixin, View):
         return JsonResponse({
             'success': True,
             'saved': saved,
+            'method': 'legacy_lump_sum',
             'filled_posts': filled_posts,
             'vacant_posts': vacant_posts,
             'filled_annual_cost': float(filled_annual_cost),
@@ -901,8 +939,13 @@ class SetupDashboardView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context['department_count'] = Department.objects.count()
         context['designation_count'] = DesignationMaster.objects.count()
-        from apps.finance.models import BudgetHead
+        
+        from apps.finance.models import BudgetHead, Fund
         context['coa_count'] = BudgetHead.objects.count()
+        context['fund_count'] = Fund.objects.count()
+        
+        from apps.core.models import BankAccount
+        context['bank_account_count'] = BankAccount.objects.count()
         return context
 
 
@@ -1025,10 +1068,121 @@ class DesignationDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
     success_url = reverse_lazy('budgeting:setup_designations')
     context_object_name = 'item'
     
+class EmployeeListView(LoginRequiredMixin, ListView):
+    """List employees linked to a schedule entry."""
+    model = BudgetEmployee
+    template_name = 'budgeting/employee_list.html'
+    context_object_name = 'employees'
+    
+    def get_schedule(self):
+        return get_object_or_404(ScheduleOfEstablishment, pk=self.kwargs['schedule_pk'])
+    
+    def get_queryset(self):
+        return BudgetEmployee.objects.filter(
+            schedule_id=self.kwargs['schedule_pk'],
+            is_vacant=False
+        ).order_by('name')
+    
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['title'] = _('Delete Designation')
-        context['back_url'] = reverse_lazy('budgeting:setup_designations')
+        schedule = self.get_schedule()
+        context['schedule'] = schedule
+        
+        # Calculate stats
+        result = schedule.calculate_total_budget_requirement()
+        context['stats'] = result
+        return context
+
+
+class EmployeeCreateView(LoginRequiredMixin, CreateView):
+    """Add new employee to schedule."""
+    model = BudgetEmployee
+    fields = ['name', 'cnic', 'personnel_number', 'current_basic_pay', 'monthly_allowances', 'annual_increment_amount']
+    template_name = 'budgeting/setup_form.html'
+    
+    def get_schedule(self):
+        return get_object_or_404(ScheduleOfEstablishment, pk=self.kwargs['schedule_pk'])
+    
+    def get_success_url(self):
+        return reverse_lazy('budgeting:employee_list', kwargs={'schedule_pk': self.kwargs['schedule_pk']})
+    
+    def form_valid(self, form):
+        schedule = self.get_schedule()
+        form.instance.schedule = schedule
+        form.instance.is_vacant = False
+        response = super().form_valid(form)
+        
+        # Recalculate budget
+        schedule.calculate_total_budget_requirement()
+        messages.success(self.request, _('Employee added successfully.'))
+        return response
+    
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        for field in form.fields:
+            form.fields[field].widget.attrs.update({'class': 'form-control'})
+        return form
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        schedule = self.get_schedule()
+        context['title'] = _(f'Add Employee - {schedule.designation_name}')
+        context['back_url'] = self.get_success_url()
+        return context
+
+
+class EmployeeUpdateView(LoginRequiredMixin, UpdateView):
+    """Edit employee details."""
+    model = BudgetEmployee
+    fields = ['name', 'cnic', 'personnel_number', 'current_basic_pay', 'monthly_allowances', 'annual_increment_amount']
+    template_name = 'budgeting/setup_form.html'
+    
+    def get_success_url(self):
+        return reverse_lazy('budgeting:employee_list', kwargs={'schedule_pk': self.object.schedule.pk})
+    
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        # Recalculate budget
+        self.object.schedule.calculate_total_budget_requirement()
+        messages.success(self.request, _('Employee updated successfully.'))
+        return response
+    
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        for field in form.fields:
+            form.fields[field].widget.attrs.update({'class': 'form-control'})
+        return form
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _(f'Edit Employee - {self.object.name}')
+        context['back_url'] = self.get_success_url()
+        return context
+
+
+class EmployeeDeleteView(LoginRequiredMixin, DeleteView):
+    """Delete employee."""
+    model = BudgetEmployee
+    template_name = 'budgeting/setup_confirm_delete.html'
+    context_object_name = 'item'
+    
+    def get_success_url(self):
+        return reverse_lazy('budgeting:employee_list', kwargs={'schedule_pk': self.object.schedule.pk})
+        
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        schedule = self.object.schedule
+        response = super().delete(request, *args, **kwargs)
+        
+        # Recalculate budget
+        schedule.calculate_total_budget_requirement()
+        messages.success(request, _('Employee removed successfully.'))
+        return response
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _('Remove Employee')
+        context['back_url'] = self.get_success_url()
         return context
 
 

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Bank Accounts - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-bank"></i> Bank Accounts Management</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{% url 'budgeting:setup_dashboard' %}">Setup</a></li>
+                <li class="breadcrumb-item active">Bank Accounts</li>
+            </ol>
+        </nav>
+    </div>
+    <a href="{% url 'budgeting:setup_bank_account_add' %}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> Add New Account
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Organization</th>
+                    <th>Bank & Branch</th>
+                    <th>Account Title & Number</th>
+                    <th>GL Code</th>
+                    <th class="text-center">Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for acc in bank_accounts %}
+                <tr>
+                    <td class="fw-bold">{{ acc.organization.name }}</td>
+                    <td>
+                        <div class="fw-bold">{{ acc.bank_name }}</div>
+                        <div class="small text-muted">{{ acc.branch_code }}</div>
+                    </td>
+                    <td>
+                        <div class="fw-bold">{{ acc.title }}</div>
+                        <div class="small text-muted font-monospace">{{ acc.masked_account_number }}</div>
+                    </td>
+                    <td>
+                        {% if acc.gl_code %}
+                            <span class="badge bg-light text-dark border" title="{{ acc.gl_code.tma_description }}">
+                                {{ acc.gl_code.tma_sub_object }}
+                            </span>
+                        {% else %}
+                            <span class="text-muted fst-italic">Not Linked</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if acc.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <a href="{% url 'budgeting:setup_bank_account_edit' acc.pk %}" class="btn btn-sm btn-outline-primary me-1" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <a href="{% url 'budgeting:setup_bank_account_delete' acc.pk %}" class="btn btn-sm btn-outline-danger" title="Delete">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted">
+                        <i class="bi bi-bank display-4 d-block mb-2"></i>
+                        No bank accounts found.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

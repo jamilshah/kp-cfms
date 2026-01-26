@@ -216,22 +216,28 @@ class ScheduleOfEstablishmentForm(forms.ModelForm):
     Restricted editing for existing posts (view-only sanctioned count).
     """
     
+    department_select = forms.ModelChoiceField(
+        queryset=Department.objects.filter(is_active=True).order_by('name'),
+        label=_('Department/Wing'),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        empty_label=_("Select Department...")
+    )
+    
+    designation = forms.ModelChoiceField(
+        queryset=DesignationMaster.objects.filter(is_active=True).order_by('name'),
+        label=_('Designation'),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        empty_label=_("Select Designation...")
+    )
+
     class Meta:
         model = ScheduleOfEstablishment
         fields = [
-            'department', 'designation_name', 'bps_scale', 
+            'department_select', 'designation', 'bps_scale', 
             'sanctioned_posts', 'occupied_posts', 'annual_salary',
             'budget_head', 'post_type'
         ]
         widgets = {
-            'department': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., Administration'
-            }),
-            'designation_name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g., Junior Clerk'
-            }),
             'bps_scale': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'min': '1',
@@ -265,6 +271,15 @@ class ScheduleOfEstablishmentForm(forms.ModelForm):
         self.fiscal_year = fiscal_year
         super().__init__(*args, **kwargs)
         
+        # Initialize dropdowns for existing instance
+        if self.instance.pk:
+            if self.instance.department:
+                try:
+                    dept = Department.objects.get(name=self.instance.department)
+                    self.fields['department_select'].initial = dept
+                except Department.DoesNotExist:
+                    pass
+        
         # Filter to salary heads only (A01*)
         self.fields['budget_head'].queryset = BudgetHead.objects.filter(
             pifra_object__startswith='A01',
@@ -282,6 +297,29 @@ class ScheduleOfEstablishmentForm(forms.ModelForm):
         if fiscal_year and not fiscal_year.can_edit_budget():
             for field in self.fields.values():
                 field.disabled = True
+
+    def save(self, commit=True):
+        """Map dropdown selections to text fields."""
+        instance = super().save(commit=False)
+        
+        # Map Department
+        department = self.cleaned_data.get('department_select')
+        if department:
+            instance.department = department.name
+            
+        # Map Designation details
+        # designation FK is set by form, but we need to sync redundant fields
+        if instance.designation:
+            instance.designation_name = instance.designation.name
+            # If creating new or empty, sync BPS/Post Type
+            if not instance.pk: 
+                instance.bps_scale = instance.designation.bps_scale
+                instance.post_type = instance.designation.post_type
+        
+        if commit:
+            instance.save()
+            
+        return instance
 
 
 class NewPostProposalForm(forms.ModelForm):

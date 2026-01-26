@@ -38,22 +38,22 @@ Description: Form BDC-2 - Schedule of Establishment Entry template.
             
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label for="{{ form.department.id_for_label }}" class="form-label">
-                        {{ form.department.label }} <span class="text-danger">*</span>
+                    <label for="{{ form.department_select.id_for_label }}" class="form-label">
+                        {{ form.department_select.label }} <span class="text-danger">*</span>
                     </label>
-                    {{ form.department }}
-                    {% if form.department.errors %}
-                        <div class="invalid-feedback d-block">{{ form.department.errors|join:", " }}</div>
+                    {{ form.department_select }}
+                    {% if form.department_select.errors %}
+                        <div class="invalid-feedback d-block">{{ form.department_select.errors|join:", " }}</div>
                     {% endif %}
                 </div>
                 
                 <div class="col-md-6">
-                    <label for="{{ form.designation_name.id_for_label }}" class="form-label">
-                        {{ form.designation_name.label }} <span class="text-danger">*</span>
+                    <label for="{{ form.designation.id_for_label }}" class="form-label">
+                        {{ form.designation.label }} <span class="text-danger">*</span>
                     </label>
-                    {{ form.designation_name }}
-                    {% if form.designation_name.errors %}
-                        <div class="invalid-feedback d-block">{{ form.designation_name.errors|join:", " }}</div>
+                    {{ form.designation }}
+                    {% if form.designation.errors %}
+                        <div class="invalid-feedback d-block">{{ form.designation.errors|join:", " }}</div>
                     {% endif %}
                 </div>
                 

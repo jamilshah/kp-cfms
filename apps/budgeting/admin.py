@@ -18,6 +18,18 @@ from apps.budgeting.models import (
     QuarterlyRelease, SAERecord, BudgetStatus,
     DesignationMaster, BPSSalaryScale
 )
+from apps.budgeting.models_employee import BudgetEmployee
+
+
+class BudgetEmployeeInline(admin.TabularInline):
+    """Inline admin for managing employees within ScheduleOfEstablishment."""
+    model = BudgetEmployee
+    extra = 0
+    fields = ['name', 'personnel_number', 'current_basic_pay', 'monthly_allowances', 'annual_increment_amount', 'is_vacant']
+    readonly_fields = []
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(is_vacant=False)
 
 
 @admin.register(FiscalYear)
@@ -161,7 +173,7 @@ class BudgetAllocationAdmin(admin.ModelAdmin):
         available = obj.get_available_budget()
         color = 'green' if available > Decimal('0') else 'red'
         return format_html(
-            '<span style="color: {}">Rs {:,.2f}</span>',
+            '<span style="color: {}">{:,.2f}</span>',
             color, available
         )
     available_display.short_description = _('Available')
@@ -183,12 +195,14 @@ class ScheduleOfEstablishmentAdmin(admin.ModelAdmin):
     list_display = [
         'designation_name', 'department', 'bps_scale', 
         'sanctioned_posts', 'occupied_posts', 'vacant_display',
-        'annual_salary_display', 'post_type', 'approval_status'
+        'employee_count_display', 'estimated_budget_display',
+        'post_type', 'approval_status'
     ]
     list_filter = ['fiscal_year', 'department', 'bps_scale', 'post_type', 'approval_status']
     search_fields = ['designation_name', 'department']
     autocomplete_fields = ['budget_head']
     ordering = ['fiscal_year', 'department', '-bps_scale']
+    inlines = [BudgetEmployeeInline]
     
     fieldsets = (
         (None, {
@@ -197,8 +211,9 @@ class ScheduleOfEstablishmentAdmin(admin.ModelAdmin):
         (_('Posts'), {
             'fields': ('sanctioned_posts', 'occupied_posts')
         }),
-        (_('Salary'), {
-            'fields': ('annual_salary', 'budget_head')
+        (_('Budget Estimation'), {
+            'fields': ('estimated_budget', 'annual_salary', 'budget_head'),
+            'description': _('Use the Employees inline below to add actual staff data for precise budget calculation.')
         }),
         (_('Approval'), {
             'fields': ('approval_status', 'recommended_by', 'recommended_at', 'approved_by', 'approved_at', 'rejection_reason'),
@@ -211,6 +226,8 @@ class ScheduleOfEstablishmentAdmin(admin.ModelAdmin):
     )
     readonly_fields = ['created_at', 'updated_at', 'created_by', 'updated_by', 'recommended_at', 'approved_at']
     
+    actions = ['recalculate_budget']
+    
     def vacant_display(self, obj: ScheduleOfEstablishment) -> str:
         """Display vacant posts with color coding."""
         vacant = obj.vacant_posts
@@ -218,10 +235,27 @@ class ScheduleOfEstablishmentAdmin(admin.ModelAdmin):
         return format_html('<span style="color: {}">{}</span>', color, vacant)
     vacant_display.short_description = _('Vacant')
     
-    def annual_salary_display(self, obj: ScheduleOfEstablishment) -> str:
-        """Format annual salary."""
-        return f"Rs {obj.annual_salary:,.2f}"
-    annual_salary_display.short_description = _('Annual Salary')
+    def employee_count_display(self, obj: ScheduleOfEstablishment) -> str:
+        """Display count of linked employees."""
+        count = obj.employees.filter(is_vacant=False).count()
+        return f"{count} emp"
+    employee_count_display.short_description = _('Employees')
+    
+    def estimated_budget_display(self, obj: ScheduleOfEstablishment) -> str:
+        """Format estimated budget."""
+        return f"Rs {obj.estimated_budget:,.0f}"
+    estimated_budget_display.short_description = _('Est. Budget')
+    
+    @admin.action(description=_('Recalculate budget from employees'))
+    def recalculate_budget(self, request, queryset):
+        """Recalculate budget for selected establishment entries."""
+        for entry in queryset:
+            result = entry.calculate_total_budget_requirement()
+            self.message_user(
+                request, 
+                f'{entry.designation_name}: Rs {result["total_cost"]:,.2f} '
+                f'(Filled: {result["filled_count"]}, Vacant: {result["vacant_count"]})'
+            )
     
     def save_model(self, request, obj, form, change):
         """Track created_by and updated_by."""

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Employees - {{ schedule.designation_name }} - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-people"></i> Manage Employees</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{% url 'budgeting:establishment_list' %}">Schedule of Establishment</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'budgeting:establishment_detail' schedule.pk %}">{{ schedule.designation_name }}</a></li>
+                <li class="breadcrumb-item active">Employees</li>
+            </ol>
+        </nav>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'budgeting:employee_add' schedule.pk %}" class="btn btn-primary">
+            <i class="bi bi-person-plus"></i> Add Employee
+        </a>
+    </div>
+</div>
+
+<!-- Budget Impact Summary -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card bg-light border-primary h-100">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Filled Posts Cost ({{ stats.filled_count }})</h6>
+                <h3 class="card-title text-primary">Rs {{ stats.filled_cost|floatformat:2 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-light border-warning h-100">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Vacant Posts Cost ({{ stats.vacant_count }})</h6>
+                <h3 class="card-title text-warning">Rs {{ stats.vacant_cost|floatformat:2 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-light border-success h-100">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Total Estimated Budget</h6>
+                <h3 class="card-title text-success">Rs {{ stats.total_cost|floatformat:2 }}</h3>
+                <small class="text-muted">Total Posts: {{ schedule.sanctioned_posts }}</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-white py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Employee List</h5>
+            <span class="badge bg-secondary">{{ employees.count }} / {{ schedule.sanctioned_posts }} Posts Filled</span>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Employee Details</th>
+                    <th>Basic Pay</th>
+                    <th>Allowances</th>
+                    <th>Annual Cost</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for emp in employees %}
+                <tr>
+                    <td>
+                        <div class="fw-bold">{{ emp.name }}</div>
+                        <div class="small text-muted">
+                            {% if emp.personnel_number %}ID: {{ emp.personnel_number }}{% endif %}
+                            {% if emp.cnic %} | CNIC: {{ emp.cnic }}{% endif %}
+                        </div>
+                    </td>
+                    <td>Rs {{ emp.current_basic_pay|floatformat:2 }}</td>
+                    <td>Rs {{ emp.monthly_allowances|floatformat:2 }}</td>
+                    <td class="fw-bold text-success">Rs {{ emp.annual_cost|floatformat:2 }}</td>
+                    <td class="text-end">
+                        <a href="{% url 'budgeting:employee_edit' emp.pk %}" class="btn btn-sm btn-outline-primary me-1" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <a href="{% url 'budgeting:employee_delete' emp.pk %}" class="btn btn-sm btn-outline-danger" title="Remove">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-5 text-muted">
+                        <i class="bi bi-people display-4 d-block mb-3"></i>
+                        No employees added yet.<br>
+                        <small>Add employees to calculated actual budget requirement.</small>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

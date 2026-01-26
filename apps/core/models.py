@@ -11,7 +11,7 @@ Description: Geographic and organizational models for TMAs including
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.mixins import TimeStampedMixin
+from apps.core.mixins import TimeStampedMixin, AuditLogMixin, StatusMixin
 
 
 class Division(TimeStampedMixin):
@@ -214,16 +214,6 @@ class Organization(TimeStampedMixin):
         verbose_name=_('PLA Account No'),
         help_text=_('Personal Ledger Account number at AG Office.')
     )
-    bank_name = models.CharField(
-        max_length=100,
-        blank=True,
-        verbose_name=_('Bank Name')
-    )
-    bank_account_no = models.CharField(
-        max_length=50,
-        blank=True,
-        verbose_name=_('Bank Account No')
-    )
     is_active = models.BooleanField(
         default=True,
         verbose_name=_('Is Active')
@@ -251,6 +241,81 @@ class Organization(TimeStampedMixin):
     def is_oversight_body(self) -> bool:
         """Check if this is an oversight organization (LCB/LGD)."""
         return self.org_type in [OrganizationType.LCB, OrganizationType.LGD]
+
+
+class BankAccount(AuditLogMixin, StatusMixin):
+    """
+    Bank account linked to an organization and the General Ledger.
+    
+    Each organization can have multiple bank accounts. Each account is
+    linked to a BudgetHead (GL code) to enable proper accounting.
+    
+    Attributes:
+        organization: The TMA/Organization that owns this account.
+        bank_name: Name of the bank (e.g., "National Bank of Pakistan").
+        branch_code: Bank branch code.
+        account_number: Bank account number (unique).
+        title: Account title/name.
+        gl_code: Link to BudgetHead (Asset account in GL).
+        is_active: Whether account is currently active.
+    """
+    
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.PROTECT,
+        related_name='bank_accounts',
+        verbose_name=_('Organization'),
+        help_text=_('The TMA/Organization that owns this account.')
+    )
+    bank_name = models.CharField(
+        max_length=100,
+        verbose_name=_('Bank Name'),
+        help_text=_('Name of the bank (e.g., "National Bank of Pakistan").')
+    )
+    branch_code = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name=_('Branch Code'),
+        help_text=_('Bank branch code.')
+    )
+    account_number = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name=_('Account Number'),
+        help_text=_('Bank account number (must be unique).')
+    )
+    title = models.CharField(
+        max_length=150,
+        verbose_name=_('Account Title'),
+        help_text=_('Account title/name as per bank records.')
+    )
+    gl_code = models.ForeignKey(
+        'finance.BudgetHead',
+        on_delete=models.PROTECT,
+        related_name='bank_accounts',
+        verbose_name=_('GL Code'),
+        help_text=_('Link to BudgetHead (Asset account in General Ledger).')
+    )
+    # is_active inherited from StatusMixin
+    
+    class Meta:
+        verbose_name = _('Bank Account')
+        verbose_name_plural = _('Bank Accounts')
+        ordering = ['organization__name', 'bank_name', 'account_number']
+        indexes = [
+            models.Index(fields=['organization']),
+            models.Index(fields=['account_number']),
+        ]
+    
+    def __str__(self) -> str:
+        return f"{self.bank_name} - {self.account_number} ({self.organization.name})"
+    
+    @property
+    def masked_account_number(self) -> str:
+        """Return masked account number for display (e.g., ****1234)."""
+        if len(self.account_number) > 4:
+            return f"****{self.account_number[-4:]}"
+        return self.account_number
 
 
 # Backward compatibility alias - DEPRECATED, use Organization instead

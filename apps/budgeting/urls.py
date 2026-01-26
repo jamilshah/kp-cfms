@@ -9,6 +9,15 @@ Description: URL configuration for the budgeting module.
 """
 from django.urls import path
 
+from apps.finance.views import (
+    BudgetHeadListView, BudgetHeadCreateView, 
+    BudgetHeadUpdateView, BudgetHeadDeleteView,
+    FundListView, FundCreateView, FundUpdateView, FundDeleteView
+)
+from apps.core.views import (
+    BankAccountListView, BankAccountCreateView, 
+    BankAccountUpdateView, BankAccountDeleteView
+)
 from apps.budgeting.views import (
     BudgetingDashboardView,
     FiscalYearListView, FiscalYearCreateView, FiscalYearUpdateView, FiscalYearDetailView,
@@ -22,11 +31,18 @@ from apps.budgeting.views import (
     DepartmentUpdateView, DepartmentDeleteView,
     DesignationListView, DesignationCreateView,
     DesignationUpdateView, DesignationDeleteView,
-    SalaryStructureView
+    SalaryStructureView,
+    EmployeeListView, EmployeeCreateView, 
+    EmployeeUpdateView, EmployeeDeleteView
 )
 from apps.finance.views import (
     BudgetHeadListView, BudgetHeadCreateView, 
-    BudgetHeadUpdateView, BudgetHeadDeleteView
+    BudgetHeadUpdateView, BudgetHeadDeleteView,
+    FundListView, FundCreateView, FundUpdateView, FundDeleteView
+)
+from apps.core.views import (
+    BankAccountListView, BankAccountCreateView, 
+    BankAccountUpdateView, BankAccountDeleteView
 )
 
 app_name = 'budgeting'
@@ -70,6 +86,12 @@ urlpatterns = [
     # SAE (Schedule of Authorized Expenditure)
     path('sae/', SAEListView.as_view(), name='sae_list'),
     path('sae/<int:pk>/', SAEDetailView.as_view(), name='sae_detail'),
+
+    # Employee Management (Nested under Schedule Entry)
+    path('establishment/<int:schedule_pk>/employees/', EmployeeListView.as_view(), name='employee_list'),
+    path('establishment/<int:schedule_pk>/employees/add/', EmployeeCreateView.as_view(), name='employee_add'),
+    path('establishment/employees/<int:pk>/edit/', EmployeeUpdateView.as_view(), name='employee_edit'),
+    path('establishment/employees/<int:pk>/delete/', EmployeeDeleteView.as_view(), name='employee_delete'),
     
     # Setup Workspace (Admin Only)
     path('setup/', SetupDashboardView.as_view(), name='setup_dashboard'),
@@ -85,6 +107,18 @@ urlpatterns = [
     
     path('setup/salary-structure/', SalaryStructureView.as_view(), name='setup_salary_structure'),
     
+    # Funds
+    path('setup/funds/', FundListView.as_view(), name='setup_funds'),
+    path('setup/funds/add/', FundCreateView.as_view(), name='setup_fund_add'),
+    path('setup/funds/<int:pk>/edit/', FundUpdateView.as_view(), name='setup_fund_edit'),
+    path('setup/funds/<int:pk>/delete/', FundDeleteView.as_view(), name='setup_fund_delete'),
+    
+    # Bank Accounts
+    path('setup/bank-accounts/', BankAccountListView.as_view(), name='setup_bank_accounts'),
+    path('setup/bank-accounts/add/', BankAccountCreateView.as_view(), name='setup_bank_account_add'),
+    path('setup/bank-accounts/<int:pk>/edit/', BankAccountUpdateView.as_view(), name='setup_bank_account_edit'),
+    path('setup/bank-accounts/<int:pk>/delete/', BankAccountDeleteView.as_view(), name='setup_bank_account_delete'),
+
     # Chart of Accounts (CoA)
     path('setup/coa/', BudgetHeadListView.as_view(), name='setup_coa_list'),
     path('setup/coa/add/', BudgetHeadCreateView.as_view(), name='setup_coa_add'),

@@ -11,7 +11,7 @@ Description: Django admin configuration for core models including
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.models import Division, District, Tehsil, Organization
+from apps.core.models import Division, District, Tehsil, Organization, BankAccount
 
 
 @admin.register(Division)
@@ -83,7 +83,7 @@ class TehsilAdmin(admin.ModelAdmin):
 class OrganizationAdmin(admin.ModelAdmin):
     """Admin configuration for Organization model (Tenant)."""
     
-    list_display = ['name', 'org_type', 'tehsil', 'ddo_code', 'user_count', 'is_active']
+    list_display = ['name', 'org_type', 'tehsil', 'ddo_code', 'bank_account_count', 'user_count', 'is_active']
     list_filter = ['org_type', 'tehsil__district__division', 'tehsil__district', 'is_active']
     search_fields = ['name', 'ddo_code', 'pla_account_no', 'tehsil__name']
     ordering = ['name']
@@ -94,7 +94,7 @@ class OrganizationAdmin(admin.ModelAdmin):
             'fields': ('name', 'org_type', 'tehsil', 'is_active')
         }),
         (_('Financial Details'), {
-            'fields': ('ddo_code', 'pla_account_no', 'bank_name', 'bank_account_no')
+            'fields': ('ddo_code', 'pla_account_no')
         }),
         (_('System Information'), {
             'fields': ('public_id', 'created_at', 'updated_at'),
@@ -102,7 +102,48 @@ class OrganizationAdmin(admin.ModelAdmin):
         }),
     )
     
+    def bank_account_count(self, obj: Organization) -> int:
+        """Count bank accounts for this organization."""
+        return obj.bank_accounts.count()
+    bank_account_count.short_description = _('Bank Accounts')
+    
     def user_count(self, obj: Organization) -> int:
         """Count users in this organization."""
         return obj.users.count()
     user_count.short_description = _('Users')
+
+
+@admin.register(BankAccount)
+class BankAccountAdmin(admin.ModelAdmin):
+    """Admin configuration for BankAccount model."""
+    
+    list_display = ['account_number', 'bank_name', 'title', 'organization', 'gl_code', 'is_active']
+    list_filter = ['bank_name', 'is_active', 'organization']
+    search_fields = ['account_number', 'title', 'bank_name', 'organization__name']
+    ordering = ['organization__name', 'bank_name', 'account_number']
+    readonly_fields = ['public_id', 'created_at', 'updated_at', 'created_by', 'updated_by']
+    
+    fieldsets = (
+        (_('Bank Details'), {
+            'fields': ('organization', 'bank_name', 'branch_code', 'account_number', 'title')
+        }),
+        (_('GL Integration'), {
+            'fields': ('gl_code',),
+            'description': _('Link this bank account to a General Ledger account (typically an Asset account).')
+        }),
+        (_('Status'), {
+            'fields': ('is_active',)
+        }),
+        (_('Audit Trail'), {
+            'fields': ('public_id', 'created_at', 'updated_at', 'created_by', 'updated_by'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def save_model(self, request, obj, form, change):
+        """Override to set audit fields."""
+        if not change:
+            obj.created_by = request.user
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
+

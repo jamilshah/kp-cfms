@@ -9,8 +9,74 @@ from django.utils.translation import gettext_lazy as _
 from typing import Dict, Any
 
 from apps.users.permissions import AdminRequiredMixin
-from apps.finance.models import BudgetHead
+from apps.finance.models import BudgetHead, Fund
 from apps.finance.forms import BudgetHeadForm
+
+
+class FundListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
+    """List all funds."""
+    model = Fund
+    template_name = 'finance/setup_fund_list.html'
+    context_object_name = 'funds'
+    ordering = ['code']
+
+
+class FundCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
+    """Create new fund."""
+    model = Fund
+    fields = ['code', 'name', 'description', 'is_active']
+    template_name = 'budgeting/setup_form.html'
+    success_url = reverse_lazy('budgeting:setup_funds')
+    
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields['code'].widget.attrs.update({'class': 'form-control'})
+        form.fields['name'].widget.attrs.update({'class': 'form-control'})
+        form.fields['description'].widget.attrs.update({'class': 'form-control', 'rows': 3})
+        form.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
+        return form
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _('Add New Fund')
+        context['back_url'] = reverse_lazy('budgeting:setup_funds')
+        return context
+
+
+class FundUpdateView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
+    """Update fund."""
+    model = Fund
+    fields = ['code', 'name', 'description', 'is_active']
+    template_name = 'budgeting/setup_form.html'
+    success_url = reverse_lazy('budgeting:setup_funds')
+    
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields['code'].widget.attrs.update({'class': 'form-control', 'readonly': 'readonly'})
+        form.fields['name'].widget.attrs.update({'class': 'form-control'})
+        form.fields['description'].widget.attrs.update({'class': 'form-control', 'rows': 3})
+        form.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
+        return form
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _('Edit Fund')
+        context['back_url'] = reverse_lazy('budgeting:setup_funds')
+        return context
+
+
+class FundDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
+    """Delete fund."""
+    model = Fund
+    template_name = 'budgeting/setup_confirm_delete.html'
+    success_url = reverse_lazy('budgeting:setup_funds')
+    context_object_name = 'item'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _('Delete Fund')
+        context['back_url'] = reverse_lazy('budgeting:setup_funds')
+        return context
 
 class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
     """List all Budget Heads (Chart of Accounts)."""

@@ -80,16 +80,16 @@
                     
                     <h5 class="mb-3 text-muted">Settings</h5>
                     <div class="row g-3 mb-4">
-                         <div class="col-md-4">
-                            <label for="{{ form.fund_id.id_for_label }}" class="form-label">Fund ID</label>
-                            {{ form.fund_id }}
-                            <div class="form-text">1=Current, 2=Dev</div>
-                            {% if form.fund_id.errors %}
-                                <div class="text-danger small">{{ form.fund_id.errors.0 }}</div>
+                         <div class="col-12">
+                            <label for="{{ form.fund.id_for_label }}" class="form-label">Fund</label>
+                            {{ form.fund }}
+                            <div class="form-text">Select the fund this budget head belongs to.</div>
+                            {% if form.fund.errors %}
+                                <div class="text-danger small">{{ form.fund.errors.0 }}</div>
                             {% endif %}
                         </div>
                         
-                        <div class="col-md-4 pt-4">
+                        <div class="col-md-3 pt-2">
                             <div class="form-check">
                                 {{ form.is_active }}
                                 <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
@@ -98,11 +98,29 @@
                             </div>
                         </div>
                         
-                        <div class="col-md-4 pt-4">
+                        <div class="col-md-3 pt-2">
                             <div class="form-check">
                                 {{ form.is_charged }}
                                 <label class="form-check-label" for="{{ form.is_charged.id_for_label }}">
                                     Charged (Non-Votable)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 pt-2">
+                            <div class="form-check">
+                                {{ form.budget_control }}
+                                <label class="form-check-label" for="{{ form.budget_control.id_for_label }}">
+                                    Budget Limits Apply
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 pt-2">
+                            <div class="form-check">
+                                {{ form.posting_allowed }}
+                                <label class="form-check-label" for="{{ form.posting_allowed.id_for_label }}">
+                                    Allow Posting
                                 </label>
                             </div>
                         </div>
