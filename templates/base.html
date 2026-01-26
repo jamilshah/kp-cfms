@@ -258,6 +258,15 @@ Description: Base template with Bootstrap 5 and navigation.
                     <i class="bi bi-file-earmark-text"></i> SAE Records
                 </a>
             </li>
+            
+            {% if user.is_superuser or user.role == 'ADM' %}
+                <li class="sidebar-heading">Administration</li>
+                <li class="nav-item">
+                    <a class="nav-link {% if 'setup' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:setup_dashboard' %}">
+                        <i class="bi bi-gear"></i> Setup Workspace
+                    </a>
+                </li>
+            {% endif %}
         </ul>
     </nav>
 

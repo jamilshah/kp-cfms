@@ -1,0 +1,253 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Schedule of Establishment detail template with approval actions.
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}{{ entry.designation_name }} - KP-CFMS{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:establishment_list' %}">Establishment</a></li>
+        <li class="breadcrumb-item active">{{ entry.designation_name }}</li>
+    </ol>
+</nav>
+
+<div class="row">
+    <!-- Main Details Card -->
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-person-badge me-2"></i>{{ entry.designation_name }}
+                </h4>
+                <span class="badge {{ status_class }} fs-6">{{ entry.get_approval_status_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <h6 class="text-muted mb-1">Department</h6>
+                        <p class="fs-5">{{ entry.department }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted mb-1">BPS Grade</h6>
+                        <p class="fs-5">BPS-{{ entry.bps_scale }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted mb-1">Post Type</h6>
+                        <p class="fs-5">
+                            {% if entry.is_pugf %}
+                                <span class="badge bg-info">PUGF</span>
+                            {% else %}
+                                <span class="badge bg-secondary">LOCAL</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h6 class="text-muted mb-2">Sanctioned Posts</h6>
+                                <p class="fs-3 fw-bold mb-0">{{ entry.sanctioned_posts }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-success bg-opacity-10">
+                            <div class="card-body text-center">
+                                <h6 class="text-muted mb-2">Occupied Posts</h6>
+                                <p class="fs-3 fw-bold text-success mb-0">{{ entry.occupied_posts }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-warning bg-opacity-10">
+                            <div class="card-body text-center">
+                                <h6 class="text-muted mb-2">Vacant Posts</h6>
+                                <p class="fs-3 fw-bold text-warning mb-0">{{ entry.vacant_posts }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <h6 class="text-muted mb-1">Annual Salary per Post</h6>
+                        <p class="fs-5">Rs {{ entry.annual_salary|floatformat:2|intcomma }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted mb-1">Estimated Annual Budget</h6>
+                        <p class="fs-5 fw-bold text-primary">
+                            {% if entry.estimated_budget %}
+                                Rs {{ entry.estimated_budget|floatformat:2|intcomma }}
+                            {% else %}
+                                <span class="text-muted">Not calculated</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+                
+                {% if entry.is_proposed %}
+                <hr>
+                <div class="row">
+                    <div class="col-12">
+                        <h6 class="text-muted mb-2">Justification for New Posts</h6>
+                        <div class="alert alert-info">
+                            {{ entry.justification }}
+                        </div>
+                        <p><strong>Financial Impact:</strong> 
+                            <span class="text-danger">Rs {{ entry.financial_impact|floatformat:2|intcomma }}</span>
+                        </p>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <hr>
+                
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <h6 class="text-muted mb-1">Budget Head</h6>
+                        <p><code>{{ entry.budget_head.tma_sub_object }}</code></p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted mb-1">Fiscal Year</h6>
+                        <p>{{ entry.fiscal_year.year_name }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Approval History -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Approval History</h5>
+            </div>
+            <div class="card-body">
+                {% if entry.recommended_by %}
+                <div class="d-flex align-items-start mb-3">
+                    <div class="rounded-circle bg-warning text-dark p-2 me-3">
+                        <i class="bi bi-hand-thumbs-up"></i>
+                    </div>
+                    <div>
+                        <p class="mb-0"><strong>Recommended by</strong> {{ entry.recommended_by.get_full_name }}</p>
+                        <small class="text-muted">{{ entry.recommended_at|date:"F j, Y H:i" }}</small>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if entry.approved_by %}
+                <div class="d-flex align-items-start mb-3">
+                    <div class="rounded-circle bg-success text-white p-2 me-3">
+                        <i class="bi bi-check-lg"></i>
+                    </div>
+                    <div>
+                        <p class="mb-0"><strong>Approved by</strong> {{ entry.approved_by.get_full_name }}</p>
+                        <small class="text-muted">{{ entry.approved_at|date:"F j, Y H:i" }}</small>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if entry.rejection_reason %}
+                <div class="d-flex align-items-start mb-3">
+                    <div class="rounded-circle bg-danger text-white p-2 me-3">
+                        <i class="bi bi-x-lg"></i>
+                    </div>
+                    <div>
+                        <p class="mb-0"><strong>Rejected</strong></p>
+                        <p class="text-danger">{{ entry.rejection_reason }}</p>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if not entry.recommended_by and not entry.approved_by and not entry.rejection_reason %}
+                <p class="text-muted text-center py-3">
+                    <i class="bi bi-hourglass-split fs-4 d-block mb-2"></i>
+                    Pending initial review.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Actions Sidebar -->
+    <div class="col-lg-4">
+        <div class="card sticky-top" style="top: 1rem;">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Actions</h5>
+            </div>
+            <div class="card-body">
+                {% if allowed_actions %}
+                <p class="text-muted mb-3">You can perform the following actions:</p>
+                
+                <form method="post" action="{% url 'budgeting:establishment_approve' entry.pk %}">
+                    {% csrf_token %}
+                    
+                    {% if 'VERIFIED' in allowed_actions %}
+                    <button type="submit" name="action" value="verify" class="btn btn-info w-100 mb-2">
+                        <i class="bi bi-check-circle me-2"></i>Verify Entry
+                    </button>
+                    {% endif %}
+                    
+                    {% if 'RECOMMENDED' in allowed_actions %}
+                    <button type="submit" name="action" value="recommend" class="btn btn-warning w-100 mb-2">
+                        <i class="bi bi-hand-thumbs-up me-2"></i>Recommend to LCB
+                    </button>
+                    {% endif %}
+                    
+                    {% if 'APPROVED' in allowed_actions %}
+                    <button type="submit" name="action" value="approve" class="btn btn-success w-100 mb-2">
+                        <i class="bi bi-check-lg me-2"></i>Approve
+                    </button>
+                    {% endif %}
+                    
+                    {% if 'REJECTED' in allowed_actions %}
+                    <hr>
+                    <div class="mb-3">
+                        <label for="rejection_reason" class="form-label">Rejection Reason</label>
+                        <textarea class="form-control" id="rejection_reason" name="rejection_reason" 
+                                  rows="3" placeholder="Provide reason for rejection..."></textarea>
+                    </div>
+                    <button type="submit" name="action" value="reject" class="btn btn-outline-danger w-100">
+                        <i class="bi bi-x-lg me-2"></i>Reject
+                    </button>
+                    {% endif %}
+                </form>
+                
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-lock fs-1 text-muted d-block mb-2"></i>
+                    <p class="text-muted mb-0">
+                        {% if entry.approval_status == 'APPROVED' %}
+                            This entry has been approved.
+                        {% elif entry.approval_status == 'REJECTED' %}
+                            This entry has been rejected.
+                        {% else %}
+                            You don't have permission to act on this entry.
+                        {% endif %}
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-footer">
+                <a href="{% url 'budgeting:establishment_list' %}" class="btn btn-outline-secondary w-100">
+                    <i class="bi bi-arrow-left me-2"></i>Back to List
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

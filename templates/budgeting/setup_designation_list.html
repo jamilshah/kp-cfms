@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Designations - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-person-badge"></i> Designations</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{% url 'budgeting:setup_dashboard' %}">Setup</a></li>
+                <li class="breadcrumb-item active">Designations</li>
+            </ol>
+        </nav>
+    </div>
+    <a href="{% url 'budgeting:setup_designation_add' %}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> Add Designation
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Designation Name</th>
+                    <th class="text-center">BPS</th>
+                    <th class="text-center">Type</th>
+                    <th class="text-center">Active</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for desig in designations %}
+                <tr>
+                    <td class="fw-bold">{{ desig.name }}</td>
+                    <td class="text-center">BPS-{{ desig.bps_scale }}</td>
+                    <td class="text-center">
+                        {% if desig.post_type == 'PUGF' %}
+                            <span class="badge bg-info">PUGF</span>
+                        {% else %}
+                            <span class="badge bg-secondary">LOCAL</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if desig.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <a href="{% url 'budgeting:setup_designation_edit' desig.pk %}" class="btn btn-sm btn-outline-primary me-1" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <a href="{% url 'budgeting:setup_designation_delete' desig.pk %}" class="btn btn-sm btn-outline-danger" title="Delete">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center py-4 text-muted">No designations found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

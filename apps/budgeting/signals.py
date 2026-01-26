@@ -68,23 +68,5 @@ def budget_allocation_post_save(
             )
 
 
-@receiver(post_save, sender=ScheduleOfEstablishment)
-def establishment_post_save(
-    sender, 
-    instance: ScheduleOfEstablishment, 
-    created: bool, 
-    **kwargs
-) -> None:
-    """
-    Post-save signal for ScheduleOfEstablishment.
-    
-    Sets PUGF flag based on budget head classification.
-    """
-    from apps.finance.models import FundType
-    
-    if instance.budget_head:
-        is_pugf = instance.budget_head.fund_type == FundType.PUGF
-        if instance.is_pugf != is_pugf:
-            ScheduleOfEstablishment.objects.filter(pk=instance.pk).update(
-                is_pugf=is_pugf
-            )
+
+

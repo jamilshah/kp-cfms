@@ -4,7 +4,8 @@ System: KP-CFMS (Computerized Financial Management System)
 Client: Local Government Department, Khyber Pakhtunkhwa
 Team Lead: Jamil Shah
 Developers: Ali Asghar, Akhtar Munir and Zarif Khan
-Description: Schedule of Establishment List template.
+Description: Schedule of Establishment List template with Smart Calculator
+             and Approval workflow buttons.
 -------------------------------------------------------------------------
 -->
 {% extends "base.html" %}
@@ -12,12 +13,44 @@ Description: Schedule of Establishment List template.
 
 {% block title %}Schedule of Establishment - KP-CFMS{% endblock %}
 
+{% block extra_css %}
+<style>
+    .btn-estimate {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        color: white;
+    }
+    .btn-estimate:hover {
+        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        color: white;
+    }
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.35em 0.65em;
+    }
+    .action-btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    .estimation-result {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        border-radius: 8px;
+        padding: 1rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2><i class="bi bi-people"></i> Schedule of Establishment (BDC-2)</h2>
-    <a href="{% url 'budgeting:establishment_create' %}" class="btn btn-cfms">
-        <i class="bi bi-plus-lg"></i> Add Entry
-    </a>
+    <div>
+        <a href="{% url 'budgeting:establishment_bulk_approval' %}" class="btn btn-outline-primary me-2">
+            <i class="bi bi-check2-all"></i> Bulk Approval
+        </a>
+        <a href="{% url 'budgeting:establishment_create' %}" class="btn btn-cfms">
+            <i class="bi bi-plus-lg"></i> Add Entry
+        </a>
+    </div>
 </div>
 
 <!-- Summary Cards -->
@@ -68,11 +101,15 @@ Description: Schedule of Establishment List template.
     </div>
 </div>
 
-<!-- Establishment Table -->
-<div class="card">
+<!-- Section A: Existing Sanctioned Strength -->
+<div class="card mb-5">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Section A: Existing Sanctioned Strength (Baseline)</h5>
+        <span class="badge bg-secondary">{{ sanctioned_list|length }} entries</span>
+    </div>
     <div class="table-responsive">
         <table class="table table-hover mb-0">
-            <thead>
+            <thead class="table-light">
                 <tr>
                     <th>Department</th>
                     <th>Designation</th>
@@ -80,16 +117,19 @@ Description: Schedule of Establishment List template.
                     <th class="text-center">Sanctioned</th>
                     <th class="text-center">Occupied</th>
                     <th class="text-center">Vacant</th>
-                    <th class="text-end">Annual Salary</th>
-                    <th>Budget Head</th>
+                    <th class="text-end">Est. Budget</th>
+                    <th class="text-center">Status</th>
+                    <th class="text-center">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                {% for entry in establishment_entries %}
+                {% for entry in sanctioned_list %}
                 <tr>
                     <td>{{ entry.department }}</td>
                     <td>
-                        {{ entry.designation }}
+                        <a href="{% url 'budgeting:establishment_detail' entry.pk %}">
+                            {{ entry.designation_name }}
+                        </a>
                         {% if entry.is_pugf %}
                             <span class="badge bg-info ms-1">PUGF</span>
                         {% endif %}
@@ -99,18 +139,47 @@ Description: Schedule of Establishment List template.
                     <td class="text-center text-success">{{ entry.occupied_posts }}</td>
                     <td class="text-center">
                         {% if entry.vacant_posts > 0 %}
-                            <span class="text-warning">{{ entry.vacant_posts }}</span>
+                            <span class="text-warning fw-bold">{{ entry.vacant_posts }}</span>
                         {% else %}
                             <span class="text-success">0</span>
                         {% endif %}
                     </td>
-                    <td class="text-end">Rs {{ entry.annual_salary|floatformat:2|intcomma }}</td>
-                    <td><code>{{ entry.budget_head.tma_sub_object }}</code></td>
+                    <td class="text-end">
+                        {% if entry.estimated_budget %}
+                            Rs {{ entry.estimated_budget|floatformat:0|intcomma }}
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <span class="badge status-badge 
+                            {% if entry.approval_status == 'APPROVED' %}bg-success
+                            {% elif entry.approval_status == 'VERIFIED' %}bg-info
+                            {% elif entry.approval_status == 'RECOMMENDED' %}bg-warning text-dark
+                            {% elif entry.approval_status == 'REJECTED' %}bg-danger
+                            {% else %}bg-secondary{% endif %}">
+                            {{ entry.get_approval_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <button type="button" 
+                                class="btn btn-estimate btn-sm" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#estimateModal"
+                                data-entry-id="{{ entry.pk }}"
+                                data-designation="{{ entry.designation_name }}"
+                                data-bps="{{ entry.bps_scale }}"
+                                data-sanctioned="{{ entry.sanctioned_posts }}"
+                                data-occupied="{{ entry.occupied_posts }}"
+                                title="Smart Calculator">
+                            <i class="bi bi-calculator"></i>
+                        </button>
+                    </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="8" class="text-center text-muted py-4">
-                        No establishment entries found.
+                    <td colspan="9" class="text-center text-muted py-4">
+                        No sanctioned posts found for this fiscal year.
                     </td>
                 </tr>
                 {% endfor %}
@@ -118,4 +187,316 @@ Description: Schedule of Establishment List template.
         </table>
     </div>
 </div>
+
+<!-- Section B: New Proposals (SNE) -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="text-primary"><i class="bi bi-file-earmark-plus"></i> Section B: New Proposals (SNE)</h4>
+    <a href="{% url 'budgeting:establishment_propose' %}?fiscal_year={{ request.GET.fiscal_year }}" class="btn btn-primary btn-lg shadow-sm">
+        <i class="bi bi-plus-circle-fill me-2"></i> Propose New Post
+    </a>
+</div>
+
+<div class="card border-primary">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">Schedule of New Expenditure (SNE) Requests</h5>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Department</th>
+                    <th>Proposed Designation</th>
+                    <th class="text-center">BPS</th>
+                    <th class="text-center">Requested</th>
+                    <th>Justification</th>
+                    <th class="text-end">Financial Impact</th>
+                    <th class="text-center">Status</th>
+                    <th class="text-center">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in proposed_list %}
+                <tr>
+                    <td>{{ entry.department }}</td>
+                    <td>
+                        <a href="{% url 'budgeting:establishment_detail' entry.pk %}">
+                            {{ entry.designation_name }}
+                        </a>
+                        {% if entry.is_pugf %}
+                            <span class="badge bg-info ms-1">PUGF</span>
+                        {% else %}
+                            <span class="badge bg-secondary ms-1">LOCAL</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">{{ entry.bps_scale }}</td>
+                    <td class="text-center fw-bold">{{ entry.sanctioned_posts }}</td>
+                    <td>
+                        <small class="text-muted d-block text-truncate" style="max-width: 250px;" title="{{ entry.justification }}">
+                            {{ entry.justification }}
+                        </small>
+                    </td>
+                    <td class="text-end fw-bold text-danger">Rs {{ entry.financial_impact|floatformat:0|intcomma }}</td>
+                    <td class="text-center">
+                        <span class="badge status-badge 
+                            {% if entry.approval_status == 'APPROVED' %}bg-success
+                            {% elif entry.approval_status == 'VERIFIED' %}bg-info
+                            {% elif entry.approval_status == 'RECOMMENDED' %}bg-warning text-dark
+                            {% elif entry.approval_status == 'REJECTED' %}bg-danger
+                            {% else %}bg-secondary{% endif %}">
+                            {{ entry.get_approval_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <a href="{% url 'budgeting:establishment_detail' entry.pk %}" 
+                           class="btn btn-outline-primary action-btn" title="View Details">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center text-muted py-5">
+                        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                        No new posts proposed yet. Click the button above to create a proposal.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Smart Calculator Modal -->
+<div class="modal fade" id="estimateModal" tabindex="-1" aria-labelledby="estimateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="estimateModalLabel">
+                    <i class="bi bi-calculator me-2"></i> Smart Calculator
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <h6 class="text-muted">Designation</h6>
+                        <p class="fs-5 fw-bold" id="modal-designation">-</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted">BPS Grade</h6>
+                        <p class="fs-5" id="modal-bps">-</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted">Sanctioned Posts</h6>
+                        <p class="fs-5" id="modal-sanctioned">-</p>
+                    </div>
+                </div>
+                
+                <form id="estimateForm">
+                    <input type="hidden" id="entry-id" name="entry_id" value="">
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="filled_posts" class="form-label">
+                                <i class="bi bi-people-fill me-1"></i> Filled Posts (Currently Occupied)
+                            </label>
+                            <input type="number" class="form-control form-control-lg" 
+                                   id="filled_posts" name="filled_posts" 
+                                   min="0" required>
+                            <div class="form-text">Enter the number of currently filled positions.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="last_month_bill" class="form-label">
+                                <i class="bi bi-cash-stack me-1"></i> Last Month Total Bill (Rs)
+                            </label>
+                            <input type="number" class="form-control form-control-lg" 
+                                   id="last_month_bill" name="last_month_bill" 
+                                   min="0" step="0.01" required>
+                            <div class="form-text">Total monthly salary bill for the <strong>filled posts of this designation only</strong>. This amount will be used to calculate per-post average.</div>
+                        </div>
+                    </div>
+                    
+                    <button type="button" class="btn btn-primary btn-lg w-100" id="calculateBtn">
+                        <i class="bi bi-lightning-fill me-2"></i> Calculate Budget Estimate
+                    </button>
+                </form>
+                
+                <!-- Results Section (initially hidden) -->
+                <div id="estimationResults" class="mt-4 d-none">
+                    <hr>
+                    <h5><i class="bi bi-graph-up-arrow me-2"></i> Estimation Results</h5>
+                    <div class="estimation-result">
+                        <div class="row text-center">
+                            <div class="col-md-3">
+                                <p class="mb-1 text-muted">Filled Posts Cost</p>
+                                <p class="fs-5 fw-bold text-success" id="result-filled-cost">-</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p class="mb-1 text-muted">Vacant Posts Cost</p>
+                                <p class="fs-5 fw-bold text-warning" id="result-vacant-cost">-</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p class="mb-1 text-muted">Inflation Buffer (10%)</p>
+                                <p class="fs-5 fw-bold text-info" id="result-inflation">-</p>
+                            </div>
+                            <div class="col-md-3">
+                                <p class="mb-1 text-muted">Total Estimate</p>
+                                <p class="fs-4 fw-bold text-primary" id="result-total">-</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-success d-none" id="saveEstimateBtn">
+                    <i class="bi bi-check-lg me-1"></i> Save Estimate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const estimateModal = document.getElementById('estimateModal');
+    const calculateBtn = document.getElementById('calculateBtn');
+    const saveBtn = document.getElementById('saveEstimateBtn');
+    const resultsDiv = document.getElementById('estimationResults');
+    
+    // Handle modal open - populate data
+    estimateModal.addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        const entryId = button.getAttribute('data-entry-id');
+        const designation = button.getAttribute('data-designation');
+        const bps = button.getAttribute('data-bps');
+        const sanctioned = button.getAttribute('data-sanctioned');
+        const occupied = button.getAttribute('data-occupied');
+        
+        document.getElementById('entry-id').value = entryId;
+        document.getElementById('modal-designation').textContent = designation;
+        document.getElementById('modal-bps').textContent = 'BPS-' + bps;
+        document.getElementById('modal-sanctioned').textContent = sanctioned;
+        document.getElementById('filled_posts').value = occupied;
+        document.getElementById('filled_posts').max = sanctioned;
+        document.getElementById('last_month_bill').value = '';
+        
+        // Reset results
+        resultsDiv.classList.add('d-none');
+        saveBtn.classList.add('d-none');
+    });
+    
+    // Calculate button click
+    calculateBtn.addEventListener('click', function() {
+        performCalculation(false);
+    });
+
+    // Save button click
+    saveBtn.addEventListener('click', function() {
+        performCalculation(true);
+    });
+
+    function performCalculation(save) {
+        const entryId = document.getElementById('entry-id').value;
+        const filledPosts = document.getElementById('filled_posts').value;
+        const lastMonthBill = document.getElementById('last_month_bill').value;
+        
+        if (!filledPosts || !lastMonthBill) {
+            alert('Please fill in all fields.');
+            return;
+        }
+        
+        // Disable buttons during request
+        calculateBtn.disabled = true;
+        saveBtn.disabled = true;
+
+        // Make API call
+        fetch(`/budgeting/establishment/${entryId}/estimate/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({
+                filled_posts: parseInt(filledPosts),
+                last_month_bill: parseFloat(lastMonthBill),
+                save: save
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            calculateBtn.disabled = false;
+            saveBtn.disabled = false;
+
+            if (data.error) {
+                alert('Error: ' + data.error);
+                return;
+            }
+            
+            // Display results
+            document.getElementById('result-filled-cost').textContent = 
+                'Rs ' + formatNumber(data.filled_annual_cost);
+            document.getElementById('result-vacant-cost').textContent = 
+                'Rs ' + formatNumber(data.vacant_annual_cost);
+            document.getElementById('result-inflation').textContent = 
+                'Rs ' + formatNumber(data.inflation_buffer);
+            document.getElementById('result-total').textContent = 
+                'Rs ' + formatNumber(data.estimated_budget);
+            
+            resultsDiv.classList.remove('d-none');
+            
+            if (save) {
+                // Handle Save Success
+                if (data.saved) {
+                    saveBtn.textContent = '✓ Saved!';
+                    saveBtn.classList.remove('btn-success');
+                    saveBtn.classList.add('btn-outline-success', 'disabled');
+                    
+                    // Reload page to update table after short delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                }
+            } else {
+                // Handle Preview Success
+                saveBtn.classList.remove('d-none');
+                // Reset save button state in case it was previously saved
+                saveBtn.textContent = 'Save Estimate';
+                saveBtn.classList.add('btn-success');
+                saveBtn.classList.remove('btn-outline-success', 'disabled');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            calculateBtn.disabled = false;
+            saveBtn.disabled = false;
+            alert('An error occurred. Please try again.');
+        });
+    }
+    
+    // Helper function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    // Helper function to format numbers
+    function formatNumber(num) {
+        return new Intl.NumberFormat('en-PK').format(Math.round(num));
+    }
+});
+</script>
 {% endblock %}

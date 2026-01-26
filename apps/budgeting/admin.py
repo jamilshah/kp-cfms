@@ -15,7 +15,8 @@ from django.db.models import Sum
 
 from apps.budgeting.models import (
     FiscalYear, BudgetAllocation, ScheduleOfEstablishment,
-    QuarterlyRelease, SAERecord, BudgetStatus
+    QuarterlyRelease, SAERecord, BudgetStatus,
+    DesignationMaster, BPSSalaryScale
 )
 
 
@@ -312,3 +313,55 @@ class SAERecordAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         """SAE records cannot be deleted (immutable)."""
         return False
+
+
+@admin.register(DesignationMaster)
+class DesignationMasterAdmin(admin.ModelAdmin):
+    """
+    Admin configuration for DesignationMaster model.
+    """
+    
+    list_display = ['name', 'bps_scale', 'post_type', 'is_active']
+    list_filter = ['bps_scale', 'post_type', 'is_active']
+    search_fields = ['name']
+    ordering = ['name']
+
+
+@admin.register(BPSSalaryScale)
+class BPSSalaryScaleAdmin(admin.ModelAdmin):
+    # 1. The Columns to Show
+    list_display = (
+        'bps_grade', 
+        'basic_pay_min', 
+        'annual_increment', 
+        'conveyance_allowance', 
+        'medical_allowance', 
+        'house_rent_percent',
+        'adhoc_relief_total_percent',
+        'estimated_gross_view'  # Calculated field
+    )
+
+    # 2. The "Excel-Style" Editing
+    list_editable = (
+        'basic_pay_min', 
+        'annual_increment', 
+        'conveyance_allowance', 
+        'medical_allowance',
+        'house_rent_percent',
+        'adhoc_relief_total_percent'
+    )
+
+    # 3. Sorting & Filtering
+    ordering = ('bps_grade',)
+    search_fields = ('bps_grade',)
+
+    # 4. Custom Column for "Total Estimated"
+    @admin.display(description='Est. Gross (Stage 0)')
+    def estimated_gross_view(self, obj):
+        return f"Rs {obj.estimated_gross_salary:,.0f}"
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['title'] = "Manage BPS Salary Chart (Update from Finance Notification)"
+        return super().changelist_view(request, extra_context=extra_context)
+

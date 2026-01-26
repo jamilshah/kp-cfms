@@ -58,9 +58,10 @@ class MakerRequiredMixin(RoleRequiredMixin):
     Mixin that restricts access to Maker (Dealing Assistant) role.
     
     Used for views that create new bills, budget entries, etc.
+    System Admins (ADM) are also allowed for data setup.
     """
     
-    required_roles = ['DA']
+    required_roles = ['DA', 'ADM']
 
 
 class CheckerRequiredMixin(RoleRequiredMixin):
@@ -70,7 +71,7 @@ class CheckerRequiredMixin(RoleRequiredMixin):
     Used for views that verify/pre-audit transactions.
     """
     
-    required_roles = ['AC']
+    required_roles = ['AC', 'ADM']
 
 
 class ApproverRequiredMixin(RoleRequiredMixin):
@@ -80,7 +81,7 @@ class ApproverRequiredMixin(RoleRequiredMixin):
     Used for views that approve transactions.
     """
     
-    required_roles = ['TMO']
+    required_roles = ['TMO', 'ADM']
 
 
 class FinanceOfficerRequiredMixin(RoleRequiredMixin):
@@ -153,3 +154,116 @@ def has_role(user: Any, roles: list) -> bool:
         return True
     
     return user.role in roles
+
+
+def can_approve_establishment_post(user: Any, establishment_entry: Any) -> bool:
+    """
+    Check if user can approve a ScheduleOfEstablishment entry.
+    
+    PUGF posts require LCB approval; Local posts require TMO approval.
+    
+    Args:
+        user: The user attempting to approve.
+        establishment_entry: The ScheduleOfEstablishment instance.
+        
+    Returns:
+        True if user can approve this type of post.
+    """
+    from apps.budgeting.models import PostType, ApprovalStatus
+    
+    if not user.is_authenticated:
+        return False
+    
+    if user.is_superuser:
+        return True
+    
+    post_type = establishment_entry.post_type
+    current_status = establishment_entry.approval_status
+    
+    # PUGF posts: Only LCB can do final approval
+    if post_type == PostType.PUGF:
+        # TMO can only "Recommend" PUGF posts
+        if current_status == ApprovalStatus.VERIFIED:
+            # At VERIFIED stage, TMO can only recommend
+            return user.role == 'TMO'  # For RECOMMEND action
+        elif current_status == ApprovalStatus.RECOMMENDED:
+            # At RECOMMENDED stage, only LCB can approve
+            return user.role == 'LCB'
+    
+    # LOCAL posts: TMO has final approval authority
+    elif post_type == PostType.LOCAL:
+        if current_status == ApprovalStatus.VERIFIED:
+            return user.role == 'TMO'
+    
+    return False
+
+
+def can_recommend_pugf_post(user: Any, establishment_entry: Any) -> bool:
+    """
+    Check if user can recommend (not approve) a PUGF post.
+    
+    TMO can recommend PUGF posts but cannot approve them.
+    
+    Args:
+        user: The user attempting to recommend.
+        establishment_entry: The ScheduleOfEstablishment instance.
+        
+    Returns:
+        True if user can recommend this PUGF post.
+    """
+    from apps.budgeting.models import PostType, ApprovalStatus
+    
+    if not user.is_authenticated:
+        return False
+    
+    if user.is_superuser:
+        return True
+    
+    # Only applies to PUGF posts at VERIFIED stage
+    if establishment_entry.post_type != PostType.PUGF:
+        return False
+    
+    if establishment_entry.approval_status != ApprovalStatus.VERIFIED:
+        return False
+    
+    # TMO can recommend PUGF posts
+    return user.role == 'TMO'
+
+
+class CanApprovePUGFMixin(UserPassesTestMixin):
+    """
+    Mixin that restricts PUGF post approval to LCB officers only.
+    
+    This mixin checks if the establishment entry is PUGF and if so,
+    only allows LCB officers to perform the approval action.
+    """
+    
+    def test_func(self) -> bool:
+        """
+        Test if the current user can approve PUGF posts.
+        
+        Returns:
+            True if user is LCB officer or superuser.
+        """
+        if not self.request.user.is_authenticated:
+            return False
+        
+        if self.request.user.is_superuser:
+            return True
+        
+        return self.request.user.role == 'LCB'
+    
+    def handle_no_permission(self) -> None:
+        """Handle unauthorized access attempt."""
+        raise PermissionDenied(
+            "Only LCB Finance Officers can approve PUGF posts."
+        )
+
+class AdminRequiredMixin(RoleRequiredMixin):
+    """
+    Mixin that restricts access to System Admin role.
+    
+    Used for configuration and setup views.
+    """
+    
+    required_roles = ['ADM']

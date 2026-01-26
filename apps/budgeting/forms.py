@@ -16,7 +16,8 @@ from django.utils.translation import gettext_lazy as _
 from django.db.models import Q
 
 from apps.budgeting.models import (
-    FiscalYear, BudgetAllocation, ScheduleOfEstablishment, BudgetStatus
+    FiscalYear, BudgetAllocation, ScheduleOfEstablishment, BudgetStatus,
+    DesignationMaster, Department, BPSSalaryScale
 )
 from apps.budgeting.services import validate_receipt_growth
 from apps.finance.models import BudgetHead, AccountType
@@ -210,9 +211,9 @@ class ExpenditureEstimateForm(BudgetAllocationBaseForm):
 
 class ScheduleOfEstablishmentForm(forms.ModelForm):
     """
-    Form BDC-2: Schedule of Establishment Entry.
+    Form BDC-2 (Part A): Existing Sanctioned Posts.
     
-    Used to define sanctioned posts and link them to salary budget heads.
+    Restricted editing for existing posts (view-only sanctioned count).
     """
     
     class Meta:
@@ -238,7 +239,9 @@ class ScheduleOfEstablishmentForm(forms.ModelForm):
             }),
             'sanctioned_posts': forms.NumberInput(attrs={
                 'class': 'form-control',
-                'min': '0'
+                'min': '0',
+                'readonly': 'readonly',  # Cannot change sanctioned count here
+                'title': 'Cannot modify sanctioned strength of existing posts'
             }),
             'occupied_posts': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -258,12 +261,7 @@ class ScheduleOfEstablishmentForm(forms.ModelForm):
         }
     
     def __init__(self, *args, fiscal_year: Optional[FiscalYear] = None, **kwargs):
-        """
-        Initialize form with fiscal year context.
-        
-        Args:
-            fiscal_year: The fiscal year for this entry.
-        """
+        """Initialize form."""
         self.fiscal_year = fiscal_year
         super().__init__(*args, **kwargs)
         
@@ -272,26 +270,146 @@ class ScheduleOfEstablishmentForm(forms.ModelForm):
             pifra_object__startswith='A01',
             is_active=True
         )
-        self.fields['budget_head'].label = _('Salary Budget Head')
         
-        # Check if budget is editable
+        # Make sanctioned_posts read-only ONLY for existing records
+        if self.instance.pk:
+            self.fields['sanctioned_posts'].widget.attrs['readonly'] = 'readonly'
+            self.fields['sanctioned_posts'].widget.attrs['title'] = _('Cannot modify sanctioned strength of existing posts')
+        else:
+            # Editable for new entries
+            self.fields['sanctioned_posts'].widget.attrs.pop('readonly', None)
+        
         if fiscal_year and not fiscal_year.can_edit_budget():
             for field in self.fields.values():
                 field.disabled = True
+
+
+class NewPostProposalForm(forms.ModelForm):
+    """
+    Form BDC-2 (Part B): New Post Proposals (SNE).
     
-    def clean(self) -> Dict[str, Any]:
-        """Validate establishment entry."""
-        cleaned_data = super().clean()
+    Used to propose NEW posts for the upcoming year.
+    Refactored to use dropdowns for Designation and dynamically
+    determine BPS, Post Type, and Budget Head.
+    """
+    
+    designation = forms.ModelChoiceField(
+        queryset=DesignationMaster.objects.filter(is_active=True).order_by('name'),
+        label=_('Proposed Designation'),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        empty_label=_("Select Designation...")
+    )
+    
+    department_select = forms.ModelChoiceField(
+        queryset=Department.objects.filter(is_active=True).order_by('name'),
+        label=_('Department/Wing'),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        empty_label=_("Select Department...")
+    )
+    
+    class Meta:
+        model = ScheduleOfEstablishment
+        fields = ['sanctioned_posts', 'justification']
+        labels = {
+            'sanctioned_posts': _('Number of Posts Required'),
+        }
+        widgets = {
+            'sanctioned_posts': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': '1'
+            }),
+            'justification': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 4,
+                'placeholder': 'Explain WHY these posts are needed (Required)...'
+            }),
+        }
+    
+    def __init__(self, *args, fiscal_year: Optional[FiscalYear] = None, **kwargs):
+        self.fiscal_year = fiscal_year
+        super().__init__(*args, **kwargs)
         
-        sanctioned = cleaned_data.get('sanctioned_posts', 0)
-        occupied = cleaned_data.get('occupied_posts', 0)
+        # Initialize designation/department from instance if editing
+        if self.instance.pk:
+            if self.instance.designation_name:
+                try:
+                    dm = DesignationMaster.objects.get(name=self.instance.designation_name)
+                    self.fields['designation'].initial = dm
+                except DesignationMaster.DoesNotExist:
+                    pass
+            
+            if self.instance.department:
+                try:
+                    dept = Department.objects.get(name=self.instance.department)
+                    self.fields['department_select'].initial = dept
+                except Department.DoesNotExist:
+                    pass
+
+        # New proposals start with 0 occupied posts
+        self.instance.occupied_posts = 0
+        from apps.budgeting.models import EstablishmentStatus
+        self.instance.establishment_status = EstablishmentStatus.PROPOSED
+        self.instance.post_type = "TBD"  # Will be set in save()
+
+    def clean_justification(self):
+        """Enforce strict justification."""
+        justification = self.cleaned_data.get('justification')
+        if not justification or len(justification.strip()) < 20:
+            raise ValidationError(
+                _("Please provide a detailed justification (at least 20 chars) for this new expenditure.")
+            )
+        return justification
+    
+    def save(self, commit=True):
+        """Auto-populate fields driven by designation."""
+        instance = super().save(commit=False)
         
-        if occupied > sanctioned:
-            raise ValidationError({
-                'occupied_posts': _('Occupied posts cannot exceed sanctioned posts.')
-            })
+        designation = self.cleaned_data['designation']
+        department = self.cleaned_data['department_select']
         
-        return cleaned_data
+        instance.designation_name = designation.name
+        instance.department = department.name
+        instance.bps_scale = designation.bps_scale
+        instance.post_type = designation.post_type
+        
+        # Auto-select budget head
+        # Officers (BPS 17+) vs Staff (BPS 1-16)
+        code_prefix = 'A01101' if instance.bps_scale >= 17 else 'A0115'
+        
+        # Try to find specific head
+        head = BudgetHead.objects.filter(
+            pifra_object__startswith=code_prefix,
+            is_active=True
+        ).first()
+        
+        if not head:
+            # Fallback to generic Salary of Officers/Staff
+            search_term = 'Officer' if instance.bps_scale >= 17 else 'Other Staff'
+            head = BudgetHead.objects.filter(
+                tma_description__icontains=search_term,
+                is_active=True
+            ).first()
+            
+        if not head:
+            # Last resort: A01 (Total Basic Pay)
+            head = BudgetHead.objects.filter(
+                pifra_object='A01', is_active=True
+            ).first()
+            
+        if not head:
+            # Absolute Failsafe: Any Expenditure Head
+            head = BudgetHead.objects.first()
+            
+        instance.budget_head = head
+        
+        if self.fiscal_year:
+            instance.fiscal_year = self.fiscal_year
+            
+        if commit:
+            instance.save()
+            self.save_m2m()
+            
+        return instance
 
 
 class BudgetApprovalForm(forms.Form):
@@ -380,3 +498,25 @@ class BudgetSearchForm(forms.Form):
             'placeholder': _('Search by head code or description...')
         })
     )
+
+
+class BPSSalaryScaleForm(forms.ModelForm):
+    """
+    Form for editing BPS Salary Scale grid row.
+    """
+    class Meta:
+        model = BPSSalaryScale
+        fields = [
+            'basic_pay_min', 'annual_increment', 'basic_pay_max',
+            'conveyance_allowance', 'medical_allowance',
+            'house_rent_percent', 'adhoc_relief_total_percent'
+        ]
+        widgets = {
+            'basic_pay_min': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '1'}),
+            'annual_increment': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '1'}),
+            'basic_pay_max': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '1'}),
+            'conveyance_allowance': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '1'}),
+            'medical_allowance': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '1'}),
+            'house_rent_percent': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '0.01'}),
+            'adhoc_relief_total_percent': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '0.01'}),
+        }

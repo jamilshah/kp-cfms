@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h4 class="mb-0 text-primary">
+                    <i class="bi bi-wallet2 me-2"></i>{{ page_title }}
+                </h4>
+            </div>
+            
+            <div class="card-body p-4">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    
+                    <h5 class="mb-3 text-muted">Classification</h5>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label for="{{ form.function.id_for_label }}" class="form-label">Function</label>
+                            {{ form.function }}
+                            {% if form.function.errors %}
+                                <div class="text-danger small">{{ form.function.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.account_type.id_for_label }}" class="form-label">Account Type</label>
+                            {{ form.account_type }}
+                            {% if form.account_type.errors %}
+                                <div class="text-danger small">{{ form.account_type.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <h5 class="mb-3 text-muted">Codes & Description</h5>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="{{ form.pifra_object.id_for_label }}" class="form-label">PIFRA Code (Major)</label>
+                            {{ form.pifra_object }}
+                            <div class="form-text">e.g. A01101</div>
+                            {% if form.pifra_object.errors %}
+                                <div class="text-danger small">{{ form.pifra_object.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.tma_sub_object.id_for_label }}" class="form-label">TMA Sub-Object</label>
+                            {{ form.tma_sub_object }}
+                            <div class="form-text">e.g. A01101-001</div>
+                            {% if form.tma_sub_object.errors %}
+                                <div class="text-danger small">{{ form.tma_sub_object.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.tma_description.id_for_label }}" class="form-label">Description (TMA)</label>
+                        {{ form.tma_description }}
+                        {% if form.tma_description.errors %}
+                            <div class="text-danger small">{{ form.tma_description.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="{{ form.pifra_description.id_for_label }}" class="form-label">Description (PIFRA)</label>
+                        {{ form.pifra_description }}
+                        {% if form.pifra_description.errors %}
+                            <div class="text-danger small">{{ form.pifra_description.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    <h5 class="mb-3 text-muted">Settings</h5>
+                    <div class="row g-3 mb-4">
+                         <div class="col-md-4">
+                            <label for="{{ form.fund_id.id_for_label }}" class="form-label">Fund ID</label>
+                            {{ form.fund_id }}
+                            <div class="form-text">1=Current, 2=Dev</div>
+                            {% if form.fund_id.errors %}
+                                <div class="text-danger small">{{ form.fund_id.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-4 pt-4">
+                            <div class="form-check">
+                                {{ form.is_active }}
+                                <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                    Active Status
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4 pt-4">
+                            <div class="form-check">
+                                {{ form.is_charged }}
+                                <label class="form-check-label" for="{{ form.is_charged.id_for_label }}">
+                                    Charged (Non-Votable)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <a href="{{ back_url }}" class="btn btn-light border">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-4">Save Budget Head</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -336,6 +336,19 @@ def finalize_budget(fiscal_year_id: int, approver_id: int) -> Dict:
         approved_by=approver
     )
     
+    # NEW: Convert PROPOSED posts (SNE) to SANCTIONED
+    # This officially sanctions the new posts requested in this budget
+    from apps.budgeting.models import EstablishmentStatus, ScheduleOfEstablishment
+    
+    proposed_posts = ScheduleOfEstablishment.objects.filter(
+        fiscal_year=fiscal_year,
+        establishment_status=EstablishmentStatus.PROPOSED
+    )
+    
+    for post in proposed_posts:
+        # Calls the model method to convert and clear justification
+        post.convert_to_sanctioned()
+    
     # Lock fiscal year
     fiscal_year.lock_budget(sae_number)
     

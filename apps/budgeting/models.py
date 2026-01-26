@@ -73,6 +73,17 @@ class ApprovalStatus(models.TextChoices):
     REJECTED = 'REJECTED', _('Rejected')
 
 
+class EstablishmentStatus(models.TextChoices):
+    """
+    Establishment status for distinguishing existing vs proposed posts.
+    
+    SANCTIONED: Existing approved posts (imported from baseline).
+    PROPOSED: New posts proposed for Council approval (SNE).
+    """
+    SANCTIONED = 'SANCTIONED', _('Sanctioned (Existing)')
+    PROPOSED = 'PROPOSED', _('Proposed (New)')
+
+
 class FiscalYear(AuditLogMixin, TenantAwareMixin):
     """
     Represents a financial year for budget planning.
@@ -355,6 +366,166 @@ class DesignationMaster(TimeStampedMixin):
         return f"{self.name} (BPS-{self.bps_scale})"
 
 
+class Department(TimeStampedMixin):
+    """
+    Master table for Departments/Wings.
+    
+    Used to standardize department names across the system.
+    """
+    
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        verbose_name=_('Department Name'),
+        help_text=_('Name of the Department or Wing (e.g., Administration, Finance).')
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name=_('Is Active')
+    )
+    
+    class Meta:
+        verbose_name = _('Department')
+        verbose_name_plural = _('Departments')
+        ordering = ['name']
+    
+    def __str__(self) -> str:
+        return self.name
+
+
+class BPSSalaryScale(AuditLogMixin):
+    """
+    Master Data for BPS Pay Scales & Allowances (e.g., 2024 Scale).
+    Mirroring the Finance Department Notification structure.
+    """
+    bps_grade = models.PositiveSmallIntegerField(
+        unique=True, 
+        verbose_name=_("BPS Grade"),
+        validators=[MinValueValidator(1), MaxValueValidator(22)]
+    )
+
+    # --- PART 1: THE BASIC PAY SCALE (The Chart) ---
+    basic_pay_min = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        default=Decimal('0.00'),
+        verbose_name=_("Initial Stage (0)"),
+        help_text=_("Initial Basic Pay")
+    )
+    annual_increment = models.DecimalField(
+        max_digits=8, 
+        decimal_places=2, 
+        default=Decimal('0.00'),
+        verbose_name=_("Annual Increment"),
+        help_text=_("Annual Increment Amount")
+    )
+    basic_pay_max = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        default=Decimal('0.00'),
+        verbose_name=_("Last Stage (30)"),
+        help_text=_("Maximum Basic Pay")
+    )
+
+    # --- PART 2: FIXED ALLOWANCES (Slab Based) ---
+    # These are fixed amounts defined per BPS (e.g., BPS 11 Conveyance = 2840)
+    conveyance_allowance = models.DecimalField(
+        max_digits=8, 
+        decimal_places=2, 
+        default=0,
+        verbose_name=_("Conveyance Allowance")
+    )
+    medical_allowance = models.DecimalField(
+        max_digits=8, 
+        decimal_places=2, 
+        default=0,
+        verbose_name=_("Medical Allowance")
+    )
+    
+    # --- PART 3: VARIABLE ALLOWANCES (Percentage Based) ---
+    # House Rent: Usually 30% or 45% of the *Initial* Basic Pay
+    house_rent_percent = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=Decimal('0.45'), 
+        verbose_name=_("House Rent %"),
+        help_text=_("e.g., 0.45 for 45% of Initial Pay")
+    )
+
+    # Adhoc Reliefs: The sum of all active reliefs (2022, 2023, 2024)
+    # Usually calculated on *Running* Basic Pay. 
+    # For budgeting new posts, we apply this to Initial Basic Pay.
+    adhoc_relief_total_percent = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=Decimal('0.35'),
+        verbose_name=_("Total Adhoc Relief %"),
+        help_text=_("Sum of all active Adhoc Reliefs (e.g., 0.35 for 35%)")
+    )
+
+    class Meta:
+        ordering = ['bps_grade']
+        verbose_name = _("BPS Salary Scale")
+        verbose_name_plural = _("BPS Salary Scales")
+
+    def __str__(self):
+        return f"BPS-{self.bps_grade} ({self.basic_pay_min}-{self.annual_increment}-{self.basic_pay_max})"
+
+    @property
+    def estimated_gross_salary(self):
+        """
+        Calculates the gross salary for a fresh entrant (Stage 0).
+        Formula: (Min Pay * (1 + Adhoc%)) + (Min Pay * HRA%) + Fixed Allowances
+        """
+        # 1. Basic Pay
+        basic = self.basic_pay_min
+
+        # 2. Variable Allowances
+        adhoc_amount = basic * self.adhoc_relief_total_percent
+        hra_amount = basic * self.house_rent_percent
+
+        # 3. Fixed Allowances
+        fixed_total = self.conveyance_allowance + self.medical_allowance
+
+        # Total
+        return basic + adhoc_amount + hra_amount + fixed_total
+    
+    def get_annual_salary(self) -> Decimal:
+        """
+        Calculate estimated annual salary including allowances.
+        
+        Returns:
+            Annual salary (basic × 12 × (1 + allowance_percentage/100))
+        """
+        return self.estimated_gross_salary * 12
+    
+    @classmethod
+    def get_salary_for_grade(cls, bps_grade: int) -> Decimal:
+        """
+        Get annual salary for a given BPS grade.
+        
+        Args:
+            bps_grade: BPS grade (1-22)
+            
+        Returns:
+            Annual salary or default estimate if grade not found.
+        """
+        scale = cls.objects.filter(bps_grade=bps_grade, is_active=True).first()
+        if scale:
+            return scale.get_annual_salary()
+        
+        # Fallback to hardcoded rates if not in database
+        default_rates = {
+            1: 22000, 2: 22500, 3: 23000, 4: 24000, 5: 25000,
+            6: 26000, 7: 28000, 8: 30000, 9: 32000, 10: 35000,
+            11: 40000, 12: 45000, 13: 50000, 14: 55000, 15: 60000,
+            16: 70000, 17: 80000, 18: 100000, 19: 120000, 20: 150000,
+            21: 180000, 22: 220000
+        }
+        monthly = Decimal(str(default_rates.get(bps_grade, 25000)))
+        return monthly * 12 * Decimal('1.5')  # 50% allowance
+
+
 class ScheduleOfEstablishment(AuditLogMixin, TenantAwareMixin):
     """
     Schedule of Establishment (Form BDC-2) - Staffing positions.
@@ -386,6 +557,7 @@ class ScheduleOfEstablishment(AuditLogMixin, TenantAwareMixin):
     )
     designation_name = models.CharField(
         max_length=100,
+        default='',
         verbose_name=_('Designation Name'),
         help_text=_('Post title (e.g., Junior Clerk, Superintendent).')
     )
@@ -465,6 +637,41 @@ class ScheduleOfEstablishment(AuditLogMixin, TenantAwareMixin):
         verbose_name=_('Rejection Reason')
     )
     
+    # SNE (Schedule of New Expenditure) fields
+    establishment_status = models.CharField(
+        max_length=15,
+        choices=EstablishmentStatus.choices,
+        default=EstablishmentStatus.SANCTIONED,
+        verbose_name=_('Establishment Status'),
+        help_text=_('SANCTIONED = existing posts, PROPOSED = new requests (SNE).')
+    )
+    justification = models.TextField(
+        blank=True,
+        verbose_name=_('Justification'),
+        help_text=_('Required for PROPOSED posts. Explain why new posts are needed.')
+    )
+    financial_impact = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Financial Impact'),
+        help_text=_('Auto-calculated: Initial Pay x 12 x Number of Posts.')
+    )
+    estimated_budget = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Estimated Budget'),
+        help_text=_('Budget estimate from Smart Calculator (filled + vacant costs + inflation).')
+    )
+    last_month_bill = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Last Month Bill'),
+        help_text=_('Last month total salary bill from bank advice (for estimation).')
+    )
+    
     class Meta:
         verbose_name = _('Schedule of Establishment')
         verbose_name_plural = _('Schedule of Establishment Entries')
@@ -503,19 +710,96 @@ class ScheduleOfEstablishment(AuditLogMixin, TenantAwareMixin):
         return self.post_type == PostType.PUGF
     
     def clean(self) -> None:
-        """Validate budget_head and post counts."""
+        """Validate budget_head, post counts, and justification for proposals."""
         from django.core.exceptions import ValidationError
-        if self.budget_head and not self.budget_head.is_salary_head():
-            raise ValidationError({
-                'budget_head': _(
-                    'Schedule of Establishment must link to a salary head (A01*). '
-                    f'Selected head {self.budget_head.pifra_object} is not a salary head.'
-                )
-            })
+        
+        # Safely check budget_head only if ID is present
+        if self.budget_head_id:
+            if not self.budget_head.is_salary_head():
+                raise ValidationError({
+                    'budget_head': _(
+                        'Schedule of Establishment must link to a salary head (A01*). '
+                        f'Selected head {self.budget_head.pifra_object} is not a salary head.'
+                    )
+                })
         if self.occupied_posts > self.sanctioned_posts:
             raise ValidationError({
                 'occupied_posts': _('Occupied posts cannot exceed sanctioned posts.')
             })
+        
+        # PROPOSED posts require justification
+        if self.establishment_status == EstablishmentStatus.PROPOSED:
+            if not self.justification or len(self.justification.strip()) < 20:
+                raise ValidationError({
+                    'justification': _(
+                        'Justification is required for new post proposals. '
+                        'Please provide at least 20 characters explaining why these posts are needed.'
+                    )
+                })
+    
+    def is_proposed(self) -> bool:
+        """Check if this is a new post proposal (SNE)."""
+        return self.establishment_status == EstablishmentStatus.PROPOSED
+    
+    def is_sanctioned(self) -> bool:
+        """Check if this is an existing sanctioned post."""
+        return self.establishment_status == EstablishmentStatus.SANCTIONED
+    
+    def calculate_financial_impact(self) -> Decimal:
+        """
+        Calculate financial impact for proposed posts.
+        
+        Uses BPS initial stage salary rates for estimation.
+        Also sets self.annual_salary if not already set.
+        
+        Returns:
+            Annual financial impact in PKR.
+        """
+        # BPS 2024 initial pay stages (approximate)
+        bps_initial_rates = {
+            1: 22000, 2: 22500, 3: 23000, 4: 24000, 5: 25000,
+            6: 26000, 7: 28000, 8: 30000, 9: 32000, 10: 35000,
+            11: 40000, 12: 45000, 13: 50000, 14: 55000, 15: 60000,
+            16: 70000, 17: 80000, 18: 100000, 19: 120000, 20: 150000,
+            21: 180000, 22: 220000
+        }
+        monthly_rate = Decimal(str(bps_initial_rates.get(self.bps_scale, 25000)))
+        
+        # Determine annual salary per post
+        estimated_annual_salary = monthly_rate * 12
+        
+        # Set annual_salary if missing (fixing IntegrityError for proposals)
+        if not self.annual_salary:
+            self.annual_salary = estimated_annual_salary
+            
+        # Calculate total impact
+        annual_cost = estimated_annual_salary * self.sanctioned_posts
+        return annual_cost
+    
+    def save(self, *args, **kwargs) -> None:
+        """Auto-calculate financial impact for proposed posts."""
+        if self.establishment_status == EstablishmentStatus.PROPOSED:
+            self.financial_impact = self.calculate_financial_impact()
+            # Ensure annual_salary is not None before super().save()
+            if self.annual_salary is None:
+                # Should have been set by calculate_financial_impact, but safety fallback
+                self.annual_salary = Decimal('300000.00') 
+        super().save(*args, **kwargs)
+    
+    def convert_to_sanctioned(self) -> None:
+        """
+        Convert a proposed post to sanctioned after budget approval.
+        
+        Called when the budget cycle is finalized.
+        """
+        if self.establishment_status == EstablishmentStatus.PROPOSED:
+            self.establishment_status = EstablishmentStatus.SANCTIONED
+            self.justification = ''  # Clear justification after approval
+            self.financial_impact = Decimal('0.00')
+            self.save(update_fields=[
+                'establishment_status', 'justification', 
+                'financial_impact', 'updated_at'
+            ])
 
 
 class QuarterlyRelease(AuditLogMixin, TenantAwareMixin):

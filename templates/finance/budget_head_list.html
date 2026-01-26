@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Chart of Accounts - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-list-ul"></i> Chart of Accounts</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{% url 'budgeting:setup_dashboard' %}">Setup</a></li>
+                <li class="breadcrumb-item active">CoA</li>
+            </ol>
+        </nav>
+    </div>
+    <a href="{% url 'budgeting:setup_coa_add' %}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> Add Budget Head
+    </a>
+</div>
+
+<form method="get" class="row g-2 mb-4">
+    <div class="col-md-4">
+        <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" name="q" class="form-control" placeholder="Search code or description..." value="{{ request.GET.q|default:'' }}">
+        </div>
+    </div>
+    <div class="col-md-2">
+        <button type="submit" class="btn btn-outline-secondary w-100">Search</button>
+    </div>
+</form>
+
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Object Code</th>
+                    <th>Sub-Object</th>
+                    <th>Description</th>
+                    <th>Function</th>
+                    <th>Type</th>
+                    <th class="text-center">Active</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for node in tree_nodes %}
+                {% with head=node.obj %}
+                <tr>
+                    <td>
+                        <div style="padding-left: calc({{ node.level }} * 1.5rem)">
+                            {% if not node.is_leaf %}
+                                <i class="bi bi-folder2-open text-primary me-1"></i>
+                            {% else %}
+                                <i class="bi bi-file-earmark-text text-muted me-1"></i>
+                            {% endif %}
+                            <code>{{ head.pifra_object }}</code>
+                        </div>
+                    </td>
+                    <td><span class="badge bg-light text-dark border">{{ head.tma_sub_object }}</span></td>
+                    <td>{{ head.tma_description }}</td>
+                    <td><small>{{ head.function.code|default:"-" }}</small></td>
+                    <td><span class="badge bg-secondary">{{ head.get_account_type_display }}</span></td>
+                    <td class="text-center">
+                        {% if head.is_active %}
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                        {% else %}
+                            <i class="bi bi-circle text-muted"></i>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <a href="{% url 'budgeting:setup_coa_edit' head.pk %}" class="btn btn-sm btn-outline-primary me-1" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <a href="{% url 'budgeting:setup_coa_delete' head.pk %}" class="btn btn-sm btn-outline-danger" title="Delete">
+                            <i class="bi bi-trash"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endwith %}
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-4 text-muted">No budget heads found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -25,19 +25,21 @@ from django.views.generic import (
 
 from apps.budgeting.models import (
     FiscalYear, BudgetAllocation, ScheduleOfEstablishment,
-    QuarterlyRelease, SAERecord, BudgetStatus, ReleaseQuarter
+    QuarterlyRelease, SAERecord, BudgetStatus, ReleaseQuarter,
+    DesignationMaster, Department
 )
 from apps.budgeting.forms import (
     FiscalYearForm, ReceiptEstimateForm, ExpenditureEstimateForm,
     ScheduleOfEstablishmentForm, BudgetApprovalForm, QuarterlyReleaseForm,
-    BudgetSearchForm
+    BudgetSearchForm, BPSSalaryScaleForm
 )
 from apps.budgeting.services import (
     finalize_budget, process_quarterly_release,
     validate_reserve_requirement, validate_zero_deficit
 )
 from apps.users.permissions import (
-    MakerRequiredMixin, ApproverRequiredMixin, FinanceOfficerRequiredMixin
+    MakerRequiredMixin, ApproverRequiredMixin, FinanceOfficerRequiredMixin,
+    AdminRequiredMixin
 )
 from apps.core.exceptions import (
     BudgetLockedException, ReserveViolationException, 
@@ -114,6 +116,21 @@ class FiscalYearCreateView(LoginRequiredMixin, ApproverRequiredMixin, CreateView
         form.instance.created_by = self.request.user
         form.instance.updated_by = self.request.user
         messages.success(self.request, _('Fiscal year created successfully.'))
+        return super().form_valid(form)
+
+
+class FiscalYearUpdateView(LoginRequiredMixin, ApproverRequiredMixin, UpdateView):
+    """
+    Update fiscal year details (TMO only).
+    """
+    model = FiscalYear
+    form_class = FiscalYearForm
+    template_name = 'budgeting/fiscal_year_form.html'
+    success_url = reverse_lazy('budgeting:fiscal_year_list')
+    
+    def form_valid(self, form):
+        form.instance.updated_by = self.request.user
+        messages.success(self.request, _('Fiscal year updated successfully.'))
         return super().form_valid(form)
 
 
@@ -327,12 +344,22 @@ class ScheduleOfEstablishmentListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         context['fiscal_years'] = FiscalYear.objects.all()
         
-        # Calculate totals
+        # Split into Section A (Sanctioned) and Section B (Proposed)
         queryset = self.get_queryset()
-        context['total_sanctioned'] = queryset.aggregate(
+        from apps.budgeting.models import EstablishmentStatus
+        
+        context['sanctioned_list'] = queryset.filter(
+            establishment_status=EstablishmentStatus.SANCTIONED
+        )
+        context['proposed_list'] = queryset.filter(
+            establishment_status=EstablishmentStatus.PROPOSED
+        )
+        
+        # Calculate totals
+        context['total_sanctioned'] = context['sanctioned_list'].aggregate(
             total=Sum('sanctioned_posts')
         )['total'] or 0
-        context['total_occupied'] = queryset.aggregate(
+        context['total_occupied'] = context['sanctioned_list'].aggregate(
             total=Sum('occupied_posts')
         )['total'] or 0
         
@@ -382,6 +409,55 @@ class ScheduleOfEstablishmentCreateView(LoginRequiredMixin, MakerRequiredMixin, 
         form.instance.updated_by = self.request.user
         
         messages.success(self.request, _('Establishment entry saved successfully.'))
+        return super().form_valid(form)
+
+
+class NewPostProposalCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
+    """
+    Create New Post Proposal (SNE) (Form BDC-2 Part B).
+    """
+    
+    model = ScheduleOfEstablishment
+    from apps.budgeting.forms import NewPostProposalForm
+    form_class = NewPostProposalForm
+    template_name = 'budgeting/form_sne.html'  # Specific template for SNE
+    success_url = reverse_lazy('budgeting:establishment_list')
+    
+    def get_form_kwargs(self) -> Dict[str, Any]:
+        kwargs = super().get_form_kwargs()
+        kwargs['fiscal_year'] = self.get_fiscal_year()
+        return kwargs
+    
+    def get_fiscal_year(self) -> FiscalYear:
+        fy_id = self.request.GET.get('fiscal_year')
+        if fy_id:
+            return get_object_or_404(FiscalYear, pk=fy_id)
+        return FiscalYear.objects.filter(is_active=True).first()
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        context['fiscal_year'] = self.get_fiscal_year()
+        context['form_title'] = _('Propose New Posts (SNE)')
+        return context
+    
+    def form_valid(self, form) -> HttpResponse:
+        fiscal_year = self.get_fiscal_year()
+        
+        if not fiscal_year:
+            messages.error(self.request, _('No active fiscal year found.'))
+            return self.form_invalid(form)
+        
+        if not fiscal_year.can_edit_budget():
+            messages.error(self.request, _('Budget entry is not allowed for this fiscal year.'))
+            return self.form_invalid(form)
+        
+        form.instance.fiscal_year = fiscal_year
+        form.instance.created_by = self.request.user
+        form.instance.updated_by = self.request.user
+        
+        # Financial impact is auto-calculated in model save()
+        
+        messages.success(self.request, _('New post proposal submitted successfully.'))
         return super().form_valid(form)
 
 
@@ -519,6 +595,7 @@ class SAEListView(LoginRequiredMixin, ListView):
     ordering = ['-approval_date']
 
 
+
 class SAEDetailView(LoginRequiredMixin, DetailView):
     """
     View SAE record details.
@@ -551,3 +628,445 @@ class SAEDetailView(LoginRequiredMixin, DetailView):
         ).order_by('department', '-bps_scale')
         
         return context
+
+
+from django.views import View
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+from django.utils.decorators import method_decorator
+import json
+
+
+class SmartCalculatorView(LoginRequiredMixin, View):
+    """
+    Smart Calculator API endpoint for budget estimation.
+    
+    Calculates annual budget based on:
+    - Filled posts cost (from last month bill × 12)
+    - Vacant posts cost (from BPS salary scale)
+    - 10% inflation buffer
+    """
+    
+    def get(self, request: HttpRequest, pk: int) -> HttpResponse:
+        """Return current estimation data for an establishment entry."""
+        entry = get_object_or_404(ScheduleOfEstablishment, pk=pk)
+        
+        from apps.budgeting.models import BPSSalaryScale
+        
+        # Get current values
+        vacant = entry.vacant_posts
+        filled = entry.occupied_posts
+        
+        # Get salary scale
+        scale = BPSSalaryScale.objects.filter(bps_grade=entry.bps_scale).first()
+        bps_annual = (scale.estimated_gross_salary * 12) if scale else Decimal('0')
+        
+        return JsonResponse({
+            'id': entry.id,
+            'designation': entry.designation_name,
+            'department': entry.department,
+            'bps_scale': entry.bps_scale,
+            'sanctioned_posts': entry.sanctioned_posts,
+            'occupied_posts': filled,
+            'vacant_posts': vacant,
+            'annual_salary_per_post': float(bps_annual),
+            'last_month_bill': float(entry.last_month_bill),
+            'current_estimated_budget': float(entry.estimated_budget),
+        })
+    
+    def post(self, request: HttpRequest, pk: int) -> HttpResponse:
+        """Calculate and save budget estimate."""
+        entry = get_object_or_404(ScheduleOfEstablishment, pk=pk)
+        
+        try:
+            data = json.loads(request.body)
+            filled_posts = int(data.get('filled_posts', 0))
+            last_month_bill = Decimal(str(data.get('last_month_bill', 0)))
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            return JsonResponse({'error': f'Invalid input: {e}'}, status=400)
+        
+        from apps.budgeting.models import BPSSalaryScale
+        
+        # Validate filled posts
+        if filled_posts < 0 or filled_posts > entry.sanctioned_posts:
+            return JsonResponse({
+                'error': f'Filled posts must be between 0 and {entry.sanctioned_posts}'
+            }, status=400)
+        
+        # Calculate vacant posts
+        vacant_posts = entry.sanctioned_posts - filled_posts
+        
+        # Get salary scale rate
+        scale = BPSSalaryScale.objects.filter(bps_grade=entry.bps_scale).first()
+        bps_annual = (scale.estimated_gross_salary * 12) if scale else Decimal('0')
+        
+        # Calculate annual cost for filled staff (from bill)
+        if filled_posts > 0 and last_month_bill > 0:
+            filled_annual_cost = last_month_bill * 12
+        else:
+            # Use BPS rate if no bill provided
+            filled_annual_cost = bps_annual * filled_posts
+        
+        # Calculate annual cost for vacant staff (using BPS salary scale)
+        vacant_annual_cost = bps_annual * vacant_posts
+        
+        # Total before inflation
+        total_cost = filled_annual_cost + vacant_annual_cost
+        
+        # Add 10% inflation buffer
+        inflation_buffer = total_cost * Decimal('0.10')
+        estimated_budget = total_cost + inflation_buffer
+        
+        # Only save if explicitly requested
+        should_save = data.get('save', False)
+        saved = False
+        
+        if should_save:
+            entry.occupied_posts = filled_posts
+            entry.last_month_bill = last_month_bill
+            entry.estimated_budget = estimated_budget
+            entry.save(update_fields=['occupied_posts', 'last_month_bill', 'estimated_budget', 'updated_at'])
+            saved = True
+        
+        return JsonResponse({
+            'success': True,
+            'saved': saved,
+            'filled_posts': filled_posts,
+            'vacant_posts': vacant_posts,
+            'filled_annual_cost': float(filled_annual_cost),
+            'vacant_annual_cost': float(vacant_annual_cost),
+            'inflation_buffer': float(inflation_buffer),
+            'estimated_budget': float(estimated_budget),
+            'message': f'Budget estimate {"saved" if saved else "calculated"}: Rs {estimated_budget:,.2f}'
+        })
+
+
+class EstablishmentDetailView(LoginRequiredMixin, DetailView):
+    """
+    View Schedule of Establishment entry details.
+    """
+    
+    model = ScheduleOfEstablishment
+    template_name = 'budgeting/establishment_detail.html'
+    context_object_name = 'entry'
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        
+        from apps.budgeting.workflows import get_user_allowed_actions, get_status_display_class
+        
+        # Get allowed actions for current user
+        context['allowed_actions'] = get_user_allowed_actions(
+            self.request.user,
+            self.object
+        )
+        context['status_class'] = get_status_display_class(self.object.approval_status)
+        
+        return context
+
+
+class EstablishmentApprovalView(LoginRequiredMixin, View):
+    """
+    Handle approval workflow actions for Schedule of Establishment entries.
+    
+    Supports: Verify, Recommend, Approve, Reject actions based on user role
+    and post type (PUGF/LOCAL).
+    """
+    
+    def post(self, request: HttpRequest, pk: int) -> HttpResponse:
+        """Process approval action."""
+        from apps.budgeting.models import ApprovalStatus
+        from apps.budgeting.workflows import perform_transition, get_user_allowed_actions
+        from apps.core.exceptions import WorkflowTransitionException
+        
+        entry = get_object_or_404(ScheduleOfEstablishment, pk=pk)
+        
+        # Get action from POST data
+        action = request.POST.get('action', '')
+        rejection_reason = request.POST.get('rejection_reason', '')
+        
+        # Map action to target status
+        action_map = {
+            'verify': ApprovalStatus.VERIFIED,
+            'recommend': ApprovalStatus.RECOMMENDED,
+            'approve': ApprovalStatus.APPROVED,
+            'reject': ApprovalStatus.REJECTED,
+        }
+        
+        target_status = action_map.get(action.lower())
+        
+        if not target_status:
+            messages.error(request, _('Invalid action specified.'))
+            return redirect('budgeting:establishment_list')
+        
+        # Check if user is allowed to perform this action
+        allowed_actions = get_user_allowed_actions(request.user, entry)
+        if target_status not in allowed_actions:
+            messages.error(request, _('You are not authorized to perform this action.'))
+            return redirect('budgeting:establishment_list')
+        
+        # Validate rejection reason
+        if target_status == ApprovalStatus.REJECTED and not rejection_reason.strip():
+            messages.error(request, _('Rejection reason is required.'))
+            return redirect('budgeting:establishment_detail', pk=pk)
+        
+        try:
+            with transaction.atomic():
+                perform_transition(
+                    establishment_entry=entry,
+                    target_status=target_status,
+                    user=request.user,
+                    rejection_reason=rejection_reason
+                )
+            
+            action_names = {
+                ApprovalStatus.VERIFIED: 'verified',
+                ApprovalStatus.RECOMMENDED: 'recommended for LCB approval',
+                ApprovalStatus.APPROVED: 'approved',
+                ApprovalStatus.REJECTED: 'rejected',
+            }
+            messages.success(
+                request,
+                _(f'Entry "{entry.designation_name}" has been {action_names.get(target_status, "updated")}.')
+            )
+        
+        except WorkflowTransitionException as e:
+            messages.error(request, str(e))
+        
+        except Exception as e:
+            messages.error(request, _(f'Error processing action: {str(e)}'))
+        
+        return redirect('budgeting:establishment_list')
+
+
+
+class EstablishmentBulkApprovalView(LoginRequiredMixin, TemplateView):
+    """
+    View for bulk approval of establishment entries.
+    Shows all pending entries that the current user can approve.
+    """
+    
+    template_name = 'budgeting/establishment_bulk_approval.html'
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        
+        from apps.budgeting.models import ApprovalStatus, PostType
+        from apps.budgeting.workflows import get_user_allowed_actions
+        
+        user = self.request.user
+        
+        # Get entries that user can act on
+        all_entries = ScheduleOfEstablishment.objects.filter(
+            approval_status__in=[
+                ApprovalStatus.DRAFT,
+                ApprovalStatus.VERIFIED,
+                ApprovalStatus.RECOMMENDED
+            ]
+        ).select_related('fiscal_year', 'budget_head')
+        
+        # Filter to only those user can act on
+        actionable_entries = []
+        for entry in all_entries:
+            actions = get_user_allowed_actions(user, entry)
+            if actions:
+                actionable_entries.append({
+                    'entry': entry,
+                    'allowed_actions': actions
+                })
+        
+        context['actionable_entries'] = actionable_entries
+        
+        # Stats
+        context['pending_local'] = ScheduleOfEstablishment.objects.filter(
+            post_type=PostType.LOCAL,
+            approval_status__in=[ApprovalStatus.DRAFT, ApprovalStatus.VERIFIED]
+        ).count()
+        
+        context['pending_pugf'] = ScheduleOfEstablishment.objects.filter(
+            post_type=PostType.PUGF,
+            approval_status__in=[ApprovalStatus.DRAFT, ApprovalStatus.VERIFIED, ApprovalStatus.RECOMMENDED]
+        ).count()
+        
+        return context
+
+
+# --- Setup / Master Data Management Views (Admin Only) ---
+
+class SetupDashboardView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
+    """Dashboard for managing master data."""
+    template_name = 'budgeting/setup_dashboard.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['department_count'] = Department.objects.count()
+        context['designation_count'] = DesignationMaster.objects.count()
+        from apps.finance.models import BudgetHead
+        context['coa_count'] = BudgetHead.objects.count()
+        return context
+
+
+class DepartmentListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
+    """List all departments."""
+    model = Department
+    template_name = 'budgeting/setup_department_list.html'
+    context_object_name = 'departments'
+
+
+class DepartmentCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
+    """Create new department."""
+    model = Department
+    fields = ['name', 'is_active']
+    template_name = 'budgeting/setup_form.html'
+    success_url = reverse_lazy('budgeting:setup_departments')
+    
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields['name'].widget.attrs.update({'class': 'form-control'})
+        form.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
+        return form
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _('Add New Department')
+        context['back_url'] = reverse_lazy('budgeting:setup_departments')
+        return context
+
+
+class DepartmentUpdateView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
+    """Update department."""
+    model = Department
+    fields = ['name', 'is_active']
+    template_name = 'budgeting/setup_form.html'
+    success_url = reverse_lazy('budgeting:setup_departments')
+    
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields['name'].widget.attrs.update({'class': 'form-control'})
+        form.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
+        return form
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _('Edit Department')
+        context['back_url'] = reverse_lazy('budgeting:setup_departments')
+        return context
+
+
+class DepartmentDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
+    """Delete department."""
+    model = Department
+    template_name = 'budgeting/setup_confirm_delete.html'
+    success_url = reverse_lazy('budgeting:setup_departments')
+    context_object_name = 'item'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _('Delete Department')
+        context['back_url'] = reverse_lazy('budgeting:setup_departments')
+        return context
+
+
+class DesignationListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
+    """List all designations."""
+    model = DesignationMaster
+    template_name = 'budgeting/setup_designation_list.html'
+    context_object_name = 'designations'
+
+
+class DesignationCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
+    """Create new designation."""
+    model = DesignationMaster
+    fields = ['name', 'bps_scale', 'post_type', 'is_active']
+    template_name = 'budgeting/setup_form.html'
+    success_url = reverse_lazy('budgeting:setup_designations')
+    
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields['name'].widget.attrs.update({'class': 'form-control'})
+        form.fields['bps_scale'].widget.attrs.update({'class': 'form-control'})
+        form.fields['post_type'].widget.attrs.update({'class': 'form-select'})
+        form.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
+        return form
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _('Add New Designation')
+        context['back_url'] = reverse_lazy('budgeting:setup_designations')
+        return context
+
+
+class DesignationUpdateView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
+    """Update designation."""
+    model = DesignationMaster
+    fields = ['name', 'bps_scale', 'post_type', 'is_active']
+    template_name = 'budgeting/setup_form.html'
+    success_url = reverse_lazy('budgeting:setup_designations')
+    
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields['name'].widget.attrs.update({'class': 'form-control'})
+        form.fields['bps_scale'].widget.attrs.update({'class': 'form-control'})
+        form.fields['post_type'].widget.attrs.update({'class': 'form-select'})
+        form.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
+        return form
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _('Edit Designation')
+        context['back_url'] = reverse_lazy('budgeting:setup_designations')
+        return context
+
+
+class DesignationDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
+    """Delete designation."""
+    model = DesignationMaster
+    template_name = 'budgeting/setup_confirm_delete.html'
+    success_url = reverse_lazy('budgeting:setup_designations')
+    context_object_name = 'item'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = _('Delete Designation')
+        context['back_url'] = reverse_lazy('budgeting:setup_designations')
+        return context
+
+
+class SalaryStructureView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
+    """
+    Grid view for editing BPS Salary Structures.
+    """
+    template_name = 'budgeting/setup_salary_structure.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from django.forms import modelformset_factory
+        from apps.budgeting.models import BPSSalaryScale
+        
+        SalaryFormSet = modelformset_factory(
+            BPSSalaryScale, 
+            form=BPSSalaryScaleForm,
+            extra=0,
+            can_delete=False
+        )
+        
+        if self.request.method == 'POST':
+            formset = SalaryFormSet(self.request.POST, queryset=BPSSalaryScale.objects.all().order_by('bps_grade'))
+        else:
+            formset = SalaryFormSet(queryset=BPSSalaryScale.objects.all().order_by('bps_grade'))
+            
+        context['formset'] = formset
+        return context
+        
+    def post(self, request, *args, **kwargs):
+        context = self.get_context_data(**kwargs)
+        formset = context['formset']
+        
+        if formset.is_valid():
+            formset.save()
+            messages.success(request, 'Salary structure updated successfully.')
+            return redirect('budgeting:setup_salary_structure')
+        else:
+            messages.error(request, 'Please verify the data. All fields must be valid numbers.')
+            return self.render_to_response(context)
+

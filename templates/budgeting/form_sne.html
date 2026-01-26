@@ -1,0 +1,108 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Form for proposing new posts (SNE).
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}{{ form_title }} - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10 col-lg-8">
+        <div class="card shadow-sm border-left-primary">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-file-earmark-plus-fill text-primary fs-3 me-3"></i>
+                    <div>
+                        <h4 class="mb-0 text-primary">{{ form_title }}</h4>
+                        <p class="text-muted mb-0 small">Schedule of New Expenditure (SNE) Request</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                
+                <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
+                    <i class="bi bi-info-circle-fill fs-4 me-3"></i>
+                    <div>
+                        <strong>Create Budget Request:</strong>
+                        These posts will be marked as <span class="badge bg-warning text-dark">PROPOSED</span> 
+                        and require Council approval before becoming part of the Sanctioned strength.
+                    </div>
+                </div>
+
+                <form method="post" class="needs-validation" novalidate>
+                    {% csrf_token %}
+                    
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div class="row g-3">
+                        <!-- Department & Designation -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">{{ form.department_select.label }}</label>
+                            {{ form.department_select }}
+                            <div class="form-text">Administrative unit requesting the post.</div>
+                            {% if form.department_select.errors %}
+                                <div class="text-danger small">{{ form.department_select.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">{{ form.designation.label }}</label>
+                            {{ form.designation }}
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>
+                                BPS grade, Post Type, and Budget Head will be auto-determined.
+                            </div>
+                            {% if form.designation.errors %}
+                                <div class="text-danger small">{{ form.designation.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold">{{ form.sanctioned_posts.label }}</label>
+                            {{ form.sanctioned_posts }}
+                            {% if form.sanctioned_posts.errors %}
+                                <div class="text-danger small">{{ form.sanctioned_posts.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Justification -->
+                        <div class="col-12 mt-4">
+                            <label class="form-label fw-bold text-dark h6">
+                                {{ form.justification.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.justification }}
+                            <div class="form-text text-muted">
+                                Please provide a detailed explanation (min 20 characters). Why is this new expenditure necessary? 
+                                This will be presented to the Council for approval.
+                            </div>
+                            {% if form.justification.errors %}
+                                <div class="text-danger small">{{ form.justification.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-5 border-top pt-4">
+                        <a href="{% url 'budgeting:establishment_list' %}" class="btn btn-light border">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-4">
+                            <i class="bi bi-check-lg me-2"></i> Submit Proposal
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

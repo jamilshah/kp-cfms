@@ -18,14 +18,14 @@ from apps.budgeting.models import ApprovalStatus, PostType
 
 # Define valid state transitions
 LOCAL_TRANSITIONS = {
-    ApprovalStatus.DRAFT: [ApprovalStatus.VERIFIED],
+    ApprovalStatus.DRAFT: [ApprovalStatus.VERIFIED, ApprovalStatus.APPROVED],
     ApprovalStatus.VERIFIED: [ApprovalStatus.APPROVED, ApprovalStatus.REJECTED],
     ApprovalStatus.APPROVED: [],
     ApprovalStatus.REJECTED: [ApprovalStatus.DRAFT],
 }
 
 PUGF_TRANSITIONS = {
-    ApprovalStatus.DRAFT: [ApprovalStatus.VERIFIED],
+    ApprovalStatus.DRAFT: [ApprovalStatus.VERIFIED, ApprovalStatus.RECOMMENDED],
     ApprovalStatus.VERIFIED: [ApprovalStatus.RECOMMENDED, ApprovalStatus.REJECTED],
     ApprovalStatus.RECOMMENDED: [ApprovalStatus.APPROVED, ApprovalStatus.REJECTED],
     ApprovalStatus.APPROVED: [],
@@ -209,12 +209,17 @@ def get_user_allowed_actions(user, establishment_entry) -> List[str]:
     )
     
     allowed = []
+    
+    # Force 'ADM' role for superusers to ensure full access
+    # This covers cases where superuser has a default role like 'DA'
+    user_role = 'ADM' if user.is_superuser else user.role
+    
     for target in valid_transitions:
         is_valid, _ = validate_transition(
             establishment_entry.post_type,
             establishment_entry.approval_status,
             target,
-            user.role
+            user_role
         )
         if is_valid:
             allowed.append(target)
