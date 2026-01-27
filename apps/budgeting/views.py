@@ -26,13 +26,19 @@ from django.views.generic import (
 from apps.budgeting.models import (
     FiscalYear, BudgetAllocation, ScheduleOfEstablishment,
     QuarterlyRelease, SAERecord, BudgetStatus, ReleaseQuarter,
-    DesignationMaster, Department
+    DesignationMaster, Department,
+    # Phase 3: Pension & Budget Execution
+    PensionEstimate, RetiringEmployee, PensionEstimateStatus,
+    SupplementaryGrant, SupplementaryGrantStatus,
+    Reappropriation, ReappropriationStatus
 )
 from apps.budgeting.models_employee import BudgetEmployee
 from apps.budgeting.forms import (
     FiscalYearForm, ReceiptEstimateForm, ExpenditureEstimateForm,
     ScheduleOfEstablishmentForm, BudgetApprovalForm, QuarterlyReleaseForm,
-    BudgetSearchForm, BPSSalaryScaleForm
+    BudgetSearchForm, BPSSalaryScaleForm,
+    # Phase 3: Pension & Budget Execution
+    PensionEstimateForm, RetiringEmployeeForm, SupplementaryGrantForm, ReappropriationForm
 )
 from apps.budgeting.services import (
     finalize_budget, process_quarterly_release,
@@ -1223,4 +1229,153 @@ class SalaryStructureView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
         else:
             messages.error(request, 'Please verify the data. All fields must be valid numbers.')
             return self.render_to_response(context)
+
+
+# =============================================================================
+# Phase 3: Pension Estimate Workflows
+# =============================================================================
+
+class PensionEstimateListView(LoginRequiredMixin, ListView):
+    model = PensionEstimate
+    template_name = 'budgeting/pension_estimate_list.html'
+    context_object_name = 'pension_estimates'
+    ordering = ['-fiscal_year__start_date']
+
+
+class PensionEstimateCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
+    model = PensionEstimate
+    form_class = PensionEstimateForm
+    template_name = 'budgeting/pension_estimate_form.html'
+    success_url = reverse_lazy('budgeting:pension_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from django.forms import inlineformset_factory
+        RetiringEmployeeFormSet = inlineformset_factory(
+            PensionEstimate, RetiringEmployee, 
+            form=RetiringEmployeeForm, extra=1, can_delete=True
+        )
+        if self.request.POST:
+            context['retirees_formset'] = RetiringEmployeeFormSet(self.request.POST)
+        else:
+            context['retirees_formset'] = RetiringEmployeeFormSet()
+        return context
+
+    def form_valid(self, form):
+        context = self.get_context_data()
+        retirees_formset = context['retirees_formset']
+        if retirees_formset.is_valid():
+            self.object = form.save(commit=False)
+            self.object.created_by = self.request.user
+            self.object.updated_by = self.request.user
+            self.object.save()
+            retirees_formset.instance = self.object
+            retirees_formset.save()
+            messages.success(self.request, 'Pension estimate created successfully.')
+            return super().form_valid(form)
+        else:
+            return self.render_to_response(self.get_context_data(form=form))
+
+
+class PensionEstimateDetailView(LoginRequiredMixin, DetailView):
+    model = PensionEstimate
+    template_name = 'budgeting/pension_estimate_detail.html'
+    context_object_name = 'estimate'
+
+
+class PensionEstimateCalculateView(LoginRequiredMixin, MakerRequiredMixin, View):
+    def post(self, request, pk):
+        estimate = get_object_or_404(PensionEstimate, pk=pk)
+        try:
+            result = estimate.calculate_and_lock(user=request.user)
+            messages.success(
+                request, 
+                f"Pension Budget Locked: A04101 (Monthly) = {result['monthly_pension']:,.2f}, "
+                f"A04102 (Commutation) = {result['commutation']:,.2f}"
+            )
+        except Exception as e:
+            messages.error(request, str(e))
+        return redirect('budgeting:pension_detail', pk=pk)
+
+
+# =============================================================================
+# Supplementary Grant Workflows
+# =============================================================================
+
+class SupplementaryGrantListView(LoginRequiredMixin, ListView):
+    model = SupplementaryGrant
+    template_name = 'budgeting/supplementary_grant_list.html'
+    context_object_name = 'grants'
+    ordering = ['-date']
+
+
+class SupplementaryGrantCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
+    model = SupplementaryGrant
+    form_class = SupplementaryGrantForm
+    template_name = 'budgeting/supplementary_grant_form.html'
+    success_url = reverse_lazy('budgeting:supplementary_list')
+
+    def form_valid(self, form):
+        form.instance.created_by = self.request.user
+        form.instance.updated_by = self.request.user
+        messages.success(self.request, 'Supplementary grant request created.')
+        return super().form_valid(form)
+
+
+class SupplementaryGrantDetailView(LoginRequiredMixin, DetailView):
+    model = SupplementaryGrant
+    template_name = 'budgeting/supplementary_grant_detail.html'
+    context_object_name = 'grant'
+
+
+class SupplementaryGrantApproveView(LoginRequiredMixin, ApproverRequiredMixin, View):
+    def post(self, request, pk):
+        grant = get_object_or_404(SupplementaryGrant, pk=pk)
+        try:
+            grant.approve(user=request.user)
+            messages.success(request, f"Supplementary grant {grant.reference_no} approved.")
+        except Exception as e:
+            messages.error(request, str(e))
+        return redirect('budgeting:supplementary_detail', pk=pk)
+
+
+# =============================================================================
+# Reappropriation Workflows
+# =============================================================================
+
+class ReappropriationListView(LoginRequiredMixin, ListView):
+    model = Reappropriation
+    template_name = 'budgeting/reappropriation_list.html'
+    context_object_name = 'reappropriations'
+    ordering = ['-date']
+
+
+class ReappropriationCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
+    model = Reappropriation
+    form_class = ReappropriationForm
+    template_name = 'budgeting/reappropriation_form.html'
+    success_url = reverse_lazy('budgeting:reappropriation_list')
+
+    def form_valid(self, form):
+        form.instance.created_by = self.request.user
+        form.instance.updated_by = self.request.user
+        messages.success(self.request, 'Re-appropriation request created.')
+        return super().form_valid(form)
+
+
+class ReappropriationDetailView(LoginRequiredMixin, DetailView):
+    model = Reappropriation
+    template_name = 'budgeting/reappropriation_detail.html'
+    context_object_name = 'reappropriation'
+
+
+class ReappropriationApproveView(LoginRequiredMixin, ApproverRequiredMixin, View):
+    def post(self, request, pk):
+        reapp = get_object_or_404(Reappropriation, pk=pk)
+        try:
+            reapp.approve(user=request.user)
+            messages.success(request, f"Re-appropriation {reapp.reference_no} approved.")
+        except Exception as e:
+            messages.error(request, str(e))
+        return redirect('budgeting:reappropriation_detail', pk=pk)
 

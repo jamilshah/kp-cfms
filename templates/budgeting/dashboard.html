@@ -111,8 +111,21 @@ Description: Budgeting module dashboard template.
                         <a href="{% url 'budgeting:establishment_create' %}" class="btn btn-outline-primary">
                             <i class="bi bi-plus-lg"></i> Add Establishment Entry (BDC-2)
                         </a>
+                        
+                        <div class="border-top my-2"></div>
+                        <h6 class="text-muted mb-2"><small>Execution & Pension</small></h6>
+                        
+                        <a href="{% url 'budgeting:pension_list' %}" class="btn btn-outline-info text-dark">
+                            <i class="bi bi-person-wheelchair"></i> Pension Estimates
+                        </a>
+                        <a href="{% url 'budgeting:supplementary_list' %}" class="btn btn-outline-warning text-dark">
+                            <i class="bi bi-cash-coin"></i> Supplementary Grants
+                        </a>
+                        <a href="{% url 'budgeting:reappropriation_list' %}" class="btn btn-outline-success text-dark">
+                            <i class="bi bi-arrow-left-right"></i> Re-appropriations
+                        </a>
                         {% if active_fiscal_year.can_edit_budget %}
-                            <a href="{% url 'budgeting:budget_approval' active_fiscal_year.pk %}" class="btn btn-cfms">
+                            <a href="{% url 'budgeting:budget_approval' active_fiscal_year.pk %}" class="btn btn-primary">
                                 <i class="bi bi-check2-square"></i> Finalize Budget
                             </a>
                         {% endif %}

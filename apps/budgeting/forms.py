@@ -17,7 +17,9 @@ from django.db.models import Q
 
 from apps.budgeting.models import (
     FiscalYear, BudgetAllocation, ScheduleOfEstablishment, BudgetStatus,
-    DesignationMaster, Department, BPSSalaryScale
+    DesignationMaster, Department, BPSSalaryScale,
+    # Phase 3: Pension & Budget Execution
+    PensionEstimate, RetiringEmployee, SupplementaryGrant, Reappropriation
 )
 from apps.budgeting.services import validate_receipt_growth
 from apps.finance.models import BudgetHead, AccountType
@@ -558,3 +560,151 @@ class BPSSalaryScaleForm(forms.ModelForm):
             'house_rent_percent': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '0.01'}),
             'adhoc_relief_total_percent': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '0.01'}),
         }
+
+
+# =============================================================================
+# Phase 3: Pension & Budget Execution Forms
+# =============================================================================
+
+class PensionEstimateForm(forms.ModelForm):
+    """
+    Form for creating/editing Pension Estimates.
+    """
+    class Meta:
+        model = PensionEstimate
+        fields = ['fiscal_year', 'current_monthly_bill', 'expected_increase', 'remarks']
+        widgets = {
+            'fiscal_year': forms.Select(attrs={'class': 'form-select'}),
+            'current_monthly_bill': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0'
+            }),
+            'expected_increase': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0',
+                'max': '100'
+            }),
+            'remarks': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Filter active fiscal years or future ones
+        self.fields['fiscal_year'].queryset = FiscalYear.objects.filter(is_locked=False)
+
+
+class RetiringEmployeeForm(forms.ModelForm):
+    """
+    Form for adding Retiring Employees to a Pension Estimate.
+    """
+    class Meta:
+        model = RetiringEmployee
+        fields = ['name', 'designation', 'retirement_date', 
+                  'monthly_pension_amount', 'commutation_amount', 'remarks']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'designation': forms.TextInput(attrs={'class': 'form-control'}),
+            'retirement_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'monthly_pension_amount': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0'
+            }),
+            'commutation_amount': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0'
+            }),
+            'remarks': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+        }
+
+
+class SupplementaryGrantForm(forms.ModelForm):
+    """
+    Form for requesting a Supplementary Grant.
+    """
+    class Meta:
+        model = SupplementaryGrant
+        fields = ['fiscal_year', 'budget_head', 'amount', 'reference_no', 
+                  'date', 'description']
+        widgets = {
+            'fiscal_year': forms.Select(attrs={'class': 'form-select'}),
+            'budget_head': forms.Select(attrs={'class': 'form-select'}),
+            'amount': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0.01'
+            }),
+            'reference_no': forms.TextInput(attrs={'class': 'form-control'}),
+            'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['budget_head'].queryset = BudgetHead.objects.filter(is_active=True)
+
+
+class ReappropriationForm(forms.ModelForm):
+    """
+    Form for requesting Re-appropriation of funds.
+    """
+    class Meta:
+        model = Reappropriation
+        fields = ['fiscal_year', 'from_head', 'to_head', 'amount', 
+                  'reference_no', 'date', 'description']
+        widgets = {
+            'fiscal_year': forms.Select(attrs={'class': 'form-select'}),
+            'from_head': forms.Select(attrs={'class': 'form-select'}),
+            'to_head': forms.Select(attrs={'class': 'form-select'}),
+            'amount': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0.01'
+            }),
+            'reference_no': forms.TextInput(attrs={'class': 'form-control'}),
+            'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Filter budget heads that are active
+        active_heads = BudgetHead.objects.filter(is_active=True)
+        self.fields['from_head'].queryset = active_heads
+        self.fields['to_head'].queryset = active_heads
+
+    def clean(self):
+        cleaned_data = super().clean()
+        from_head = cleaned_data.get('from_head')
+        to_head = cleaned_data.get('to_head')
+        amount = cleaned_data.get('amount')
+        fiscal_year = cleaned_data.get('fiscal_year')
+
+        if from_head and to_head:
+            # Rule 1: Same Fund check
+            if from_head.fund != to_head.fund:
+                raise forms.ValidationError(
+                    f"Both budget heads must belong to the same Fund. "
+                    f"From: {from_head.fund}, To: {to_head.fund}"
+                )
+            
+            # Rule 2: Validation of sufficient balance is done in model.clean(), 
+            # but we can do a preliminary check here if we have fiscal_year
+            if fiscal_year and amount:
+                try:
+                    from_allocation = BudgetAllocation.objects.get(
+                        fiscal_year=fiscal_year,
+                        budget_head=from_head
+                    )
+                    available = from_allocation.revised_allocation - from_allocation.spent_amount
+                    if amount > available:
+                        self.add_error('amount', 
+                            f"Insufficient balance in {from_head}. Available: {available}"
+                        )
+                except BudgetAllocation.DoesNotExist:
+                   self.add_error('from_head', f"No budget allocation found for {from_head} in {fiscal_year}.")
+
+        return cleaned_data

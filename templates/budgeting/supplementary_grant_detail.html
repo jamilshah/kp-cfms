@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Supplementary Grant Details - KP-CFMS{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:supplementary_list' %}">Supplementary Grants</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Grant Details</li>
+    </ol>
+</nav>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>
+                <i class="bi bi-file-text"></i> Grant Request
+                {% if grant.status == 'APPROVED' %}
+                    <span class="badge bg-success ms-2">APPROVED</span>
+                {% elif grant.status == 'REJECTED' %}
+                    <span class="badge bg-danger ms-2">REJECTED</span>
+                {% else %}
+                    <span class="badge bg-secondary ms-2">DRAFT</span>
+                {% endif %}
+            </h2>
+            <a href="{% url 'budgeting:supplementary_list' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to List
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between">
+                <h5 class="mb-0">Reference: {{ grant.reference_no }}</h5>
+                <span>{{ grant.date }}</span>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th class="w-25">Fiscal Year:</th>
+                        <td>{{ grant.fiscal_year }}</td>
+                    </tr>
+                    <tr>
+                        <th>Budget Head:</th>
+                        <td>
+                            <strong class="text-primary">{{ grant.budget_head.pifra_object }}</strong> - 
+                            {{ grant.budget_head.tma_sub_object }} <br>
+                            <span class="text-muted">{{ grant.budget_head.tma_description }}</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Amount:</th>
+                        <td><h4 class="text-success mb-0">Rs {{ grant.amount|intcomma }}</h4></td>
+                    </tr>
+                    <tr>
+                        <th>Description:</th>
+                        <td>{{ grant.description|linebreaks }}</td>
+                    </tr>
+                    
+                    {% if grant.status != 'DRAFT' %}
+                    <tr>
+                        <th class="border-top pt-3">Processed By:</th>
+                        <td class="border-top pt-3">
+                            {{ grant.approved_by.get_full_name }} <br>
+                            <small class="text-muted">{{ grant.approved_at }}</small>
+                        </td>
+                    </tr>
+                    {% endif %}
+
+                    {% if grant.status == 'REJECTED' %}
+                    <tr>
+                        <th class="text-danger">Rejection Reason:</th>
+                        <td class="text-danger">{{ grant.rejection_reason }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+
+                {% if grant.status == 'DRAFT' %}
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> 
+                    Approving this grant will immediately increase the Revised Allocation of the selected budget head.
+                </div>
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                    <!-- Reject Button could be added here -->
+                    
+                    <form method="post" action="{% url 'budgeting:supplementary_approve' grant.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-success" 
+                                onclick="return confirm('Are you sure you want to approve this grant?')">
+                            <i class="bi bi-check-lg"></i> Approve Grant
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

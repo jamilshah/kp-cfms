@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Supplementary Grants - KP-CFMS{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Supplementary Grants</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-cash-coin"></i> Supplementary Grants</h2>
+    <a href="{% url 'budgeting:supplementary_create' %}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> New Grant Request
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>Reference No</th>
+                        <th>Fiscal Year</th>
+                        <th>Budget Head</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for grant in grants %}
+                    <tr>
+                        <td>{{ grant.date|date:"d M, Y" }}</td>
+                        <td class="fw-bold">{{ grant.reference_no }}</td>
+                        <td>{{ grant.fiscal_year }}</td>
+                        <td>
+                            {{ grant.budget_head.pifra_object }} - 
+                            {{ grant.budget_head.tma_sub_object }}
+                        </td>
+                        <td class="text-end fw-bold text-success">
+                            Rs {{ grant.amount|intcomma }}
+                        </td>
+                        <td class="text-center">
+                            {% if grant.status == 'APPROVED' %}
+                                <span class="badge bg-success">Approved</span>
+                            {% elif grant.status == 'REJECTED' %}
+                                <span class="badge bg-danger">Rejected</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Draft</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <a href="{% url 'budgeting:supplementary_detail' grant.pk %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i> View
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            No supplementary grants found.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Re-appropriation Details - KP-CFMS{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:reappropriation_list' %}">Re-appropriations</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Re-appropriation Details</li>
+    </ol>
+</nav>
+
+<div class="row justify-content-center">
+    <div class="col-md-9">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>
+                <i class="bi bi-file-text"></i> Re-appropriation Details
+                {% if reappropriation.status == 'APPROVED' %}
+                    <span class="badge bg-success ms-2">APPROVED</span>
+                {% else %}
+                    <span class="badge bg-secondary ms-2">DRAFT</span>
+                {% endif %}
+            </h2>
+            <a href="{% url 'budgeting:reappropriation_list' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to List
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between">
+                <h5 class="mb-0">Reference: {{ reappropriation.reference_no }}</h5>
+                <span>{{ reappropriation.date }}</span>
+            </div>
+            <div class="card-body">
+                
+                <!-- Transfer Visualization -->
+                <div class="row align-items-center text-center my-4">
+                    <div class="col-5">
+                        <div class="p-3 border rounded bg-light">
+                            <h6 class="text-danger mb-2">Source (From)</h6>
+                            <h5 class="mb-1">{{ reappropriation.from_head.pifra_object }}</h5>
+                            <small class="text-muted d-block text-truncate">{{ reappropriation.from_head.tma_sub_object }}</small>
+                            <span class="badge bg-danger mt-2">- Rs {{ reappropriation.amount|intcomma }}</span>
+                        </div>
+                    </div>
+                    <div class="col-2">
+                        <i class="bi bi-arrow-right-circle-fill text-primary fs-1"></i>
+                    </div>
+                    <div class="col-5">
+                        <div class="p-3 border rounded bg-light">
+                            <h6 class="text-success mb-2">Destination (To)</h6>
+                            <h5 class="mb-1">{{ reappropriation.to_head.pifra_object }}</h5>
+                            <small class="text-muted d-block text-truncate">{{ reappropriation.to_head.tma_sub_object }}</small>
+                            <span class="badge bg-success mt-2">+ Rs {{ reappropriation.amount|intcomma }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <hr>
+
+                <table class="table table-borderless">
+                    <tr>
+                        <th class="w-25">Amount Transferred:</th>
+                        <td><h4 class="text-primary mb-0">Rs {{ reappropriation.amount|intcomma }}</h4></td>
+                    </tr>
+                    <tr>
+                        <th class="w-25">Fiscal Year:</th>
+                        <td>{{ reappropriation.fiscal_year }}</td>
+                    </tr>
+                    <tr>
+                        <th>Description:</th>
+                        <td>{{ reappropriation.description|linebreaks }}</td>
+                    </tr>
+                    
+                    {% if reappropriation.status == 'APPROVED' %}
+                    <tr>
+                        <th class="border-top pt-3">Approved By:</th>
+                        <td class="border-top pt-3">
+                            {{ reappropriation.approved_by.get_full_name }} <br>
+                            <small class="text-muted">{{ reappropriation.approved_at }}</small>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </table>
+
+                {% if reappropriation.status == 'DRAFT' %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    Please ensure the source head has sufficient available balance before approving.
+                </div>
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                    <form method="post" action="{% url 'budgeting:reappropriation_approve' reappropriation.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-success" 
+                                onclick="return confirm('Are you sure you want to approve this transfer? Funds will be moved immediately.')">
+                            <i class="bi bi-check-lg"></i> Approve Transfer
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

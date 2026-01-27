@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Pension Estimate Details - KP-CFMS{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:pension_list' %}">Pension Estimates</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Estimate Details</li>
+    </ol>
+</nav>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>
+                <i class="bi bi-file-text"></i> Pension Estimate: {{ estimate.fiscal_year }}
+                {% if estimate.status == 'LOCKED' %}
+                    <span class="badge bg-success ms-2">LOCKED</span>
+                {% else %}
+                    <span class="badge bg-warning text-dark ms-2">DRAFT</span>
+                {% endif %}
+            </h2>
+            <a href="{% url 'budgeting:pension_list' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to List
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Parameters Card -->
+    <div class="col-md-5">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0">Estimation Parameters</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th class="w-50">Current Monthly Bill:</th>
+                        <td>Rs {{ estimate.current_monthly_bill|intcomma }}</td>
+                    </tr>
+                    <tr>
+                        <th>Expected Increase:</th>
+                        <td>{{ estimate.expected_increase }}%</td>
+                    </tr>
+                    <tr>
+                        <th>Created By:</th>
+                        <td>{{ estimate.created_by.get_full_name }}</td>
+                    </tr>
+                    <tr>
+                        <th>Remarks:</th>
+                        <td>{{ estimate.remarks|default:"-" }}</td>
+                    </tr>
+                </table>
+
+                {% if estimate.status == 'LOCKED' %}
+                <div class="alert alert-success mt-3">
+                    <h6><i class="bi bi-lock-fill"></i> Locked Budget</h6>
+                    <p class="mb-1">Locked on: {{ estimate.locked_at }}</p>
+                    <p class="mb-0">Locked by: {{ estimate.locked_by.get_full_name }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Card -->
+    <div class="col-md-7">
+        <div class="card h-100 border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Calculated Budget Requirements</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center mb-4">
+                    <div class="col-md-6">
+                        <h6 class="text-muted">A04101: Pension</h6>
+                        <h3 class="text-primary">Rs {{ estimate.estimated_monthly_pension|intcomma }}</h3>
+                        <small class="text-muted">Based on monthly bill + increase + new retirees</small>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted">A04102: Commutation</h6>
+                        <h3 class="text-info">Rs {{ estimate.estimated_commutation|intcomma }}</h3>
+                        <small class="text-muted">Sum of all retiring employees' commutation</small>
+                    </div>
+                </div>
+
+                {% if estimate.status == 'DRAFT' %}
+                <div class="d-grid gap-2">
+                    <form method="post" action="{% url 'budgeting:pension_calculate' estimate.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-success btn-lg w-100" 
+                                onclick="return confirm('Are you sure? This will LOCK the estimate and update the Budget Allocation. This action cannot be undone.')">
+                            <i class="bi bi-calculator-fill"></i> Calculate & Lock Budget
+                        </button>
+                    </form>
+                </div>
+                <div class="alert alert-warning mt-3 mb-0">
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    Check all retiring employees below before locking.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Retiring Employees List -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0">Retiring Employees List</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Designation</th>
+                        <th>Retirement Date</th>
+                        <th class="text-end">Monthly Pension</th>
+                        <th class="text-end">Commutation</th>
+                        <th>Remarks</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for retiree in estimate.retiring_employees.all %}
+                    <tr>
+                        <td>{{ retiree.name }}</td>
+                        <td>{{ retiree.designation }}</td>
+                        <td>{{ retiree.retirement_date }}</td>
+                        <td class="text-end">{{ retiree.monthly_pension_amount|intcomma }}</td>
+                        <td class="text-end">{{ retiree.commutation_amount|intcomma }}</td>
+                        <td>{{ retiree.remarks|default:"" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted">No retiring employees added.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

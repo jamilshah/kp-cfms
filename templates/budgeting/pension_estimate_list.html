@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Pension Estimates - KP-CFMS{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Pension Estimates</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-person-wheelchair"></i> Pension Estimates</h2>
+    <a href="{% url 'budgeting:pension_create' %}" class="btn btn-primary">
+        <i class="bi bi-plus-lg"></i> New Estimate
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Fiscal Year</th>
+                        <th>Status</th>
+                        <th class="text-end">Monthly Bill</th>
+                        <th class="text-end">Est. Annual Pension (A04101)</th>
+                        <th class="text-end">Est. Commutation (A04102)</th>
+                        <th class="text-center">Retirees</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for estimate in pension_estimates %}
+                    <tr>
+                        <td class="fw-bold">{{ estimate.fiscal_year }}</td>
+                        <td>
+                            {% if estimate.status == 'LOCKED' %}
+                                <span class="badge bg-success">Locked</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Draft</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">Rs {{ estimate.current_monthly_bill|intcomma }}</td>
+                        <td class="text-end">Rs {{ estimate.estimated_monthly_pension|intcomma }}</td>
+                        <td class="text-end">Rs {{ estimate.estimated_commutation|intcomma }}</td>
+                        <td class="text-center">{{ estimate.retiring_employees.count }}</td>
+                        <td class="text-center">
+                            <a href="{% url 'budgeting:pension_detail' estimate.pk %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i> View
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            No pension estimates found.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

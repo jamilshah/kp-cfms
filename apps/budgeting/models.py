@@ -84,6 +84,31 @@ class EstablishmentStatus(models.TextChoices):
     PROPOSED = 'PROPOSED', _('Proposed (New)')
 
 
+class PensionEstimateStatus(models.TextChoices):
+    """
+    Status choices for pension estimate workflow.
+    """
+    DRAFT = 'DRAFT', _('Draft')
+    LOCKED = 'LOCKED', _('Locked (Finalized)')
+
+
+class SupplementaryGrantStatus(models.TextChoices):
+    """
+    Status choices for supplementary grant workflow.
+    """
+    DRAFT = 'DRAFT', _('Draft')
+    APPROVED = 'APPROVED', _('Approved')
+    REJECTED = 'REJECTED', _('Rejected')
+
+
+class ReappropriationStatus(models.TextChoices):
+    """
+    Status choices for re-appropriation workflow.
+    """
+    DRAFT = 'DRAFT', _('Draft')
+    APPROVED = 'APPROVED', _('Approved')
+
+
 class FiscalYear(AuditLogMixin, TenantAwareMixin):
     """
     Represents a financial year for budget planning.
@@ -1031,3 +1056,538 @@ class SAERecord(TimeStampedMixin, TenantAwareMixin):
     def get_surplus_deficit(self) -> Decimal:
         """Calculate surplus (positive) or deficit (negative)."""
         return self.total_receipts - self.total_expenditure
+
+
+# =============================================================================
+# Phase 3: Pension & Budget Execution Models
+# =============================================================================
+
+class PensionEstimate(AuditLogMixin, TenantAwareMixin):
+    """
+    Pension Estimate for budget planning.
+    
+    Calculates estimated pension (A04101) and commutation (A04102) budgets
+    based on current pensioners and expected retirees.
+    
+    Attributes:
+        fiscal_year: The fiscal year for this estimate
+        current_monthly_bill: Total pension bill of June (last month of previous FY)
+        expected_increase: Expected percentage increase (e.g., 10.0 for 10%)
+        status: DRAFT or LOCKED
+    """
+    
+    fiscal_year = models.ForeignKey(
+        FiscalYear,
+        on_delete=models.PROTECT,
+        related_name='pension_estimates',
+        verbose_name=_('Fiscal Year')
+    )
+    current_monthly_bill = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Current Monthly Pension Bill'),
+        help_text=_('Total pension bill of June (last month of previous FY).')
+    )
+    expected_increase = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('10.00'),
+        validators=[MinValueValidator(Decimal('0.00')), MaxValueValidator(Decimal('100.00'))],
+        verbose_name=_('Expected Increase (%)'),
+        help_text=_('Expected percentage increase in pension (e.g., 10.0 for 10%).')
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=PensionEstimateStatus.choices,
+        default=PensionEstimateStatus.DRAFT,
+        verbose_name=_('Status')
+    )
+    
+    # Calculated fields (set by calculate_and_lock)
+    estimated_monthly_pension = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Estimated Monthly Pension (A04101)'),
+        help_text=_('Calculated: (current_bill * 12 * (1 + increase%)) + new retirees pension.')
+    )
+    estimated_commutation = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Estimated Commutation (A04102)'),
+        help_text=_('Calculated: Sum of all retirees commutation amounts.')
+    )
+    locked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Locked At')
+    )
+    locked_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='locked_pension_estimates',
+        verbose_name=_('Locked By')
+    )
+    remarks = models.TextField(
+        blank=True,
+        verbose_name=_('Remarks')
+    )
+    
+    class Meta:
+        verbose_name = _('Pension Estimate')
+        verbose_name_plural = _('Pension Estimates')
+        ordering = ['-fiscal_year__start_date']
+        unique_together = ['organization', 'fiscal_year']
+    
+    def __str__(self) -> str:
+        return f"Pension Estimate - {self.fiscal_year}"
+    
+    def calculate_estimates(self) -> dict:
+        """
+        Calculate pension estimates without locking.
+        
+        Returns:
+            Dictionary with 'monthly_pension' and 'commutation' values.
+        """
+        # A04101: (current_monthly_bill * 12 * (1 + expected_increase/100)) + Sum(new retirees * 12)
+        base_annual = self.current_monthly_bill * 12 * (1 + self.expected_increase / 100)
+        
+        # Add new retirees' monthly pension * 12 (for remaining months in FY)
+        new_retirees_pension = self.retiring_employees.aggregate(
+            total=Sum(F('monthly_pension_amount') * 12)
+        )['total'] or Decimal('0.00')
+        
+        monthly_pension_total = base_annual + new_retirees_pension
+        
+        # A04102: Sum of all commutation amounts
+        commutation_total = self.retiring_employees.aggregate(
+            total=Sum('commutation_amount')
+        )['total'] or Decimal('0.00')
+        
+        return {
+            'monthly_pension': monthly_pension_total.quantize(Decimal('0.01')),
+            'commutation': commutation_total.quantize(Decimal('0.01')),
+        }
+    
+    def calculate_and_lock(self, user=None) -> dict:
+        """
+        Calculate estimates and lock the pension estimate.
+        
+        Also creates/updates BudgetAllocations for heads A04101 and A04102.
+        
+        Args:
+            user: The user performing the lock action.
+            
+        Returns:
+            Dictionary with calculated values.
+            
+        Raises:
+            ValidationError: If already locked.
+        """
+        from django.core.exceptions import ValidationError
+        from django.db import transaction
+        from apps.finance.models import BudgetHead
+        
+        if self.status == PensionEstimateStatus.LOCKED:
+            raise ValidationError(_('This pension estimate is already locked.'))
+        
+        estimates = self.calculate_estimates()
+        
+        with transaction.atomic():
+            self.estimated_monthly_pension = estimates['monthly_pension']
+            self.estimated_commutation = estimates['commutation']
+            self.status = PensionEstimateStatus.LOCKED
+            self.locked_at = timezone.now()
+            self.locked_by = user
+            self.save()
+            
+            # Update BudgetAllocations for A04101 and A04102
+            pension_head_codes = {
+                'A04101': estimates['monthly_pension'],  # Monthly Pension
+                'A04102': estimates['commutation'],      # Commutation
+            }
+            
+            for head_code, amount in pension_head_codes.items():
+                try:
+                    budget_head = BudgetHead.objects.get(pifra_object=head_code)
+                    allocation, created = BudgetAllocation.objects.get_or_create(
+                        organization=self.organization,
+                        fiscal_year=self.fiscal_year,
+                        budget_head=budget_head,
+                        defaults={
+                            'original_allocation': amount,
+                            'revised_allocation': amount,
+                        }
+                    )
+                    if not created:
+                        allocation.original_allocation = amount
+                        allocation.revised_allocation = amount
+                        allocation.save(update_fields=['original_allocation', 'revised_allocation', 'updated_at'])
+                except BudgetHead.DoesNotExist:
+                    # Head doesn't exist, skip (admin should create heads first)
+                    pass
+        
+        return estimates
+
+
+class RetiringEmployee(TimeStampedMixin):
+    """
+    Individual retiring employee for pension estimation.
+    
+    Linked to a PensionEstimate, tracks expected pension and commutation amounts.
+    """
+    
+    estimate = models.ForeignKey(
+        PensionEstimate,
+        on_delete=models.CASCADE,
+        related_name='retiring_employees',
+        verbose_name=_('Pension Estimate')
+    )
+    name = models.CharField(
+        max_length=100,
+        verbose_name=_('Employee Name')
+    )
+    designation = models.CharField(
+        max_length=100,
+        verbose_name=_('Designation')
+    )
+    retirement_date = models.DateField(
+        verbose_name=_('Retirement Date')
+    )
+    monthly_pension_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Monthly Pension Amount'),
+        help_text=_('Expected monthly pension payout.')
+    )
+    commutation_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Commutation Amount'),
+        help_text=_('Lump sum commutation payment.')
+    )
+    remarks = models.TextField(
+        blank=True,
+        verbose_name=_('Remarks')
+    )
+    
+    class Meta:
+        verbose_name = _('Retiring Employee')
+        verbose_name_plural = _('Retiring Employees')
+        ordering = ['retirement_date']
+    
+    def __str__(self) -> str:
+        return f"{self.name} - {self.designation} (Retiring: {self.retirement_date})"
+    
+    @property
+    def annual_pension(self) -> Decimal:
+        """Calculate annual pension amount."""
+        return self.monthly_pension_amount * 12
+
+
+class SupplementaryGrant(AuditLogMixin, TenantAwareMixin):
+    """
+    Supplementary Grant for additional budget during the fiscal year.
+    
+    When approved, increases the revised_allocation of the linked BudgetAllocation.
+    """
+    
+    fiscal_year = models.ForeignKey(
+        FiscalYear,
+        on_delete=models.PROTECT,
+        related_name='supplementary_grants',
+        verbose_name=_('Fiscal Year')
+    )
+    budget_head = models.ForeignKey(
+        'finance.BudgetHead',
+        on_delete=models.PROTECT,
+        related_name='supplementary_grants',
+        verbose_name=_('Budget Head')
+    )
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name=_('Amount'),
+        help_text=_('Additional budget amount to be granted.')
+    )
+    reference_no = models.CharField(
+        max_length=50,
+        verbose_name=_('Reference/Order No'),
+        help_text=_('Government order or reference number.')
+    )
+    date = models.DateField(
+        verbose_name=_('Date'),
+        help_text=_('Date of supplementary grant order.')
+    )
+    description = models.TextField(
+        verbose_name=_('Description'),
+        help_text=_('Justification for supplementary budget.')
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=SupplementaryGrantStatus.choices,
+        default=SupplementaryGrantStatus.DRAFT,
+        verbose_name=_('Status')
+    )
+    approved_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_supplementary_grants',
+        verbose_name=_('Approved By')
+    )
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Approved At')
+    )
+    rejection_reason = models.TextField(
+        blank=True,
+        verbose_name=_('Rejection Reason')
+    )
+    
+    class Meta:
+        verbose_name = _('Supplementary Grant')
+        verbose_name_plural = _('Supplementary Grants')
+        ordering = ['-date']
+    
+    def __str__(self) -> str:
+        return f"SG {self.reference_no} - {self.budget_head.tma_sub_object} ({self.amount:,.2f})"
+    
+    def approve(self, user) -> None:
+        """
+        Approve the supplementary grant and update budget allocation.
+        
+        Args:
+            user: The user approving the grant.
+            
+        Raises:
+            ValidationError: If already approved/rejected or allocation not found.
+        """
+        from django.core.exceptions import ValidationError
+        from django.db import transaction
+        
+        if self.status != SupplementaryGrantStatus.DRAFT:
+            raise ValidationError(
+                _('Only draft supplementary grants can be approved.')
+            )
+        
+        with transaction.atomic():
+            # Find or create the BudgetAllocation
+            allocation, created = BudgetAllocation.objects.get_or_create(
+                organization=self.organization,
+                fiscal_year=self.fiscal_year,
+                budget_head=self.budget_head,
+                defaults={
+                    'original_allocation': Decimal('0.00'),
+                    'revised_allocation': self.amount,
+                }
+            )
+            
+            if not created:
+                allocation.revised_allocation += self.amount
+                allocation.save(update_fields=['revised_allocation', 'updated_at'])
+            
+            self.status = SupplementaryGrantStatus.APPROVED
+            self.approved_by = user
+            self.approved_at = timezone.now()
+            self.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+    
+    def reject(self, user, reason: str) -> None:
+        """
+        Reject the supplementary grant.
+        
+        Args:
+            user: The user rejecting the grant.
+            reason: Reason for rejection.
+        """
+        from django.core.exceptions import ValidationError
+        
+        if self.status != SupplementaryGrantStatus.DRAFT:
+            raise ValidationError(
+                _('Only draft supplementary grants can be rejected.')
+            )
+        
+        self.status = SupplementaryGrantStatus.REJECTED
+        self.rejection_reason = reason
+        self.save(update_fields=['status', 'rejection_reason', 'updated_at'])
+
+
+class Reappropriation(AuditLogMixin, TenantAwareMixin):
+    """
+    Re-appropriation for transferring budget between heads.
+    
+    Allows moving funds from one budget head to another within the same Fund.
+    Validates that source has sufficient available balance.
+    """
+    
+    fiscal_year = models.ForeignKey(
+        FiscalYear,
+        on_delete=models.PROTECT,
+        related_name='reappropriations',
+        verbose_name=_('Fiscal Year')
+    )
+    from_head = models.ForeignKey(
+        'finance.BudgetHead',
+        on_delete=models.PROTECT,
+        related_name='reappropriations_out',
+        verbose_name=_('From Budget Head'),
+        help_text=_('Source head to transfer budget from.')
+    )
+    to_head = models.ForeignKey(
+        'finance.BudgetHead',
+        on_delete=models.PROTECT,
+        related_name='reappropriations_in',
+        verbose_name=_('To Budget Head'),
+        help_text=_('Destination head to transfer budget to.')
+    )
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name=_('Amount'),
+        help_text=_('Amount to transfer.')
+    )
+    reference_no = models.CharField(
+        max_length=50,
+        verbose_name=_('Reference/Order No'),
+        help_text=_('Authorization reference number.')
+    )
+    date = models.DateField(
+        verbose_name=_('Date')
+    )
+    description = models.TextField(
+        verbose_name=_('Description'),
+        help_text=_('Justification for re-appropriation.')
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=ReappropriationStatus.choices,
+        default=ReappropriationStatus.DRAFT,
+        verbose_name=_('Status')
+    )
+    approved_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_reappropriations',
+        verbose_name=_('Approved By')
+    )
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Approved At')
+    )
+    
+    class Meta:
+        verbose_name = _('Re-appropriation')
+        verbose_name_plural = _('Re-appropriations')
+        ordering = ['-date']
+    
+    def __str__(self) -> str:
+        return f"RA {self.reference_no}: {self.from_head.tma_sub_object} → {self.to_head.tma_sub_object} ({self.amount:,.2f})"
+    
+    def clean(self) -> None:
+        """
+        Validate re-appropriation rules.
+        
+        1. Fund Check: from_head and to_head must belong to the same Fund.
+        2. Balance Check: from_head must have enough Available Balance.
+        """
+        from django.core.exceptions import ValidationError
+        
+        errors = {}
+        
+        # Check that from_head and to_head are set
+        if not self.from_head_id or not self.to_head_id:
+            return  # Let field validation handle required fields
+        
+        # Rule 1: Same Fund check
+        if self.from_head.fund_id != self.to_head.fund_id:
+            errors['to_head'] = _(
+                'Cannot transfer funds between different Funds. '
+                f'From: {self.from_head.fund}, To: {self.to_head.fund}'
+            )
+        
+        # Rule 2: Available Balance check (only for existing allocations)
+        if self.status == ReappropriationStatus.DRAFT and self.fiscal_year_id:
+            try:
+                from_allocation = BudgetAllocation.objects.get(
+                    organization=self.organization,
+                    fiscal_year=self.fiscal_year,
+                    budget_head=self.from_head
+                )
+                available = from_allocation.revised_allocation - from_allocation.spent_amount
+                if self.amount > available:
+                    errors['amount'] = _(
+                        f'Insufficient balance in {self.from_head.tma_sub_object}. '
+                        f'Available: Rs {available:,.2f}, Requested: Rs {self.amount:,.2f}'
+                    )
+            except BudgetAllocation.DoesNotExist:
+                errors['from_head'] = _(
+                    f'No budget allocation found for {self.from_head} in {self.fiscal_year}.'
+                )
+        
+        if errors:
+            raise ValidationError(errors)
+    
+    def approve(self, user) -> None:
+        """
+        Approve the re-appropriation and transfer funds.
+        
+        Args:
+            user: The user approving the re-appropriation.
+            
+        Raises:
+            ValidationError: If validation fails or already approved.
+        """
+        from django.core.exceptions import ValidationError
+        from django.db import transaction
+        
+        if self.status != ReappropriationStatus.DRAFT:
+            raise ValidationError(
+                _('Only draft re-appropriations can be approved.')
+            )
+        
+        # Re-validate before approval
+        self.clean()
+        
+        with transaction.atomic():
+            # Decrease from_head allocation
+            from_allocation = BudgetAllocation.objects.select_for_update().get(
+                organization=self.organization,
+                fiscal_year=self.fiscal_year,
+                budget_head=self.from_head
+            )
+            from_allocation.revised_allocation -= self.amount
+            from_allocation.save(update_fields=['revised_allocation', 'updated_at'])
+            
+            # Increase to_head allocation (create if doesn't exist)
+            to_allocation, created = BudgetAllocation.objects.select_for_update().get_or_create(
+                organization=self.organization,
+                fiscal_year=self.fiscal_year,
+                budget_head=self.to_head,
+                defaults={
+                    'original_allocation': Decimal('0.00'),
+                    'revised_allocation': self.amount,
+                }
+            )
+            if not created:
+                to_allocation.revised_allocation += self.amount
+                to_allocation.save(update_fields=['revised_allocation', 'updated_at'])
+            
+            self.status = ReappropriationStatus.APPROVED
+            self.approved_by = user
+            self.approved_at = timezone.now()
+            self.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])

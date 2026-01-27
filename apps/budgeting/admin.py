@@ -8,7 +8,7 @@ Description: Django admin configuration for the budgeting module.
 -------------------------------------------------------------------------
 """
 from decimal import Decimal
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from django.db.models import Sum
@@ -16,7 +16,11 @@ from django.db.models import Sum
 from apps.budgeting.models import (
     FiscalYear, BudgetAllocation, ScheduleOfEstablishment,
     QuarterlyRelease, SAERecord, BudgetStatus,
-    DesignationMaster, BPSSalaryScale
+    DesignationMaster, BPSSalaryScale,
+    # Phase 3: Pension & Budget Execution
+    PensionEstimate, RetiringEmployee, PensionEstimateStatus,
+    SupplementaryGrant, SupplementaryGrantStatus,
+    Reappropriation, ReappropriationStatus,
 )
 from apps.budgeting.models_employee import BudgetEmployee
 
@@ -399,3 +403,274 @@ class BPSSalaryScaleAdmin(admin.ModelAdmin):
         extra_context['title'] = "Manage BPS Salary Chart (Update from Finance Notification)"
         return super().changelist_view(request, extra_context=extra_context)
 
+
+# =============================================================================
+# Phase 3: Pension & Budget Execution Admin
+# =============================================================================
+
+class RetiringEmployeeInline(admin.TabularInline):
+    """Inline admin for managing retiring employees within PensionEstimate."""
+    model = RetiringEmployee
+    extra = 1
+    fields = ['name', 'designation', 'retirement_date', 'monthly_pension_amount', 'commutation_amount', 'remarks']
+
+
+@admin.register(PensionEstimate)
+class PensionEstimateAdmin(admin.ModelAdmin):
+    """
+    Admin configuration for PensionEstimate model.
+    """
+    
+    list_display = [
+        'fiscal_year', 'current_monthly_bill_display', 'expected_increase',
+        'estimated_pension_display', 'estimated_commutation_display',
+        'status_badge', 'retirees_count'
+    ]
+    list_filter = ['fiscal_year', 'status']
+    readonly_fields = [
+        'estimated_monthly_pension', 'estimated_commutation',
+        'locked_at', 'locked_by',
+        'created_at', 'updated_at', 'created_by', 'updated_by'
+    ]
+    ordering = ['-fiscal_year__start_date']
+    inlines = [RetiringEmployeeInline]
+    
+    fieldsets = (
+        (None, {
+            'fields': ('fiscal_year', 'status')
+        }),
+        (_('Input Parameters'), {
+            'fields': ('current_monthly_bill', 'expected_increase'),
+            'description': _('Enter the current pension bill and expected increase percentage.')
+        }),
+        (_('Calculated Estimates'), {
+            'fields': ('estimated_monthly_pension', 'estimated_commutation'),
+            'classes': ('collapse',),
+            'description': _('These are calculated when you run "Calculate & Lock".')
+        }),
+        (_('Lock Information'), {
+            'fields': ('locked_at', 'locked_by'),
+            'classes': ('collapse',)
+        }),
+        (_('Notes'), {
+            'fields': ('remarks',),
+            'classes': ('collapse',)
+        }),
+        (_('Audit Trail'), {
+            'fields': ('created_at', 'updated_at', 'created_by', 'updated_by'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    actions = ['calculate_and_lock_action']
+    
+    def current_monthly_bill_display(self, obj: PensionEstimate) -> str:
+        return f"Rs {obj.current_monthly_bill:,.2f}"
+    current_monthly_bill_display.short_description = _('Monthly Bill')
+    
+    def estimated_pension_display(self, obj: PensionEstimate) -> str:
+        return f"Rs {obj.estimated_monthly_pension:,.2f}"
+    estimated_pension_display.short_description = _('Est. A04101')
+    
+    def estimated_commutation_display(self, obj: PensionEstimate) -> str:
+        return f"Rs {obj.estimated_commutation:,.2f}"
+    estimated_commutation_display.short_description = _('Est. A04102')
+    
+    def status_badge(self, obj: PensionEstimate) -> str:
+        color = 'success' if obj.status == PensionEstimateStatus.LOCKED else 'secondary'
+        return format_html(
+            '<span class="badge bg-{}">{}</span>',
+            color, obj.get_status_display()
+        )
+    status_badge.short_description = _('Status')
+    
+    def retirees_count(self, obj: PensionEstimate) -> int:
+        return obj.retiring_employees.count()
+    retirees_count.short_description = _('Retirees')
+    
+    @admin.action(description=_('Calculate estimates & lock'))
+    def calculate_and_lock_action(self, request, queryset):
+        """Calculate pension estimates and lock selected entries."""
+        for estimate in queryset.filter(status=PensionEstimateStatus.DRAFT):
+            try:
+                result = estimate.calculate_and_lock(user=request.user)
+                self.message_user(
+                    request,
+                    f'{estimate}: A04101=Rs {result["monthly_pension"]:,.2f}, A04102=Rs {result["commutation"]:,.2f}',
+                    messages.SUCCESS
+                )
+            except Exception as e:
+                self.message_user(request, f'{estimate}: {str(e)}', messages.ERROR)
+    
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(SupplementaryGrant)
+class SupplementaryGrantAdmin(admin.ModelAdmin):
+    """
+    Admin configuration for SupplementaryGrant model.
+    """
+    
+    list_display = [
+        'reference_no', 'fiscal_year', 'budget_head',
+        'amount_display', 'date', 'status_badge'
+    ]
+    list_filter = ['fiscal_year', 'status', 'date']
+    search_fields = ['reference_no', 'budget_head__tma_sub_object', 'budget_head__tma_description']
+    autocomplete_fields = ['budget_head']
+    readonly_fields = [
+        'approved_by', 'approved_at',
+        'created_at', 'updated_at', 'created_by', 'updated_by'
+    ]
+    ordering = ['-date']
+    
+    fieldsets = (
+        (None, {
+            'fields': ('fiscal_year', 'budget_head', 'status')
+        }),
+        (_('Grant Details'), {
+            'fields': ('amount', 'reference_no', 'date', 'description')
+        }),
+        (_('Approval'), {
+            'fields': ('approved_by', 'approved_at', 'rejection_reason'),
+            'classes': ('collapse',)
+        }),
+        (_('Audit Trail'), {
+            'fields': ('created_at', 'updated_at', 'created_by', 'updated_by'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    actions = ['approve_grants', 'reject_grants']
+    
+    def amount_display(self, obj: SupplementaryGrant) -> str:
+        return f"Rs {obj.amount:,.2f}"
+    amount_display.short_description = _('Amount')
+    
+    def status_badge(self, obj: SupplementaryGrant) -> str:
+        color_map = {
+            SupplementaryGrantStatus.DRAFT: 'secondary',
+            SupplementaryGrantStatus.APPROVED: 'success',
+            SupplementaryGrantStatus.REJECTED: 'danger',
+        }
+        color = color_map.get(obj.status, 'secondary')
+        return format_html(
+            '<span class="badge bg-{}">{}</span>',
+            color, obj.get_status_display()
+        )
+    status_badge.short_description = _('Status')
+    
+    @admin.action(description=_('Approve selected grants'))
+    def approve_grants(self, request, queryset):
+        """Approve selected supplementary grants."""
+        for grant in queryset.filter(status=SupplementaryGrantStatus.DRAFT):
+            try:
+                grant.approve(user=request.user)
+                self.message_user(
+                    request,
+                    f'Approved: {grant.reference_no} - Rs {grant.amount:,.2f} added to {grant.budget_head}',
+                    messages.SUCCESS
+                )
+            except Exception as e:
+                self.message_user(request, f'{grant.reference_no}: {str(e)}', messages.ERROR)
+    
+    @admin.action(description=_('Reject selected grants'))
+    def reject_grants(self, request, queryset):
+        """Reject selected supplementary grants."""
+        for grant in queryset.filter(status=SupplementaryGrantStatus.DRAFT):
+            try:
+                grant.reject(user=request.user, reason='Rejected via admin action')
+                self.message_user(
+                    request,
+                    f'Rejected: {grant.reference_no}',
+                    messages.WARNING
+                )
+            except Exception as e:
+                self.message_user(request, f'{grant.reference_no}: {str(e)}', messages.ERROR)
+    
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Reappropriation)
+class ReappropriationAdmin(admin.ModelAdmin):
+    """
+    Admin configuration for Reappropriation model.
+    """
+    
+    list_display = [
+        'reference_no', 'fiscal_year', 'from_head', 'to_head',
+        'amount_display', 'date', 'status_badge'
+    ]
+    list_filter = ['fiscal_year', 'status', 'date']
+    search_fields = [
+        'reference_no', 
+        'from_head__tma_sub_object', 'from_head__tma_description',
+        'to_head__tma_sub_object', 'to_head__tma_description'
+    ]
+    autocomplete_fields = ['from_head', 'to_head']
+    readonly_fields = [
+        'approved_by', 'approved_at',
+        'created_at', 'updated_at', 'created_by', 'updated_by'
+    ]
+    ordering = ['-date']
+    
+    fieldsets = (
+        (None, {
+            'fields': ('fiscal_year', 'status')
+        }),
+        (_('Transfer Details'), {
+            'fields': ('from_head', 'to_head', 'amount', 'reference_no', 'date', 'description'),
+            'description': _('Transfer budget from one head to another within the same Fund.')
+        }),
+        (_('Approval'), {
+            'fields': ('approved_by', 'approved_at'),
+            'classes': ('collapse',)
+        }),
+        (_('Audit Trail'), {
+            'fields': ('created_at', 'updated_at', 'created_by', 'updated_by'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    actions = ['approve_reappropriations']
+    
+    def amount_display(self, obj: Reappropriation) -> str:
+        return f"Rs {obj.amount:,.2f}"
+    amount_display.short_description = _('Amount')
+    
+    def status_badge(self, obj: Reappropriation) -> str:
+        color = 'success' if obj.status == ReappropriationStatus.APPROVED else 'secondary'
+        return format_html(
+            '<span class="badge bg-{}">{}</span>',
+            color, obj.get_status_display()
+        )
+    status_badge.short_description = _('Status')
+    
+    @admin.action(description=_('Approve selected re-appropriations'))
+    def approve_reappropriations(self, request, queryset):
+        """Approve selected re-appropriations and transfer funds."""
+        for reappropriation in queryset.filter(status=ReappropriationStatus.DRAFT):
+            try:
+                reappropriation.approve(user=request.user)
+                self.message_user(
+                    request,
+                    f'Approved: {reappropriation.reference_no} - Rs {reappropriation.amount:,.2f} '
+                    f'transferred from {reappropriation.from_head.tma_sub_object} to {reappropriation.to_head.tma_sub_object}',
+                    messages.SUCCESS
+                )
+            except Exception as e:
+                self.message_user(request, f'{reappropriation.reference_no}: {str(e)}', messages.ERROR)
+    
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)

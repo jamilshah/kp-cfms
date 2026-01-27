@@ -33,7 +33,11 @@ from apps.budgeting.views import (
     DesignationUpdateView, DesignationDeleteView,
     SalaryStructureView,
     EmployeeListView, EmployeeCreateView, 
-    EmployeeUpdateView, EmployeeDeleteView
+    EmployeeUpdateView, EmployeeDeleteView,
+    # Phase 3
+    PensionEstimateListView, PensionEstimateCreateView, PensionEstimateDetailView, PensionEstimateCalculateView,
+    SupplementaryGrantListView, SupplementaryGrantCreateView, SupplementaryGrantDetailView, SupplementaryGrantApproveView,
+    ReappropriationListView, ReappropriationCreateView, ReappropriationDetailView, ReappropriationApproveView
 )
 from apps.finance.views import (
     BudgetHeadListView, BudgetHeadCreateView, 
@@ -124,4 +128,22 @@ urlpatterns = [
     path('setup/coa/add/', BudgetHeadCreateView.as_view(), name='setup_coa_add'),
     path('setup/coa/<int:pk>/edit/', BudgetHeadUpdateView.as_view(), name='setup_coa_edit'),
     path('setup/coa/<int:pk>/delete/', BudgetHeadDeleteView.as_view(), name='setup_coa_delete'),
+
+    # Phase 3: Pension Estimate
+    path('pension/', PensionEstimateListView.as_view(), name='pension_list'),
+    path('pension/create/', PensionEstimateCreateView.as_view(), name='pension_create'),
+    path('pension/<int:pk>/', PensionEstimateDetailView.as_view(), name='pension_detail'),
+    path('pension/<int:pk>/calculate/', PensionEstimateCalculateView.as_view(), name='pension_calculate'),
+
+    # Phase 3: Supplementary Grant
+    path('supplementary/', SupplementaryGrantListView.as_view(), name='supplementary_list'),
+    path('supplementary/create/', SupplementaryGrantCreateView.as_view(), name='supplementary_create'),
+    path('supplementary/<int:pk>/', SupplementaryGrantDetailView.as_view(), name='supplementary_detail'),
+    path('supplementary/<int:pk>/approve/', SupplementaryGrantApproveView.as_view(), name='supplementary_approve'),
+
+    # Phase 3: Re-appropriation
+    path('reappropriation/', ReappropriationListView.as_view(), name='reappropriation_list'),
+    path('reappropriation/create/', ReappropriationCreateView.as_view(), name='reappropriation_create'),
+    path('reappropriation/<int:pk>/', ReappropriationDetailView.as_view(), name='reappropriation_detail'),
+    path('reappropriation/<int:pk>/approve/', ReappropriationApproveView.as_view(), name='reappropriation_approve'),
 ]
