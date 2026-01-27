@@ -1,0 +1,560 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Budget Book PDF Template - A4 government formatting
+             Separates Operating vs Capital accounts.
+-------------------------------------------------------------------------
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budget Book - {{ fiscal_year.year_name }}</title>
+    <style>
+        /* Print-optimized CSS for A4 Government Reports */
+        @page {
+            size: A4;
+            margin: 20mm 15mm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Times New Roman', Times, serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #000;
+            background: white;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 15px;
+        }
+        
+        .header h1 {
+            font-size: 18pt;
+            font-weight: bold;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+        
+        .header h2 {
+            font-size: 14pt;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .header p {
+            font-size: 11pt;
+            margin: 3px 0;
+        }
+        
+        .section-title {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-top: 25px;
+            margin-bottom: 10px;
+            padding: 5px 10px;
+            background-color: #e0e0e0;
+            border-left: 4px solid #000;
+            page-break-after: avoid;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+        }
+        
+        table th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            padding: 8px 5px;
+            text-align: left;
+            border: 1px solid #000;
+            font-size: 9pt;
+        }
+        
+        table td {
+            padding: 6px 5px;
+            border: 1px solid #000;
+            font-size: 9pt;
+        }
+        
+        table th.text-right,
+        table td.text-right {
+            text-align: right;
+        }
+        
+        table th.text-center,
+        table td.text-center {
+            text-align: center;
+        }
+        
+        .total-row {
+            font-weight: bold;
+            background-color: #f9f9f9;
+        }
+        
+        .subtotal-row {
+            font-weight: bold;
+            background-color: #f5f5f5;
+        }
+        
+        .summary-box {
+            border: 2px solid #000;
+            padding: 15px;
+            margin: 20px 0;
+            background-color: #fafafa;
+        }
+        
+        .summary-box h3 {
+            font-size: 11pt;
+            margin-bottom: 10px;
+            text-align: center;
+            text-decoration: underline;
+        }
+        
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px dotted #ccc;
+        }
+        
+        .summary-row:last-child {
+            border-bottom: none;
+            font-weight: bold;
+            font-size: 11pt;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 2px solid #000;
+        }
+        
+        .surplus {
+            color: #006400;
+        }
+        
+        .deficit {
+            color: #8B0000;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            border-top: 1px solid #000;
+            padding-top: 15px;
+            font-size: 9pt;
+            text-align: center;
+        }
+        
+        .signature-section {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 50px;
+            page-break-inside: avoid;
+        }
+        
+        .signature-block {
+            text-align: center;
+            width: 30%;
+        }
+        
+        .signature-line {
+            border-top: 1px solid #000;
+            margin-top: 60px;
+            padding-top: 5px;
+        }
+        
+        @media print {
+            body {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+            
+            .no-print {
+                display: none;
+            }
+        }
+        
+        /* Print button for browser preview */
+        .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .print-button:hover {
+            background-color: #0056b3;
+        }
+
+        .download-button {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-block;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .download-button:hover {
+            background-color: #1e7e34;
+        }
+    </style>
+</head>
+<body>
+    <!-- Print Button (hidden in print) -->
+    <button class="print-button no-print" onclick="window.print()">
+        🖨️ Print Budget Book
+    </button>
+    <!-- Direct PDF Download (hidden in print) -->
+    <a class="download-button no-print" href="?pdf=true" target="_blank">
+        ⬇️ Download PDF
+    </a>
+
+    <!-- HEADER -->
+    <div class="header">
+        <h1>Government of Khyber Pakhtunkhwa</h1>
+        <h2>Local Government Department</h2>
+        <p><strong>Annual Budget Statement</strong></p>
+        <p>Fiscal Year: <strong>{{ fiscal_year.year_name }}</strong></p>
+        <p>Budget Period: {{ fiscal_year.start_date|date:"d M Y" }} to {{ fiscal_year.end_date|date:"d M Y" }}</p>
+        {% if fiscal_year.sae_number %}
+        <p>SAE Number: <strong>{{ fiscal_year.sae_number }}</strong></p>
+        {% endif %}
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- PART I: OPERATING BUDGET -->
+    <!-- ============================================================ -->
+    <div class="section-title">PART I: OPERATING BUDGET</div>
+    
+    <!-- Section A: Operating Receipts -->
+    <h4 style="margin-top: 15px; margin-bottom: 10px; font-size: 11pt;">A. Operating Receipts (Revenue)</h4>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 15%;">Code</th>
+                <th style="width: 45%;">Description</th>
+                <th style="width: 15%;" class="text-center">Function</th>
+                <th style="width: 25%;" class="text-right">Budget Estimate (Rs.)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for allocation in operating_receipts %}
+            <tr>
+                <td>{{ allocation.budget_head.pifra_object }}</td>
+                <td>{{ allocation.budget_head.pifra_description }}</td>
+                <td class="text-center">{{ allocation.budget_head.function.code|default:"-" }}</td>
+                <td class="text-right">{{ allocation.original_allocation|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="text-center">No operating receipts recorded.</td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="3" class="text-right">Total Operating Receipts:</td>
+                <td class="text-right">{{ totals.operating_receipts|floatformat:2 }}</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <!-- Section B: Operating Expenditure -->
+    <h4 style="margin-top: 15px; margin-bottom: 10px; font-size: 11pt;">B. Operating Expenditure</h4>
+    
+    <!-- B1: Salaries (A01) -->
+    <h5 style="margin-left: 20px; margin-top: 10px; margin-bottom: 5px; font-size: 10pt; font-style: italic;">B1. Employee Compensation (Salaries & Allowances)</h5>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 15%;">Code</th>
+                <th style="width: 45%;">Description</th>
+                <th style="width: 15%;" class="text-center">Function</th>
+                <th style="width: 25%;" class="text-right">Budget Estimate (Rs.)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for allocation in operating_expenditure_salary %}
+            <tr>
+                <td>{{ allocation.budget_head.pifra_object }}</td>
+                <td>{{ allocation.budget_head.pifra_description }}</td>
+                <td class="text-center">{{ allocation.budget_head.function.code|default:"-" }}</td>
+                <td class="text-right">{{ allocation.original_allocation|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="text-center">No salary allocations recorded.</td>
+            </tr>
+            {% endfor %}
+            <tr class="subtotal-row">
+                <td colspan="3" class="text-right">Subtotal - Salaries:</td>
+                <td class="text-right">{{ totals.salary_expenditure|floatformat:2 }}</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <!-- B2: Non-Salary Operating Costs (A03, A04, A05, etc.) -->
+    <h5 style="margin-left: 20px; margin-top: 10px; margin-bottom: 5px; font-size: 10pt; font-style: italic;">B2. Non-Salary Operating Costs</h5>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 15%;">Code</th>
+                <th style="width: 45%;">Description</th>
+                <th style="width: 15%;" class="text-center">Function</th>
+                <th style="width: 25%;" class="text-right">Budget Estimate (Rs.)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for allocation in operating_expenditure_nonsalary %}
+            <tr>
+                <td>{{ allocation.budget_head.pifra_object }}</td>
+                <td>{{ allocation.budget_head.pifra_description }}</td>
+                <td class="text-center">{{ allocation.budget_head.function.code|default:"-" }}</td>
+                <td class="text-right">{{ allocation.original_allocation|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="text-center">No non-salary operating costs recorded.</td>
+            </tr>
+            {% endfor %}
+            <tr class="subtotal-row">
+                <td colspan="3" class="text-right">Subtotal - Non-Salary:</td>
+                <td class="text-right">{{ totals.nonsalary_expenditure|floatformat:2 }}</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <!-- Total Operating Expenditure -->
+    <table style="margin-top: 10px;">
+        <tr class="total-row">
+            <td style="width: 75%;" class="text-right">Total Operating Expenditure:</td>
+            <td style="width: 25%;" class="text-right">{{ totals.operating_expenditure|floatformat:2 }}</td>
+        </tr>
+        <tr style="background-color: #ffffcc; font-weight: bold; font-size: 10pt;">
+            <td class="text-right">Operating Surplus / (Deficit):</td>
+            <td class="text-right {% if totals.operating_surplus >= 0 %}surplus{% else %}deficit{% endif %}">
+                {{ totals.operating_surplus|floatformat:2 }}
+            </td>
+        </tr>
+    </table>
+
+    <!-- ============================================================ -->
+    <!-- PART II: CAPITAL BUDGET (Development) -->
+    <!-- ============================================================ -->
+    <div class="section-title" style="page-break-before: always;">PART II: CAPITAL BUDGET (Development)</div>
+    
+    <!-- Section C: Capital Receipts -->
+    <h4 style="margin-top: 15px; margin-bottom: 10px; font-size: 11pt;">C. Capital Receipts (Grants & Loans)</h4>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 15%;">Code</th>
+                <th style="width: 45%;">Description</th>
+                <th style="width: 15%;" class="text-center">Function</th>
+                <th style="width: 25%;" class="text-right">Budget Estimate (Rs.)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for allocation in capital_receipts %}
+            <tr>
+                <td>{{ allocation.budget_head.pifra_object }}</td>
+                <td>{{ allocation.budget_head.pifra_description }}</td>
+                <td class="text-center">{{ allocation.budget_head.function.code|default:"-" }}</td>
+                <td class="text-right">{{ allocation.original_allocation|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="text-center">No capital receipts recorded.</td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="3" class="text-right">Total Capital Receipts:</td>
+                <td class="text-right">{{ totals.capital_receipts|floatformat:2 }}</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <!-- Section D: Capital Expenditure (A09 - Physical Assets) -->
+    <h4 style="margin-top: 15px; margin-bottom: 10px; font-size: 11pt;">D. Capital Expenditure (Physical Assets & Development)</h4>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 15%;">Code</th>
+                <th style="width: 45%;">Description</th>
+                <th style="width: 15%;" class="text-center">Function</th>
+                <th style="width: 25%;" class="text-right">Budget Estimate (Rs.)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for allocation in capital_expenditure %}
+            <tr>
+                <td>{{ allocation.budget_head.pifra_object }}</td>
+                <td>{{ allocation.budget_head.pifra_description }}</td>
+                <td class="text-center">{{ allocation.budget_head.function.code|default:"-" }}</td>
+                <td class="text-right">{{ allocation.original_allocation|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="text-center">No capital expenditure recorded.</td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="3" class="text-right">Total Capital Expenditure:</td>
+                <td class="text-right">{{ totals.capital_expenditure|floatformat:2 }}</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <!-- Net Capital Flow -->
+    <table style="margin-top: 10px;">
+        <tr style="background-color: #ffffcc; font-weight: bold; font-size: 10pt;">
+            <td style="width: 75%;" class="text-right">Net Capital Flow (Surplus / Deficit):</td>
+            <td style="width: 25%;" class="text-right {% if totals.net_capital_flow >= 0 %}surplus{% else %}deficit{% endif %}">
+                {{ totals.net_capital_flow|floatformat:2 }}
+            </td>
+        </tr>
+    </table>
+
+    <!-- ============================================================ -->
+    <!-- PART III: SCHEDULE OF ESTABLISHMENT -->
+    <!-- ============================================================ -->
+    <div class="section-title" style="page-break-before: always;">PART III: SCHEDULE OF ESTABLISHMENT</div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 30%;">Department</th>
+                <th style="width: 15%;" class="text-center">Post Type</th>
+                <th style="width: 15%;" class="text-center">Sanctioned</th>
+                <th style="width: 15%;" class="text-center">Occupied</th>
+                <th style="width: 25%;" class="text-right">Budget (Rs.)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in establishment_summary %}
+            <tr>
+                <td>{{ entry.department }}</td>
+                <td class="text-center">{{ entry.post_type }}</td>
+                <td class="text-center">{{ entry.total_sanctioned }}</td>
+                <td class="text-center">{{ entry.total_occupied }}</td>
+                <td class="text-right">{{ entry.total_budget|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" class="text-center">No establishment data recorded.</td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="2" class="text-right">Total Posts:</td>
+                <td class="text-center">{{ establishment_totals.total_sanctioned|default:0 }}</td>
+                <td class="text-center">{{ establishment_totals.total_occupied|default:0 }}</td>
+                <td class="text-right">{{ establishment_totals.total_budget|default:0|floatformat:2 }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- ============================================================ -->
+    <!-- BUDGET SUMMARY -->
+    <!-- ============================================================ -->
+    <div class="summary-box">
+        <h3>BUDGET SUMMARY - {{ fiscal_year.year_name }}</h3>
+        
+        <div class="summary-row">
+            <span>Total Receipts (Operating + Capital):</span>
+            <span><strong>Rs. {{ totals.total_receipts|floatformat:2 }}</strong></span>
+        </div>
+        
+        <div class="summary-row">
+            <span>Total Expenditure (Operating + Capital):</span>
+            <span><strong>Rs. {{ totals.total_expenditure|floatformat:2 }}</strong></span>
+        </div>
+        
+        <div class="summary-row">
+            <span>Operating Surplus / (Deficit):</span>
+            <span class="{% if totals.operating_surplus >= 0 %}surplus{% else %}deficit{% endif %}">
+                <strong>Rs. {{ totals.operating_surplus|floatformat:2 }}</strong>
+            </span>
+        </div>
+        
+        <div class="summary-row">
+            <span>Net Capital Flow:</span>
+            <span class="{% if totals.net_capital_flow >= 0 %}surplus{% else %}deficit{% endif %}">
+                <strong>Rs. {{ totals.net_capital_flow|floatformat:2 }}</strong>
+            </span>
+        </div>
+        
+        <div class="summary-row">
+            <span>NET SURPLUS / (DEFICIT):</span>
+            <span class="{% if totals.net_surplus_deficit >= 0 %}surplus{% else %}deficit{% endif %}">
+                <strong>Rs. {{ totals.net_surplus_deficit|floatformat:2 }}</strong>
+            </span>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- SIGNATURE SECTION -->
+    <!-- ============================================================ -->
+    <div class="signature-section">
+        <div class="signature-block">
+            <div class="signature-line">
+                Prepared By<br>
+                (Dealing Assistant)
+            </div>
+        </div>
+        
+        <div class="signature-block">
+            <div class="signature-line">
+                Verified By<br>
+                (Accountant)
+            </div>
+        </div>
+        
+        <div class="signature-block">
+            <div class="signature-line">
+                Approved By<br>
+                (Tehsil Municipal Officer)
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        <p>Generated on: {{ today|date:"d M Y" }} | KP-CFMS Budget Management System</p>
+        <p>This is a system-generated document and requires proper authorization signatures.</p>
+    </div>
+
+    <!-- Auto-print script (optional, uncomment if needed) -->
+    <!-- <script>
+        window.onload = function() {
+            window.print();
+        };
+    </script> -->
+</body>
+</html>

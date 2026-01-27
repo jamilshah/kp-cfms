@@ -37,7 +37,9 @@ from apps.budgeting.views import (
     # Phase 3
     PensionEstimateListView, PensionEstimateCreateView, PensionEstimateDetailView, PensionEstimateCalculateView,
     SupplementaryGrantListView, SupplementaryGrantCreateView, SupplementaryGrantDetailView, SupplementaryGrantApproveView,
-    ReappropriationListView, ReappropriationCreateView, ReappropriationDetailView, ReappropriationApproveView
+    ReappropriationListView, ReappropriationCreateView, ReappropriationDetailView, ReappropriationApproveView,
+    # Phase 4: Reporting
+    PrintBudgetBookView
 )
 from apps.finance.views import (
     BudgetHeadListView, BudgetHeadCreateView, 
@@ -146,4 +148,7 @@ urlpatterns = [
     path('reappropriation/create/', ReappropriationCreateView.as_view(), name='reappropriation_create'),
     path('reappropriation/<int:pk>/', ReappropriationDetailView.as_view(), name='reappropriation_detail'),
     path('reappropriation/<int:pk>/approve/', ReappropriationApproveView.as_view(), name='reappropriation_approve'),
+    
+    # Phase 4: Budget Book Reporting
+    path('reports/budget-book/<int:fy_id>/', PrintBudgetBookView.as_view(), name='budget_book_print'),
 ]

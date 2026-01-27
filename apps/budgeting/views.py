@@ -1379,3 +1379,102 @@ class ReappropriationApproveView(LoginRequiredMixin, ApproverRequiredMixin, View
             messages.error(request, str(e))
         return redirect('budgeting:reappropriation_detail', pk=pk)
 
+
+# ============================================================
+# PHASE 4: BUDGET BOOK REPORTING
+# ============================================================
+
+from django.views import View
+from django.template.response import TemplateResponse
+from django.utils import timezone
+from apps.budgeting.services_report import BudgetBookService
+
+
+class PrintBudgetBookView(LoginRequiredMixin, View):
+    """
+    Generate and render Budget Book PDF report.
+    
+    Displays a printer-friendly HTML page that can be printed to PDF
+    or uses PDF generation libraries if available.
+    
+    URL: /budgeting/reports/budget-book/<int:fy_id>/
+    
+    Permissions: Any authenticated user can view budget book.
+    """
+    
+    def get(self, request: HttpRequest, fy_id: int) -> HttpResponse:
+        """
+        Render Budget Book report.
+        
+        Args:
+            request: HTTP request object.
+            fy_id: Fiscal Year ID.
+        
+        Returns:
+            HTTP response with rendered template or PDF.
+        """
+        # Get structured context from reporting service
+        context = BudgetBookService.get_budget_book_context(fy_id)
+        
+        # Add current date for footer
+        context['today'] = timezone.now()
+        
+        # Check if PDF generation is requested via query parameter
+        generate_pdf = request.GET.get('pdf', 'false').lower() == 'true'
+        engine = request.GET.get('engine', 'weasyprint').lower()
+        
+        if generate_pdf:
+            # Attempt to generate PDF using selected engine
+            template = 'budgeting/reports/budget_book_pdf.html'
+            html_string = TemplateResponse(
+                request, template, context
+            ).render().content.decode('utf-8')
+
+            if engine == 'weasyprint':
+                try:
+                    from weasyprint import HTML
+                    # Generate PDF (base_url helps resolve relative assets)
+                    pdf_file = HTML(string=html_string, base_url=request.build_absolute_uri('/')).write_pdf()
+                    response = HttpResponse(pdf_file, content_type='application/pdf')
+                    filename = f"Budget_Book_{context['fiscal_year'].year_name.replace(' ', '_')}.pdf"
+                    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                    return response
+                except Exception as e:  # Catch broader runtime errors (e.g., missing libgobject)
+                    messages.warning(
+                        request,
+                        'WeasyPrint failed to generate PDF on this system. '
+                        'Falling back to xhtml2pdf. '
+                        f'Details: {e}'
+                    )
+                    engine = 'xhtml2pdf'
+
+            if engine == 'xhtml2pdf':
+                try:
+                    from xhtml2pdf import pisa
+                    from io import BytesIO
+                    result = BytesIO()
+                    pdf = pisa.pisaDocument(BytesIO(html_string.encode('utf-8')), result)
+                    if not pdf.err:
+                        response = HttpResponse(result.getvalue(), content_type='application/pdf')
+                        filename = f"Budget_Book_{context['fiscal_year'].year_name.replace(' ', '_')}.pdf"
+                        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                        return response
+                    else:
+                        messages.warning(
+                            request,
+                            'xhtml2pdf failed to generate PDF. Displaying HTML version for printing.'
+                        )
+                except Exception:
+                    messages.warning(
+                        request,
+                        'PDF library not available. Displaying HTML version. '
+                        'Use the Print button or add ?engine=xhtml2pdf after installing xhtml2pdf.'
+                    )
+        
+        # Fallback: Render HTML template for browser printing
+        return TemplateResponse(
+            request,
+            'budgeting/reports/budget_book_pdf.html',
+            context
+        )
+

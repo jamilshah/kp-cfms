@@ -124,6 +124,14 @@ Description: Budgeting module dashboard template.
                         <a href="{% url 'budgeting:reappropriation_list' %}" class="btn btn-outline-success text-dark">
                             <i class="bi bi-arrow-left-right"></i> Re-appropriations
                         </a>
+                        {% if active_fiscal_year %}
+                            <a href="{% url 'budgeting:budget_book_print' active_fiscal_year.id %}" class="btn btn-outline-danger" target="_blank">
+                                <i class="bi bi-file-earmark-pdf"></i> Print Budget Book
+                            </a>
+                            <a href="{% url 'budgeting:budget_book_print' active_fiscal_year.id %}?pdf=true" class="btn btn-danger" target="_blank">
+                                <i class="bi bi-download"></i> Download Budget Book (PDF)
+                            </a>
+                        {% endif %}
                         {% if active_fiscal_year.can_edit_budget %}
                             <a href="{% url 'budgeting:budget_approval' active_fiscal_year.pk %}" class="btn btn-primary">
                                 <i class="bi bi-check2-square"></i> Finalize Budget

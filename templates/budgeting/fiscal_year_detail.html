@@ -98,6 +98,14 @@
                         New Expenditure Estimate
                         <i class="bi bi-plus-lg text-muted"></i>
                     </a>
+                    <a href="{% url 'budgeting:budget_book_print' fiscal_year.id %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center bg-light" target="_blank">
+                        <span><i class="bi bi-file-earmark-pdf text-danger"></i> Print Budget Book</span>
+                        <i class="bi bi-printer text-muted"></i>
+                    </a>
+                    <a href="{% url 'budgeting:budget_book_print' fiscal_year.id %}?pdf=true" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center bg-light" target="_blank">
+                        <span><i class="bi bi-download text-danger"></i> Download Budget Book (PDF)</span>
+                        <i class="bi bi-filetype-pdf text-muted"></i>
+                    </a>
                 </div>
             </div>
         </div>
