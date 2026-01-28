@@ -9,6 +9,7 @@ Description: Budgeting module dashboard template.
 -->
 {% extends "base.html" %}
 {% load humanize %}
+{% load custom_filters %}
 
 {% block title %}Dashboard - KP-CFMS{% endblock %}
 
@@ -27,7 +28,7 @@ Description: Budgeting module dashboard template.
             <div class="card stat-card success">
                 <div class="card-body">
                     <div class="stat-label">Total Receipts</div>
-                    <div class="stat-value text-success">Rs {{ total_receipts|floatformat:2|intcomma }}</div>
+                    <div class="stat-value text-success">Rs {{ total_receipts|currency }}</div>
                 </div>
             </div>
         </div>
@@ -35,7 +36,7 @@ Description: Budgeting module dashboard template.
             <div class="card stat-card danger">
                 <div class="card-body">
                     <div class="stat-label">Total Expenditure</div>
-                    <div class="stat-value text-danger">Rs {{ total_expenditure|floatformat:2|intcomma }}</div>
+                    <div class="stat-value text-danger">Rs {{ total_expenditure|currency }}</div>
                 </div>
             </div>
         </div>
@@ -43,7 +44,7 @@ Description: Budgeting module dashboard template.
             <div class="card stat-card warning">
                 <div class="card-body">
                     <div class="stat-label">Contingency (2%)</div>
-                    <div class="stat-value text-warning">Rs {{ contingency|floatformat:2|intcomma }}</div>
+                    <div class="stat-value text-warning">Rs {{ contingency|currency }}</div>
                 </div>
             </div>
         </div>
@@ -53,7 +54,7 @@ Description: Budgeting module dashboard template.
                     <div class="stat-label">Balance</div>
                     {% with balance=total_receipts|add:"-"|add:total_expenditure %}
                         <div class="stat-value {% if total_receipts >= total_expenditure %}text-success{% else %}text-danger{% endif %}">
-                            Rs {{ total_receipts|floatformat:2|intcomma }}
+                            Rs {{ total_receipts|currency }}
                         </div>
                     {% endwith %}
                 </div>

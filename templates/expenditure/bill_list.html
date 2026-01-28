@@ -9,6 +9,7 @@ Description: Bill List Template with Status Filtering
 -->
 {% extends "base.html" %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}Bills - KP-CFMS{% endblock %}
 
@@ -97,9 +98,9 @@ Description: Bill List Template with Status Filtering
                         <td>
                             <small class="text-muted">{{ bill.budget_head.tma_sub_object }}</small>
                         </td>
-                        <td class="text-end">Rs. {{ bill.gross_amount|floatformat:2 }}</td>
-                        <td class="text-end">Rs. {{ bill.tax_amount|floatformat:2 }}</td>
-                        <td class="text-end fw-bold">Rs. {{ bill.net_amount|floatformat:2 }}</td>
+                        <td class="text-end">Rs. {{ bill.gross_amount|currency }}</td>
+                        <td class="text-end">Rs. {{ bill.tax_amount|currency }}</td>
+                        <td class="text-end fw-bold">Rs. {{ bill.net_amount|currency }}</td>
                         <td>
                             {% if bill.status == 'DRAFT' %}
                             <span class="badge bg-secondary badge-status">Draft</span>

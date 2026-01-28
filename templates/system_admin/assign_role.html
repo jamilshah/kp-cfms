@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Assign Roles - {{ target_user.get_full_name }} - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            {% if request.user.is_superuser or request.user.is_super_admin %}
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:dashboard' %}">System Admin</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:system_user_list' %}">All Users</a></li>
+            {% else %}
+            <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Dashboard</a></li>
+            {% endif %}
+            <li class="breadcrumb-item active">Assign Roles</li>
+        </ol>
+    </nav>
+    
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-person-gear me-2"></i>Assign Roles
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- User Info -->
+                    <div class="card bg-light mb-4">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <dl class="row mb-0">
+                                        <dt class="col-sm-4">CNIC</dt>
+                                        <dd class="col-sm-8"><code>{{ target_user.cnic }}</code></dd>
+                                        
+                                        <dt class="col-sm-4">Name</dt>
+                                        <dd class="col-sm-8">{{ target_user.get_full_name|default:"-" }}</dd>
+                                    </dl>
+                                </div>
+                                <div class="col-md-6">
+                                    <dl class="row mb-0">
+                                        <dt class="col-sm-4">Email</dt>
+                                        <dd class="col-sm-8">{{ target_user.email|default:"-" }}</dd>
+                                        
+                                        <dt class="col-sm-4">Organization</dt>
+                                        <dd class="col-sm-8">{{ target_user.organization.name|default:"-" }}</dd>
+                                    </dl>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Current Roles -->
+                    <div class="mb-4">
+                        <h6 class="text-muted mb-2">Current Roles</h6>
+                        {% for role in target_user.roles.all %}
+                        <span class="badge bg-secondary me-1">{{ role.name }}</span>
+                        {% empty %}
+                        <span class="text-muted">No roles assigned</span>
+                        {% endfor %}
+                    </div>
+                    
+                    <hr>
+                    
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        
+                        <div class="mb-4">
+                            <label for="id_roles" class="form-label">Assign Roles <span class="text-danger">*</span></label>
+                            {{ form.roles }}
+                            {% if form.roles.errors %}
+                            <div class="invalid-feedback d-block">{{ form.roles.errors.0 }}</div>
+                            {% endif %}
+                            <small class="text-muted">
+                                Select one or more roles to assign to this user. 
+                                This will replace all existing role assignments.
+                            </small>
+                        </div>
+                        
+                        <!-- Role Descriptions -->
+                        <div class="card bg-light mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Available Roles</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    {% for role in roles %}
+                                    <div class="col-md-6 mb-2">
+                                        <div class="d-flex align-items-start">
+                                            <span class="badge bg-primary me-2">{{ role.code }}</span>
+                                            <div>
+                                                <strong>{{ role.name }}</strong>
+                                                <small class="d-block text-muted">{{ role.description|truncatewords:10 }}</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% empty %}
+                                    <div class="col-12 text-muted">No roles defined in the system.</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="d-flex justify-content-between">
+                            {% if target_user.organization %}
+                            <a href="{% url 'system_admin:tenant_user_list' target_user.organization.pk %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-1"></i> Cancel
+                            </a>
+                            {% else %}
+                            <a href="{% url 'system_admin:system_user_list' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-1"></i> Cancel
+                            </a>
+                            {% endif %}
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg me-1"></i> Save Roles
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    $('#id_roles').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Select roles...'
+    });
+});
+</script>
+{% endblock %}

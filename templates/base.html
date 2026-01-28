@@ -351,8 +351,7 @@ Description: Base template with Bootstrap 5 and navigation.
                 <div id="collapseFinance" class="accordion-collapse collapse {% if request.resolver_match.app_name == 'finance' %}show{% endif %}" aria-labelledby="headingFinance" data-bs-parent="#sidebarAccordion">
                     <div class="accordion-body p-2">
                         <ul class="nav flex-column">
-                            <li class="nav-item"><a class="nav-link {% if 'statement' in request.resolver_match.url_name and request.resolver_match.app_name == 'finance' %}active{% endif %}" href="{% url 'finance:statement_list' %}"><i class="bi bi-file-text me-2"></i> Bank Statements</a></li>
-                            <li class="nav-item"><a class="nav-link {% if 'reconciliation' in request.resolver_match.url_name or 'brs' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'finance:statement_list' %}"><i class="bi bi-check2-square me-2"></i> Reconciliation</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'statement' in request.resolver_match.url_name and request.resolver_match.app_name == 'finance' %}active{% endif %}" href="{% url 'finance:statement_list' %}"><i class="bi bi-file-text me-2"></i> Bank Reconciliation</a></li>
                         </ul>
                     </div>
                 </div>
@@ -388,6 +387,28 @@ Description: Base template with Bootstrap 5 and navigation.
                     <div class="accordion-body p-2">
                         <ul class="nav flex-column">
                             <li class="nav-item"><a class="nav-link {% if 'setup' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:setup_dashboard' %}"><i class="bi bi-gear me-2"></i> Setup Workspace</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- System Admin (visible to superusers only) -->
+            {% if user.is_superuser or user.is_super_admin %}
+            <div class="accordion-item bg-transparent border-0">
+                <h2 class="accordion-header" id="headingSystemAdmin">
+                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseSystemAdmin" aria-expanded="false" aria-controls="collapseSystemAdmin">
+                        <i class="bi bi-shield-lock me-2"></i> System Admin
+                    </button>
+                </h2>
+                <div id="collapseSystemAdmin" class="accordion-collapse collapse {% if request.resolver_match.app_name == 'system_admin' %}show{% endif %}" aria-labelledby="headingSystemAdmin" data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body p-2">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'dashboard' and request.resolver_match.app_name == 'system_admin' %}active{% endif %}" href="{% url 'system_admin:dashboard' %}"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'organization' in request.resolver_match.url_name or 'provision' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'system_admin:organization_list' %}"><i class="bi bi-buildings me-2"></i> Organizations</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'system_user' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'system_admin:system_user_list' %}"><i class="bi bi-people me-2"></i> All Users</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'role' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'system_admin:role_list' %}"><i class="bi bi-person-badge me-2"></i> Roles</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'master_data' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'system_admin:master_data_seed' %}"><i class="bi bi-database me-2"></i> Master Data</a></li>
                         </ul>
                     </div>
                 </div>

@@ -1,0 +1,239 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}System Admin Dashboard - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="bi bi-shield-lock me-2"></i>System Administration
+        </h2>
+        <span class="badge bg-danger fs-6">Super Admin Only</span>
+    </div>
+    
+    <!-- Stats Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="stat-label">Organizations</h6>
+                            <h3 class="stat-value">{{ total_organizations }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-building fs-1 text-primary opacity-25"></i>
+                        </div>
+                    </div>
+                    <small class="text-success">{{ active_organizations }} active</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card success h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="stat-label">Users</h6>
+                            <h3 class="stat-value">{{ total_users }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-people fs-1 text-success opacity-25"></i>
+                        </div>
+                    </div>
+                    <small class="text-success">{{ active_users }} active, {{ staff_users }} staff</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card warning h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="stat-label">Geographic</h6>
+                            <h3 class="stat-value">{{ districts }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-geo-alt fs-1 text-warning opacity-25"></i>
+                        </div>
+                    </div>
+                    <small>{{ divisions }} Divisions, {{ districts }} Districts</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="stat-label">Fiscal Year</h6>
+                            <h3 class="stat-value">{{ total_fiscal_years }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-calendar3 fs-1 text-info opacity-25"></i>
+                        </div>
+                    </div>
+                    {% if active_fiscal_year %}
+                    <small class="text-success">Active: {{ active_fiscal_year.code }}</small>
+                    {% else %}
+                    <small class="text-danger">No active FY</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row g-4">
+        <!-- Quick Actions -->
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <a href="{% url 'system_admin:provision_organization' %}" class="btn btn-outline-primary w-100 py-3">
+                                <i class="bi bi-building-add d-block fs-3 mb-2"></i>
+                                Provision TMA
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="{% url 'system_admin:system_user_list' %}" class="btn btn-outline-success w-100 py-3">
+                                <i class="bi bi-people d-block fs-3 mb-2"></i>
+                                Manage Users
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="{% url 'system_admin:master_data_seed' %}" class="btn btn-outline-info w-100 py-3">
+                                <i class="bi bi-database-add d-block fs-3 mb-2"></i>
+                                Seed Data
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="{% url 'system_admin:role_list' %}" class="btn btn-outline-warning w-100 py-3">
+                                <i class="bi bi-shield-check d-block fs-3 mb-2"></i>
+                                Permissions
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Role Distribution -->
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Role Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Role</th>
+                                <th class="text-end">Users</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for role in roles %}
+                            <tr>
+                                <td>
+                                    <i class="bi bi-person-badge text-primary me-2"></i>
+                                    {{ role.name }}
+                                </td>
+                                <td class="text-end">
+                                    <span class="badge bg-secondary">{{ role.user_count }}</span>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-muted text-center">No roles defined</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <a href="{% url 'system_admin:role_list' %}" class="btn btn-sm btn-outline-primary">
+                        Manage Roles <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row g-4 mt-2">
+        <!-- Recent Users -->
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Users</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Organization</th>
+                                <th>Joined</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in recent_users %}
+                            <tr>
+                                <td>{{ user.get_full_name }}</td>
+                                <td>{{ user.organization.name|default:"-" }}</td>
+                                <td>{{ user.date_joined|date:"M d, Y" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-muted text-center">No users yet</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <a href="{% url 'system_admin:system_user_list' %}" class="btn btn-sm btn-outline-primary">
+                        View All Users <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Organizations by Type -->
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Organizations by Type</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th class="text-end">Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in orgs_by_type %}
+                            <tr>
+                                <td>{{ item.org_type }}</td>
+                                <td class="text-end">
+                                    <span class="badge bg-primary">{{ item.count }}</span>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-muted text-center">No organizations</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <a href="{% url 'system_admin:organization_list' %}" class="btn btn-sm btn-outline-primary">
+                        View Organizations <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

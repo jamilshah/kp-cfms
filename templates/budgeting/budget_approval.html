@@ -9,6 +9,7 @@ Description: Budget Approval template (TMO).
 -->
 {% extends "base.html" %}
 {% load humanize %}
+{% load custom_filters %}
 
 {% block title %}Finalize Budget - {{ fiscal_year }} - KP-CFMS{% endblock %}
 
@@ -24,7 +25,7 @@ Description: Budget Approval template (TMO).
         <div class="card stat-card success">
             <div class="card-body">
                 <div class="stat-label">Total Receipts</div>
-                <div class="stat-value text-success">Rs {{ total_receipts|floatformat:2|intcomma }}</div>
+                <div class="stat-value text-success">Rs {{ total_receipts|currency }}</div>
             </div>
         </div>
     </div>
@@ -32,7 +33,7 @@ Description: Budget Approval template (TMO).
         <div class="card stat-card danger">
             <div class="card-body">
                 <div class="stat-label">Total Expenditure</div>
-                <div class="stat-value text-danger">Rs {{ total_expenditure|floatformat:2|intcomma }}</div>
+                <div class="stat-value text-danger">Rs {{ total_expenditure|currency }}</div>
             </div>
         </div>
     </div>
@@ -40,7 +41,7 @@ Description: Budget Approval template (TMO).
         <div class="card stat-card warning">
             <div class="card-body">
                 <div class="stat-label">Contingency (2%)</div>
-                <div class="stat-value text-warning">Rs {{ contingency|floatformat:2|intcomma }}</div>
+                <div class="stat-value text-warning">Rs {{ contingency|currency }}</div>
             </div>
         </div>
     </div>
@@ -49,7 +50,7 @@ Description: Budget Approval template (TMO).
             <div class="card-body">
                 <div class="stat-label">Surplus/Deficit</div>
                 <div class="stat-value {% if surplus >= 0 %}text-success{% else %}text-danger{% endif %}">
-                    Rs {{ surplus|floatformat:2|intcomma }}
+                    Rs {{ surplus|currency }}
                 </div>
             </div>
         </div>
@@ -67,8 +68,8 @@ Description: Budget Approval template (TMO).
                 <div>
                     <strong>2% Reserve Requirement</strong>
                     <p class="text-muted mb-0 small">
-                        Required: Rs {{ required_reserve|floatformat:2|intcomma }} | 
-                        Allocated: Rs {{ contingency|floatformat:2|intcomma }}
+                        Required: Rs {{ required_reserve|currency }} | 
+                        Allocated: Rs {{ contingency|currency }}
                     </p>
                 </div>
                 {% if reserve_valid %}

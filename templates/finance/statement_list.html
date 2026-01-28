@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}Bank Statements - CFMS{% endblock %}
 
@@ -48,8 +49,8 @@
                                 <br><small class="text-muted">{{ statement.bank_account.bank_name }}</small>
                             </td>
                             <td>{{ statement }}</td>
-                            <td class="text-end">{{ statement.opening_balance|floatformat:2 }}</td>
-                            <td class="text-end">{{ statement.closing_balance|floatformat:2 }}</td>
+                            <td class="text-end">{{ statement.opening_balance|currency }}</td>
+                            <td class="text-end">{{ statement.closing_balance|currency }}</td>
                             <td class="text-center">{{ statement.lines.count }}</td>
                             <td class="text-center">
                                 <span class="badge bg-{{ statement.unreconciled_count|yesno:'warning,success' }}">

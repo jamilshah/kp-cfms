@@ -9,6 +9,7 @@ Description: SAE List template.
 -->
 {% extends "base.html" %}
 {% load humanize %}
+{% load custom_filters %}
 
 {% block title %}SAE Records - KP-CFMS{% endblock %}
 
@@ -37,12 +38,12 @@ Description: SAE List template.
                 <tr>
                     <td><strong>{{ sae.sae_number }}</strong></td>
                     <td>{{ sae.fiscal_year.year_name }}</td>
-                    <td class="text-success">Rs {{ sae.total_receipts|floatformat:2|intcomma }}</td>
-                    <td class="text-danger">Rs {{ sae.total_expenditure|floatformat:2|intcomma }}</td>
+                    <td class="text-success">Rs {{ sae.total_receipts|currency }}</td>
+                    <td class="text-danger">Rs {{ sae.total_expenditure|currency }}</td>
                     <td>
                         {% with diff=sae.get_surplus_deficit %}
                             <span class="{% if diff >= 0 %}text-success{% else %}text-danger{% endif %}">
-                                Rs {{ diff|floatformat:2|intcomma }}
+                                Rs {{ diff|currency }}
                             </span>
                         {% endwith %}
                     </td>

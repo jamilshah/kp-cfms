@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if object %}Edit{% else %}Add{% endif %} District - Master Data - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:dashboard' %}">System Admin</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:master_data_seed' %}">Master Data</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:district_list' %}">Districts</a></li>
+            <li class="breadcrumb-item active">{% if object %}Edit{% else %}Add{% endif %}</li>
+        </ol>
+    </nav>
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>
+            <i class="bi bi-geo me-2"></i>
+            {% if object %}Edit District: {{ object.name }}{% else %}Add New District{% endif %}
+        </h2>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label for="id_division" class="form-label">Division <span class="text-danger">*</span></label>
+                            <select name="division" id="id_division" 
+                                    class="form-select {% if form.division.errors %}is-invalid{% endif %}" required>
+                                <option value="">-- Select Division --</option>
+                                {% for division in form.division.field.queryset %}
+                                <option value="{{ division.pk }}" {% if form.division.value|stringformat:"s" == division.pk|stringformat:"s" %}selected{% endif %}>
+                                    {{ division.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            {% if form.division.errors %}
+                            <div class="invalid-feedback">{{ form.division.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="id_name" class="form-label">District Name <span class="text-danger">*</span></label>
+                            <input type="text" name="name" id="id_name" 
+                                   class="form-control {% if form.name.errors %}is-invalid{% endif %}"
+                                   value="{{ form.name.value|default:'' }}" required>
+                            {% if form.name.errors %}
+                            <div class="invalid-feedback">{{ form.name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="id_code" class="form-label">Code <span class="text-danger">*</span></label>
+                            <input type="text" name="code" id="id_code" 
+                                   class="form-control {% if form.code.errors %}is-invalid{% endif %}"
+                                   value="{{ form.code.value|default:'' }}" required maxlength="10">
+                            {% if form.code.errors %}
+                            <div class="invalid-feedback">{{ form.code.errors.0 }}</div>
+                            {% endif %}
+                            <div class="form-text">Short code for the district (e.g., PSH, CHR)</div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'system_admin:district_list' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-1"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle me-1"></i> 
+                                {% if object %}Update{% else %}Create{% endif %} District
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -29,6 +29,7 @@ urlpatterns = [
     path('revenue/', include('apps.revenue.urls')),
     path('finance/', include('apps.finance.urls')),
     path('reports/', include('apps.reporting.urls')),
+    path('system-admin/', include('apps.system_admin.urls')),
     path('', RedirectView.as_view(url='/budgeting/', permanent=False), name='home'),
 ]
 

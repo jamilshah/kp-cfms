@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if is_edit %}Edit{% else %}Add{% endif %} User - {{ organization.name }} - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            {% if is_tenant_view %}
+            <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Dashboard</a></li>
+            {% else %}
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:dashboard' %}">System Admin</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:organization_list' %}">Organizations</a></li>
+            {% endif %}
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:tenant_user_list' organization.pk %}">{{ organization.name }} Users</a></li>
+            <li class="breadcrumb-item active">{% if is_edit %}Edit{% else %}Add{% endif %} User</li>
+        </ol>
+    </nav>
+    
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header {% if is_edit %}bg-warning{% else %}bg-success{% endif %} text-white">
+                    <h5 class="mb-0">
+                        {% if is_edit %}
+                        <i class="bi bi-pencil me-2"></i>Edit User
+                        {% else %}
+                        <i class="bi bi-person-plus-fill me-2"></i>Add User
+                        {% endif %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info mb-4">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Organization: <strong>{{ organization.name }}</strong> ({{ organization.code }})
+                    </div>
+                    
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        
+                        <h6 class="text-muted mb-3">User Identification</h6>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="id_cnic" class="form-label">CNIC <span class="text-danger">*</span></label>
+                                {{ form.cnic }}
+                                {% if form.cnic.errors %}
+                                <div class="invalid-feedback d-block">{{ form.cnic.errors.0 }}</div>
+                                {% endif %}
+                                <small class="text-muted">Format: 12345-1234567-1</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="id_email" class="form-label">Email</label>
+                                {{ form.email }}
+                                {% if form.email.errors %}
+                                <div class="invalid-feedback d-block">{{ form.email.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="id_first_name" class="form-label">First Name <span class="text-danger">*</span></label>
+                                {{ form.first_name }}
+                                {% if form.first_name.errors %}
+                                <div class="invalid-feedback d-block">{{ form.first_name.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="id_last_name" class="form-label">Last Name <span class="text-danger">*</span></label>
+                                {{ form.last_name }}
+                                {% if form.last_name.errors %}
+                                <div class="invalid-feedback d-block">{{ form.last_name.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        {% if not is_edit %}
+                        <hr>
+                        <h6 class="text-muted mb-3">Password</h6>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="id_password1" class="form-label">Password <span class="text-danger">*</span></label>
+                                {{ form.password1 }}
+                                {% if form.password1.errors %}
+                                <div class="invalid-feedback d-block">{{ form.password1.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="id_password2" class="form-label">Confirm Password <span class="text-danger">*</span></label>
+                                {{ form.password2 }}
+                                {% if form.password2.errors %}
+                                <div class="invalid-feedback d-block">{{ form.password2.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <hr>
+                        <h6 class="text-muted mb-3">Role Assignment</h6>
+                        <div class="mb-3">
+                            <label for="id_roles" class="form-label">Roles <span class="text-danger">*</span></label>
+                            {{ form.roles }}
+                            {% if form.roles.errors %}
+                            <div class="invalid-feedback d-block">{{ form.roles.errors.0 }}</div>
+                            {% endif %}
+                            <small class="text-muted">Select one or more roles for this user.</small>
+                        </div>
+                        
+                        <div class="form-check mb-3">
+                            {{ form.is_active }}
+                            <label class="form-check-label" for="id_is_active">
+                                Active User
+                            </label>
+                            <small class="d-block text-muted">Inactive users cannot login to the system.</small>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'system_admin:tenant_user_list' organization.pk %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left me-1"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn {% if is_edit %}btn-warning{% else %}btn-success{% endif %}">
+                                {% if is_edit %}
+                                <i class="bi bi-check-lg me-1"></i> Update User
+                                {% else %}
+                                <i class="bi bi-person-plus me-1"></i> Create User
+                                {% endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // CNIC Mask
+    $('#id_cnic').on('input', function() {
+        var value = $(this).val().replace(/\D/g, '');
+        if (value.length > 5) {
+            value = value.substring(0, 5) + '-' + value.substring(5);
+        }
+        if (value.length > 13) {
+            value = value.substring(0, 13) + '-' + value.substring(13);
+        }
+        if (value.length > 15) {
+            value = value.substring(0, 15);
+        }
+        $(this).val(value);
+    });
+    
+    // Select2 for roles
+    $('#id_roles').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: 'Select roles...'
+    });
+});
+</script>
+{% endblock %}

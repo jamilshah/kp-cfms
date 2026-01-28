@@ -103,7 +103,7 @@
             <strong>Report Generated:</strong> {{ generated_date|date:"F j, Y" }}
         </div>
         <div style="text-align: right;">
-            <strong>Opening Balance:</strong> Rs. {{ opening_balance|floatformat:2 }}
+            <strong>Opening Balance:</strong> Rs. {{ opening_balance|currency }}
         </div>
     </div>
     
@@ -124,7 +124,7 @@
                 <td colspan="4"><strong>Opening Balance B/F</strong></td>
                 <td class="amount"></td>
                 <td class="amount"></td>
-                <td class="amount"><strong>{{ opening_balance|floatformat:2 }}</strong></td>
+                <td class="amount"><strong>{{ opening_balance|currency }}</strong></td>
             </tr>
             
             {% for entry in entries %}
@@ -133,9 +133,9 @@
                 <td>{{ entry.voucher_no }}</td>
                 <td>{{ entry.description|truncatechars:50 }}</td>
                 <td>{{ entry.instrument_no|default:"-" }}</td>
-                <td class="amount">{% if entry.debit > 0 %}{{ entry.debit|floatformat:2 }}{% endif %}</td>
-                <td class="amount">{% if entry.credit > 0 %}{{ entry.credit|floatformat:2 }}{% endif %}</td>
-                <td class="amount">{{ entry.balance|floatformat:2 }}</td>
+                <td class="amount">{% if entry.debit > 0 %}{{ entry.debit|currency }}{% endif %}</td>
+                <td class="amount">{% if entry.credit > 0 %}{{ entry.credit|currency }}{% endif %}</td>
+                <td class="amount">{{ entry.balance|currency }}</td>
             </tr>
             {% empty %}
             <tr>
@@ -145,8 +145,8 @@
             
             <tr class="total-row">
                 <td colspan="4"><strong>Monthly Total</strong></td>
-                <td class="amount"><strong>{{ total_receipts|floatformat:2 }}</strong></td>
-                <td class="amount"><strong>{{ total_payments|floatformat:2 }}</strong></td>
+                <td class="amount"><strong>{{ total_receipts|currency }}</strong></td>
+                <td class="amount"><strong>{{ total_payments|currency }}</strong></td>
                 <td class="amount"></td>
             </tr>
             
@@ -154,7 +154,7 @@
                 <td colspan="4"><strong>Closing Balance C/F</strong></td>
                 <td class="amount"></td>
                 <td class="amount"></td>
-                <td class="amount"><strong>{{ closing_balance|floatformat:2 }}</strong></td>
+                <td class="amount"><strong>{{ closing_balance|currency }}</strong></td>
             </tr>
         </tbody>
     </table>

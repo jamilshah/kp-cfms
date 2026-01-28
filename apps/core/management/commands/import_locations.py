@@ -13,7 +13,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from apps.core.models import Division, District, TMA
+from apps.core.models import Division, District, Tehsil, Organization
 
 
 class Command(BaseCommand):
@@ -52,7 +52,8 @@ class Command(BaseCommand):
         # Clear existing data if requested
         if options['clear']:
             self.stdout.write(self.style.WARNING('Clearing existing location data...'))
-            TMA.objects.all().delete()
+            Organization.objects.all().delete()
+            Tehsil.objects.all().delete()
             District.objects.all().delete()
             Division.objects.all().delete()
             self.stdout.write(self.style.SUCCESS('Existing data cleared.'))
@@ -61,8 +62,8 @@ class Command(BaseCommand):
         stats: Dict[str, int] = {
             'divisions_created': 0,
             'districts_created': 0,
-            'tmas_created': 0,
-            'tmas_skipped': 0,
+            'tehsils_created': 0,
+            'tehsils_skipped': 0,
         }
         
         # Read CSV and import
@@ -99,17 +100,17 @@ class Command(BaseCommand):
                     stats['districts_created'] += 1
                     self.stdout.write(f'    Created District: {district_name}')
                 
-                # Create or get TMA
-                tma, created = TMA.objects.get_or_create(
+                # Create or get Tehsil
+                tehsil, created = Tehsil.objects.get_or_create(
                     district=district,
                     name=tehsil_name,
                     defaults={'is_active': True}
                 )
                 if created:
-                    stats['tmas_created'] += 1
-                    self.stdout.write(f'      Created TMA: {tehsil_name}')
+                    stats['tehsils_created'] += 1
+                    self.stdout.write(f'      Created Tehsil: {tehsil_name}')
                 else:
-                    stats['tmas_skipped'] += 1
+                    stats['tehsils_skipped'] += 1
         
         # Print summary
         self.stdout.write('')
@@ -118,9 +119,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('=' * 50))
         self.stdout.write(f"Divisions created: {stats['divisions_created']}")
         self.stdout.write(f"Districts created: {stats['districts_created']}")
-        self.stdout.write(f"TMAs created: {stats['tmas_created']}")
-        self.stdout.write(f"TMAs skipped (existing): {stats['tmas_skipped']}")
+        self.stdout.write(f"Tehsils created: {stats['tehsils_created']}")
+        self.stdout.write(f"Tehsils skipped (existing): {stats['tehsils_skipped']}")
         self.stdout.write('')
         self.stdout.write(f"Total Divisions: {Division.objects.count()}")
         self.stdout.write(f"Total Districts: {District.objects.count()}")
-        self.stdout.write(f"Total TMAs: {TMA.objects.count()}")
+        self.stdout.write(f"Total Tehsils: {Tehsil.objects.count()}")

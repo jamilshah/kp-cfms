@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Roles - System Admin - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:dashboard' %}">System Admin</a></li>
+            <li class="breadcrumb-item active">Roles</li>
+        </ol>
+    </nav>
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-person-badge-fill me-2"></i>System Roles</h2>
+    </div>
+    
+    <!-- Roles Table -->
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th class="text-center">System Role</th>
+                            <th class="text-center">Users</th>
+                            <th class="text-center">Permissions</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for role in roles %}
+                        <tr>
+                            <td><code>{{ role.code }}</code></td>
+                            <td>
+                                <strong>{{ role.name }}</strong>
+                            </td>
+                            <td>{{ role.description|default:"-"|truncatewords:15 }}</td>
+                            <td class="text-center">
+                                {% if role.is_system_role %}
+                                <span class="badge bg-info">System</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Custom</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-primary">{{ role.user_count }}</span>
+                            </td>
+                            <td class="text-center">
+                                {% if role.group %}
+                                <span class="badge bg-secondary">{{ role.group.permissions.count }}</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'system_admin:role_permissions' role.pk %}" 
+                                       class="btn btn-outline-primary" title="Manage Permissions">
+                                        <i class="bi bi-key"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">
+                                <i class="bi bi-person-badge display-4 d-block mb-2"></i>
+                                No roles found.
+                                <a href="{% url 'system_admin:master_data_seed' %}">Seed system roles</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Role Legend -->
+    <div class="card shadow-sm mt-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Role Descriptions</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Super Admin</dt>
+                        <dd class="col-sm-8">Full system access, can provision TMAs and manage all users</dd>
+                        
+                        <dt class="col-sm-4">TMO</dt>
+                        <dd class="col-sm-8">Town Municipal Officer - Approver for TMA budgets and expenditures</dd>
+                        
+                        <dt class="col-sm-4">LCB Officer</dt>
+                        <dd class="col-sm-8">Local Council Board Officer - Reviews and approves PUGF budgets</dd>
+                        
+                        <dt class="col-sm-4">Finance Officer</dt>
+                        <dd class="col-sm-8">Checker for financial transactions within TMA</dd>
+                    </dl>
+                </div>
+                <div class="col-md-6">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Accountant</dt>
+                        <dd class="col-sm-8">Manages accounting entries and bank reconciliation</dd>
+                        
+                        <dt class="col-sm-4">Cashier</dt>
+                        <dd class="col-sm-8">Handles cash book entries and daily collections</dd>
+                        
+                        <dt class="col-sm-4">Budget Officer</dt>
+                        <dd class="col-sm-8">Prepares budget estimates and allocation requests</dd>
+                        
+                        <dt class="col-sm-4">Dealing Assistant</dt>
+                        <dd class="col-sm-8">Data entry and document preparation (Maker role)</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

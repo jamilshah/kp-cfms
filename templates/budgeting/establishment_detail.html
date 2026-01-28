@@ -9,6 +9,7 @@ Description: Schedule of Establishment detail template with approval actions.
 -->
 {% extends "base.html" %}
 {% load humanize %}
+{% load custom_filters %}
 
 {% block title %}{{ entry.designation_name }} - KP-CFMS{% endblock %}
 
@@ -87,13 +88,13 @@ Description: Schedule of Establishment detail template with approval actions.
                 <div class="row g-4">
                     <div class="col-md-6">
                         <h6 class="text-muted mb-1">Annual Salary per Post</h6>
-                        <p class="fs-5">Rs {{ entry.annual_salary|floatformat:2|intcomma }}</p>
+                        <p class="fs-5">Rs {{ entry.annual_salary|currency }}</p>
                     </div>
                     <div class="col-md-6">
                         <h6 class="text-muted mb-1">Estimated Annual Budget</h6>
                         <p class="fs-5 fw-bold text-primary">
                             {% if entry.estimated_budget %}
-                                Rs {{ entry.estimated_budget|floatformat:2|intcomma }}
+                                Rs {{ entry.estimated_budget|currency }}
                             {% else %}
                                 <span class="text-muted">Not calculated</span>
                             {% endif %}
@@ -110,7 +111,7 @@ Description: Schedule of Establishment detail template with approval actions.
                             {{ entry.justification }}
                         </div>
                         <p><strong>Financial Impact:</strong> 
-                            <span class="text-danger">Rs {{ entry.financial_impact|floatformat:2|intcomma }}</span>
+                            <span class="text-danger">Rs {{ entry.financial_impact|currency }}</span>
                         </p>
                     </div>
                 </div>

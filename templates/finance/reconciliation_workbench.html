@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}{{ page_title }} - CFMS{% endblock %}
 
@@ -68,7 +69,7 @@
         <div class="col-md-3">
             <div class="card bg-primary text-white">
                 <div class="card-body text-center">
-                    <h4 class="mb-0">Rs. {{ brs_summary.balance_per_cash_book|floatformat:2 }}</h4>
+                    <h4 class="mb-0">Rs. {{ brs_summary.balance_per_cash_book|currency }}</h4>
                     <small>Cash Book Balance</small>
                 </div>
             </div>
@@ -76,7 +77,7 @@
         <div class="col-md-3">
             <div class="card bg-success text-white">
                 <div class="card-body text-center">
-                    <h4 class="mb-0">Rs. {{ brs_summary.add_unpresented_cheques|floatformat:2 }}</h4>
+                    <h4 class="mb-0">Rs. {{ brs_summary.add_unpresented_cheques|currency }}</h4>
                     <small>+ Unpresented Cheques</small>
                 </div>
             </div>
@@ -84,7 +85,7 @@
         <div class="col-md-3">
             <div class="card bg-warning text-dark">
                 <div class="card-body text-center">
-                    <h4 class="mb-0">Rs. {{ brs_summary.less_uncredited_deposits|floatformat:2 }}</h4>
+                    <h4 class="mb-0">Rs. {{ brs_summary.less_uncredited_deposits|currency }}</h4>
                     <small>- Uncredited Deposits</small>
                 </div>
             </div>
@@ -92,7 +93,7 @@
         <div class="col-md-3">
             <div class="card {% if brs_summary.difference == 0 %}bg-success{% else %}bg-danger{% endif %} text-white">
                 <div class="card-body text-center">
-                    <h4 class="mb-0">Rs. {{ brs_summary.difference|floatformat:2 }}</h4>
+                    <h4 class="mb-0">Rs. {{ brs_summary.difference|currency }}</h4>
                     <small>Difference</small>
                 </div>
             </div>
@@ -137,9 +138,9 @@
                                 <td><code>{{ entry.instrument_no|default:"-" }}</code></td>
                                 <td class="text-end">
                                     {% if entry.debit > 0 %}
-                                    <span class="amount-dr">Dr {{ entry.debit|floatformat:2 }}</span>
+                                    <span class="amount-dr">Dr {{ entry.debit|currency }}</span>
                                     {% else %}
-                                    <span class="amount-cr">Cr {{ entry.credit|floatformat:2 }}</span>
+                                    <span class="amount-cr">Cr {{ entry.credit|currency }}</span>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -196,9 +197,9 @@
                                 <td><code>{{ line.ref_no|default:"-" }}</code></td>
                                 <td class="text-end">
                                     {% if line.debit > 0 %}
-                                    <span class="amount-dr">Dr {{ line.debit|floatformat:2 }}</span>
+                                    <span class="amount-dr">Dr {{ line.debit|currency }}</span>
                                     {% else %}
-                                    <span class="amount-cr">Cr {{ line.credit|floatformat:2 }}</span>
+                                    <span class="amount-cr">Cr {{ line.credit|currency }}</span>
                                     {% endif %}
                                 </td>
                             </tr>

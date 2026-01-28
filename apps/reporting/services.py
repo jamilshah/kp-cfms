@@ -56,7 +56,7 @@ def generate_cash_book_pdf(
     # Get journal entries for this bank account in the month
     entries = JournalEntry.objects.filter(
         voucher__organization=organization,
-        head=bank_account.gl_code,
+        budget_head=bank_account.gl_code,
         voucher__date__gte=start_date,
         voucher__date__lte=end_date,
     ).select_related('voucher').order_by('voucher__date', 'pk')
@@ -64,7 +64,7 @@ def generate_cash_book_pdf(
     # Calculate opening balance (sum of all entries before start_date)
     previous_entries = JournalEntry.objects.filter(
         voucher__organization=organization,
-        head=bank_account.gl_code,
+        budget_head=bank_account.gl_code,
         voucher__date__lt=start_date,
     )
     opening_debit = sum(e.debit for e in previous_entries)
@@ -123,8 +123,8 @@ def generate_cash_book_pdf(
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
         
-    except ImportError:
-        # WeasyPrint not installed, return HTML for print
+    except (ImportError, OSError):
+        # WeasyPrint not installed or GTK libraries missing, return HTML for print
         html_string = render_to_string('reporting/cash_book_pdf.html', context)
         return HttpResponse(html_string)
 
@@ -169,8 +169,8 @@ def generate_brs_pdf(statement_id: int, organization: Organization) -> HttpRespo
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
         
-    except ImportError:
-        # WeasyPrint not installed, return HTML for print
+    except (ImportError, OSError):
+        # WeasyPrint not installed or GTK libraries missing, return HTML for print
         html_string = render_to_string('reporting/brs_pdf.html', context)
         return HttpResponse(html_string)
 
@@ -210,7 +210,7 @@ def get_monthly_summary(
     for account in bank_accounts:
         entries = JournalEntry.objects.filter(
             voucher__organization=organization,
-            head=account.gl_code,
+            budget_head=account.gl_code,
             voucher__date__gte=start_date,
             voucher__date__lte=end_date,
         )

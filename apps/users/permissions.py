@@ -6,9 +6,10 @@ Team Lead: Jamil Shah
 Developers: Ali Asghar, Akhtar Munir and Zarif Khan
 Description: Permission classes for role-based access control.
              Implements Maker/Checker/Approver permission checks.
+             Updated to use dynamic Role model instead of hardcoded roles.
 -------------------------------------------------------------------------
 """
-from typing import Any
+from typing import Any, List
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest
@@ -21,13 +22,13 @@ class RoleRequiredMixin(UserPassesTestMixin):
     Base mixin for role-based view access control.
     
     Subclasses should define the `required_roles` attribute as a list
-    of UserRole values that are allowed to access the view.
+    of role codes that are allowed to access the view.
     
     Attributes:
         required_roles: List of role codes that can access this view.
     """
     
-    required_roles: list = []
+    required_roles: List[str] = []
     
     def test_func(self) -> bool:
         """
@@ -42,7 +43,8 @@ class RoleRequiredMixin(UserPassesTestMixin):
         if self.request.user.is_superuser:
             return True
         
-        return self.request.user.role in self.required_roles
+        # Use the new has_any_role method
+        return self.request.user.has_any_role(self.required_roles)
     
     def handle_no_permission(self) -> None:
         """Handle unauthorized access attempt."""
@@ -58,10 +60,10 @@ class MakerRequiredMixin(RoleRequiredMixin):
     Mixin that restricts access to Maker (Dealing Assistant) role.
     
     Used for views that create new bills, budget entries, etc.
-    System Admins (ADM) are also allowed for data setup.
+    System Admins are also allowed for data setup.
     """
     
-    required_roles = ['DA', 'ADM']
+    required_roles = ['DEALING_ASSISTANT', 'DA', 'SUPER_ADMIN', 'ADM']
 
 
 class CheckerRequiredMixin(RoleRequiredMixin):
@@ -71,7 +73,7 @@ class CheckerRequiredMixin(RoleRequiredMixin):
     Used for views that verify/pre-audit transactions.
     """
     
-    required_roles = ['AC', 'ADM']
+    required_roles = ['ACCOUNTANT', 'AC', 'SUPER_ADMIN', 'ADM']
 
 
 class ApproverRequiredMixin(RoleRequiredMixin):
@@ -81,17 +83,17 @@ class ApproverRequiredMixin(RoleRequiredMixin):
     Used for views that approve transactions.
     """
     
-    required_roles = ['TMO', 'ADM']
+    required_roles = ['TMO', 'SUPER_ADMIN', 'ADM']
 
 
 class FinanceOfficerRequiredMixin(RoleRequiredMixin):
     """
-    Mixin that restricts access to TO Finance role.
+    Mixin that restricts access to Finance Officer role.
     
     Used for budget release and financial oversight views.
     """
     
-    required_roles = ['TOF', 'TMO']
+    required_roles = ['FINANCE_OFFICER', 'TOF', 'TO_FINANCE', 'TMO']
 
 
 class CashierRequiredMixin(RoleRequiredMixin):
@@ -101,7 +103,7 @@ class CashierRequiredMixin(RoleRequiredMixin):
     Used for payment and collection recording views.
     """
     
-    required_roles = ['CSH']
+    required_roles = ['CASHIER', 'CSH']
 
 
 class LCBOfficerRequiredMixin(RoleRequiredMixin):
@@ -111,7 +113,35 @@ class LCBOfficerRequiredMixin(RoleRequiredMixin):
     Used for provincial oversight functions like CoA approval.
     """
     
-    required_roles = ['LCB']
+    required_roles = ['LCB_OFFICER', 'LCB']
+
+
+class BudgetOfficerRequiredMixin(RoleRequiredMixin):
+    """
+    Mixin that restricts access to Budget Officer role.
+    
+    Used for budget preparation and estimates.
+    """
+    
+    required_roles = ['BUDGET_OFFICER', 'DEALING_ASSISTANT', 'DA']
+
+
+class SuperAdminRequiredMixin(UserPassesTestMixin):
+    """
+    Mixin that restricts access to Super Admin / Superuser only.
+    
+    Used for system administration and configuration views.
+    """
+    
+    def test_func(self) -> bool:
+        """Test if the current user is a superuser."""
+        if not self.request.user.is_authenticated:
+            return False
+        return self.request.user.is_superuser or self.request.user.is_super_admin()
+    
+    def handle_no_permission(self) -> None:
+        """Handle unauthorized access attempt."""
+        raise PermissionDenied("This action requires Super Admin access.")
 
 
 def check_segregation_of_duties(
@@ -136,7 +166,7 @@ def check_segregation_of_duties(
         )
 
 
-def has_role(user: Any, roles: list) -> bool:
+def has_role(user: Any, roles: List[str]) -> bool:
     """
     Check if user has any of the specified roles.
     
@@ -153,7 +183,8 @@ def has_role(user: Any, roles: list) -> bool:
     if user.is_superuser:
         return True
     
-    return user.role in roles
+    # Use new has_any_role method
+    return user.has_any_role(roles)
 
 
 def can_approve_establishment_post(user: Any, establishment_entry: Any) -> bool:
@@ -185,15 +216,15 @@ def can_approve_establishment_post(user: Any, establishment_entry: Any) -> bool:
         # TMO can only "Recommend" PUGF posts
         if current_status == ApprovalStatus.VERIFIED:
             # At VERIFIED stage, TMO can only recommend
-            return user.role == 'TMO'  # For RECOMMEND action
+            return user.has_any_role(['TMO'])  # For RECOMMEND action
         elif current_status == ApprovalStatus.RECOMMENDED:
             # At RECOMMENDED stage, only LCB can approve
-            return user.role == 'LCB'
+            return user.has_any_role(['LCB_OFFICER', 'LCB'])
     
     # LOCAL posts: TMO has final approval authority
     elif post_type == PostType.LOCAL:
         if current_status == ApprovalStatus.VERIFIED:
-            return user.role == 'TMO'
+            return user.has_any_role(['TMO'])
     
     return False
 
@@ -227,7 +258,7 @@ def can_recommend_pugf_post(user: Any, establishment_entry: Any) -> bool:
         return False
     
     # TMO can recommend PUGF posts
-    return user.role == 'TMO'
+    return user.has_any_role(['TMO'])
 
 
 class CanApprovePUGFMixin(UserPassesTestMixin):
@@ -251,13 +282,14 @@ class CanApprovePUGFMixin(UserPassesTestMixin):
         if self.request.user.is_superuser:
             return True
         
-        return self.request.user.role == 'LCB'
+        return self.request.user.has_any_role(['LCB_OFFICER', 'LCB'])
     
     def handle_no_permission(self) -> None:
         """Handle unauthorized access attempt."""
         raise PermissionDenied(
             "Only LCB Finance Officers can approve PUGF posts."
         )
+
 
 class AdminRequiredMixin(RoleRequiredMixin):
     """
@@ -266,4 +298,25 @@ class AdminRequiredMixin(RoleRequiredMixin):
     Used for configuration and setup views.
     """
     
-    required_roles = ['ADM']
+    required_roles = ['SUPER_ADMIN', 'ADM']
+
+
+class TenantAdminRequiredMixin(UserPassesTestMixin):
+    """
+    Mixin that restricts access to TMA Admins (TMO or org admin).
+    
+    Used for user management within an organization.
+    """
+    
+    def test_func(self) -> bool:
+        """Test if the current user is a TMA admin."""
+        if not self.request.user.is_authenticated:
+            return False
+        if self.request.user.is_superuser:
+            return True
+        # TMO or users with admin role in their org
+        return self.request.user.has_any_role(['TMO', 'SUPER_ADMIN', 'ADM'])
+    
+    def handle_no_permission(self) -> None:
+        """Handle unauthorized access attempt."""
+        raise PermissionDenied("This action requires TMA Admin access.")

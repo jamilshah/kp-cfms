@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Role Permissions - {{ role.name }} - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:dashboard' %}">System Admin</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:role_list' %}">Roles</a></li>
+            <li class="breadcrumb-item active">{{ role.name }} Permissions</li>
+        </ol>
+    </nav>
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-key-fill me-2"></i>{{ role.name }} Permissions</h2>
+            <p class="text-muted mb-0">{{ role.description }}</p>
+        </div>
+        <a href="{% url 'system_admin:role_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Back to Roles
+        </a>
+    </div>
+    
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Permissions Matrix</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        {% regroup permissions by content_type.app_label as app_list %}
+                        
+                        {% for app in app_list %}
+                        <div class="mb-4">
+                            <h6 class="text-uppercase text-muted border-bottom pb-2 mb-3">
+                                <i class="bi bi-folder2 me-1"></i> {{ app.grouper|title }}
+                            </h6>
+                            <div class="row">
+                                {% for perm in app.list %}
+                                <div class="col-md-6 mb-2">
+                                    <div class="form-check">
+                                        <input type="checkbox" 
+                                               class="form-check-input" 
+                                               name="permissions" 
+                                               value="{{ perm.id }}"
+                                               id="perm_{{ perm.id }}"
+                                               {% if perm.id in assigned_permission_ids %}checked{% endif %}>
+                                        <label class="form-check-label" for="perm_{{ perm.id }}">
+                                            {{ perm.name }}
+                                        </label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="text-center text-muted py-4">
+                            <i class="bi bi-shield-x display-4 d-block mb-2"></i>
+                            No permissions available in the system.
+                        </div>
+                        {% endfor %}
+                        
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'system_admin:role_list' %}" class="btn btn-outline-secondary">
+                                Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg me-1"></i> Save Permissions
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Role Info -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Role Information</h6>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Code</dt>
+                        <dd class="col-sm-8"><code>{{ role.code }}</code></dd>
+                        
+                        <dt class="col-sm-4">Name</dt>
+                        <dd class="col-sm-8">{{ role.name }}</dd>
+                        
+                        <dt class="col-sm-4">Type</dt>
+                        <dd class="col-sm-8">
+                            {% if role.is_system_role %}
+                            <span class="badge bg-info">System Role</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Custom Role</span>
+                            {% endif %}
+                        </dd>
+                        
+                        <dt class="col-sm-4">Group</dt>
+                        <dd class="col-sm-8">{{ role.group.name|default:"Not linked" }}</dd>
+                        
+                        <dt class="col-sm-4">Users</dt>
+                        <dd class="col-sm-8">
+                            <span class="badge bg-primary">{{ role.customuser_set.count }}</span>
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+            
+            <!-- Quick Actions -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="bi bi-lightning me-2"></i>Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button type="button" class="btn btn-outline-success btn-sm" id="selectAll">
+                            <i class="bi bi-check-all me-1"></i> Select All
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" id="clearAll">
+                            <i class="bi bi-x-lg me-1"></i> Clear All
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    $('#selectAll').click(function() {
+        $('input[name="permissions"]').prop('checked', true);
+    });
+    
+    $('#clearAll').click(function() {
+        $('input[name="permissions"]').prop('checked', false);
+    });
+});
+</script>
+{% endblock %}

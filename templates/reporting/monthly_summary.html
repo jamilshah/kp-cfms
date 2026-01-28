@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}Monthly Summary - {{ month_name }} {{ year }} - CFMS{% endblock %}
 
@@ -62,10 +63,10 @@
                         <td>{{ item.bank_account.title }}</td>
                         <td>{{ item.bank_account.bank_name }}</td>
                         <td><code>{{ item.bank_account.account_number }}</code></td>
-                        <td class="text-end text-success">{{ item.receipts|floatformat:2 }}</td>
-                        <td class="text-end text-danger">{{ item.payments|floatformat:2 }}</td>
+                        <td class="text-end text-success">{{ item.receipts|currency }}</td>
+                        <td class="text-end text-danger">{{ item.payments|currency }}</td>
                         <td class="text-end {% if item.receipts > item.payments %}text-success{% else %}text-danger{% endif %}">
-                            {{ item.receipts|add:item.payments|default:"0.00"|floatformat:2 }}
+                            {{ item.receipts|add:item.payments|default:"0.00"|currency }}
                         </td>
                     </tr>
                     {% empty %}
@@ -77,8 +78,8 @@
                 <tfoot class="table-light">
                     <tr class="fw-bold">
                         <td colspan="3">Grand Total</td>
-                        <td class="text-end text-success">{{ total_receipts|floatformat:2 }}</td>
-                        <td class="text-end text-danger">{{ total_payments|floatformat:2 }}</td>
+                        <td class="text-end text-success">{{ total_receipts|currency }}</td>
+                        <td class="text-end text-danger">{{ total_payments|currency }}</td>
                         <td class="text-end">
                             {% widthratio total_receipts 1 1 as rec %}
                             {% widthratio total_payments 1 1 as pay %}

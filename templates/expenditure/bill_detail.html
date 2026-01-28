@@ -9,6 +9,7 @@ Description: Bill Detail Template with Workflow Actions
 -->
 {% extends "base.html" %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}Bill #{{ bill.id }} - KP-CFMS{% endblock %}
 
@@ -93,15 +94,15 @@ Description: Bill Detail Template with Workflow Actions
                 <table class="table table-bordered mb-0">
                     <tr>
                         <th width="50%">Gross Amount</th>
-                        <td class="text-end">Rs. {{ bill.gross_amount|floatformat:2 }}</td>
+                        <td class="text-end">Rs. {{ bill.gross_amount|currency }}</td>
                     </tr>
                     <tr>
                         <th>Tax Deduction</th>
-                        <td class="text-end text-danger">(-) Rs. {{ bill.tax_amount|floatformat:2 }}</td>
+                        <td class="text-end text-danger">(-) Rs. {{ bill.tax_amount|currency }}</td>
                     </tr>
                     <tr class="table-success">
                         <th>Net Payable</th>
-                        <td class="text-end fw-bold">Rs. {{ bill.net_amount|floatformat:2 }}</td>
+                        <td class="text-end fw-bold">Rs. {{ bill.net_amount|currency }}</td>
                     </tr>
                 </table>
             </div>
@@ -117,15 +118,15 @@ Description: Bill Detail Template with Workflow Actions
                 <div class="row">
                     <div class="col-md-4">
                         <div class="text-muted small">Released Amount</div>
-                        <div class="fs-5">Rs. {{ allocation.released_amount|floatformat:2 }}</div>
+                        <div class="fs-5">Rs. {{ allocation.released_amount|currency }}</div>
                     </div>
                     <div class="col-md-4">
                         <div class="text-muted small">Spent Amount</div>
-                        <div class="fs-5 text-danger">Rs. {{ allocation.spent_amount|floatformat:2 }}</div>
+                        <div class="fs-5 text-danger">Rs. {{ allocation.spent_amount|currency }}</div>
                     </div>
                     <div class="col-md-4">
                         <div class="text-muted small">Available Balance</div>
-                        <div class="fs-5 text-success">Rs. {{ allocation.get_available_budget|floatformat:2 }}</div>
+                        <div class="fs-5 text-success">Rs. {{ allocation.get_available_budget|currency }}</div>
                     </div>
                 </div>
                 
@@ -189,7 +190,7 @@ Description: Bill Detail Template with Workflow Actions
                             <td>{{ payment.cheque_number }}</td>
                             <td>{{ payment.cheque_date|date:"d-M-Y" }}</td>
                             <td>{{ payment.bank_account.bank_name }}</td>
-                            <td>Rs. {{ payment.amount|floatformat:2 }}</td>
+                            <td>Rs. {{ payment.amount|currency }}</td>
                             <td>
                                 {% if payment.is_posted %}
                                 <span class="badge bg-success">Posted</span>

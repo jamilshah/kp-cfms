@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 
 {% block title %}Manage Employees - {{ schedule.designation_name }} - KP-CFMS{% endblock %}
 
@@ -27,7 +28,7 @@
         <div class="card bg-light border-primary h-100">
             <div class="card-body">
                 <h6 class="card-subtitle mb-2 text-muted">Filled Posts Cost ({{ stats.filled_count }})</h6>
-                <h3 class="card-title text-primary">Rs {{ stats.filled_cost|floatformat:2 }}</h3>
+                <h3 class="card-title text-primary">Rs {{ stats.filled_cost|currency }}</h3>
             </div>
         </div>
     </div>
@@ -35,7 +36,7 @@
         <div class="card bg-light border-warning h-100">
             <div class="card-body">
                 <h6 class="card-subtitle mb-2 text-muted">Vacant Posts Cost ({{ stats.vacant_count }})</h6>
-                <h3 class="card-title text-warning">Rs {{ stats.vacant_cost|floatformat:2 }}</h3>
+                <h3 class="card-title text-warning">Rs {{ stats.vacant_cost|currency }}</h3>
             </div>
         </div>
     </div>
@@ -43,7 +44,7 @@
         <div class="card bg-light border-success h-100">
             <div class="card-body">
                 <h6 class="card-subtitle mb-2 text-muted">Total Estimated Budget</h6>
-                <h3 class="card-title text-success">Rs {{ stats.total_cost|floatformat:2 }}</h3>
+                <h3 class="card-title text-success">Rs {{ stats.total_cost|currency }}</h3>
                 <small class="text-muted">Total Posts: {{ schedule.sanctioned_posts }}</small>
             </div>
         </div>
@@ -78,9 +79,9 @@
                             {% if emp.cnic %} | CNIC: {{ emp.cnic }}{% endif %}
                         </div>
                     </td>
-                    <td>Rs {{ emp.current_basic_pay|floatformat:2 }}</td>
-                    <td>Rs {{ emp.monthly_allowances|floatformat:2 }}</td>
-                    <td class="fw-bold text-success">Rs {{ emp.annual_cost|floatformat:2 }}</td>
+                    <td>Rs {{ emp.current_basic_pay|currency }}</td>
+                    <td>Rs {{ emp.monthly_allowances|currency }}</td>
+                    <td class="fw-bold text-success">Rs {{ emp.annual_cost|currency }}</td>
                     <td class="text-end">
                         <a href="{% url 'budgeting:employee_edit' emp.pk %}" class="btn btn-sm btn-outline-primary me-1" title="Edit">
                             <i class="bi bi-pencil"></i>

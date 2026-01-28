@@ -11,6 +11,10 @@ Description: URL configuration for the finance module including
 from django.urls import path
 
 from apps.finance.views import (
+    # Master Data
+    FundListView,
+    BudgetHeadListView,
+    
     # Bank Statement Management
     BankStatementListView,
     BankStatementCreateView,
@@ -30,6 +34,10 @@ from apps.finance.views import (
 app_name = 'finance'
 
 urlpatterns = [
+    # Master Data
+    path('funds/', FundListView.as_view(), name='fund_list'),
+    path('budget-heads/', BudgetHeadListView.as_view(), name='budget_head_list'),
+    
     # Bank Statement Management
     path('statements/', BankStatementListView.as_view(), name='statement_list'),
     path('statements/create/', BankStatementCreateView.as_view(), name='statement_create'),

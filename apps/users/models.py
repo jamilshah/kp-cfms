@@ -6,19 +6,124 @@ Team Lead: Jamil Shah
 Developers: Ali Asghar, Akhtar Munir and Zarif Khan
 Description: Custom User model with role-based access control (RBAC).
              Implements the Maker/Checker/Approver hierarchy with
-             multi-tenancy support.
+             multi-tenancy support. Uses database-driven Role model
+             for dynamic permissions.
 -------------------------------------------------------------------------
 """
 import uuid
 from typing import Optional, List
-from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.contrib.auth.models import AbstractUser, BaseUserManager, Group
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 
+class RoleCode(models.TextChoices):
+    """
+    Standard role codes for the system.
+    
+    These are used as reference codes when creating Role objects.
+    """
+    SUPER_ADMIN = 'SUPER_ADMIN', _('Super Administrator')
+    LCB_OFFICER = 'LCB_OFFICER', _('LCB Finance Officer')
+    TMO = 'TMO', _('Tehsil Municipal Officer')
+    FINANCE_OFFICER = 'FINANCE_OFFICER', _('Finance Officer (Pre-Audit)')
+    ACCOUNTANT = 'ACCOUNTANT', _('Accountant (Verifier)')
+    CASHIER = 'CASHIER', _('Cashier')
+    BUDGET_OFFICER = 'BUDGET_OFFICER', _('Budget Officer')
+    DEALING_ASSISTANT = 'DEALING_ASSISTANT', _('Dealing Assistant (Maker)')
+
+
+class Role(models.Model):
+    """
+    Dynamic Role model for database-driven RBAC.
+    
+    Linked 1-to-1 with Django's Group model to leverage standard
+    Django permissions system. Roles can be assigned to users
+    via ManyToMany relationship.
+    
+    Attributes:
+        name: Human-readable role name.
+        code: Unique slug identifier for the role.
+        description: Detailed description of the role's responsibilities.
+        group: Associated Django Group for permission management.
+        is_system_role: If True, role cannot be deleted by users.
+    """
+    
+    name = models.CharField(
+        max_length=100,
+        verbose_name=_('Role Name'),
+        help_text=_('Human-readable name for the role.')
+    )
+    code = models.SlugField(
+        max_length=50,
+        unique=True,
+        verbose_name=_('Role Code'),
+        help_text=_('Unique identifier code (e.g., TMO, ACCOUNTANT).')
+    )
+    description = models.TextField(
+        blank=True,
+        verbose_name=_('Description'),
+        help_text=_('Detailed description of role responsibilities.')
+    )
+    group = models.OneToOneField(
+        Group,
+        on_delete=models.CASCADE,
+        related_name='cfms_role',
+        verbose_name=_('Django Group'),
+        help_text=_('Associated Django Group for permissions.')
+    )
+    is_system_role = models.BooleanField(
+        default=False,
+        verbose_name=_('System Role'),
+        help_text=_('System roles cannot be deleted by users.')
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = _('Role')
+        verbose_name_plural = _('Roles')
+        ordering = ['name']
+    
+    def __str__(self) -> str:
+        return self.name
+    
+    def save(self, *args, **kwargs):
+        """Create or update the associated Django Group."""
+        if not self.pk:
+            # Creating new role - create Django Group first
+            group, created = Group.objects.get_or_create(name=self.name)
+            self.group = group
+        else:
+            # Updating role - update Group name if changed
+            if self.group and self.group.name != self.name:
+                self.group.name = self.name
+                self.group.save()
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def get_by_code(cls, code: str) -> Optional['Role']:
+        """
+        Get a role by its code.
+        
+        Args:
+            code: The role code to look up.
+            
+        Returns:
+            Role instance or None if not found.
+        """
+        try:
+            return cls.objects.get(code=code)
+        except cls.DoesNotExist:
+            return None
+
+
+# Keep UserRole for backward compatibility during migration
 class UserRole(models.TextChoices):
     """
     Enumeration of user roles in the TMA hierarchy.
+    
+    DEPRECATED: Use Role model instead. Kept for migration compatibility.
     
     Based on the KP TMA Budget Rules 2016:
     - Dealing Assistant (Maker): Creates bills and budget entries
@@ -73,6 +178,8 @@ class CustomUserManager(BaseUserManager):
             raise ValueError(_('CNIC is required for user creation.'))
         
         email = self.normalize_email(email)
+        # Remove role from extra_fields if present (handled via roles M2M)
+        extra_fields.pop('role', None)
         user = self.model(cnic=cnic, email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
@@ -100,14 +207,22 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
-        extra_fields.setdefault('role', UserRole.SYSTEM_ADMIN)
+        # Remove role from extra_fields (deprecated field)
+        extra_fields.pop('role', None)
         
         if extra_fields.get('is_staff') is not True:
             raise ValueError(_('Superuser must have is_staff=True.'))
         if extra_fields.get('is_superuser') is not True:
             raise ValueError(_('Superuser must have is_superuser=True.'))
         
-        return self.create_user(cnic, email, password, **extra_fields)
+        user = self.create_user(cnic, email, password, **extra_fields)
+        
+        # Assign SUPER_ADMIN role if it exists
+        super_admin_role = Role.get_by_code('SUPER_ADMIN')
+        if super_admin_role:
+            user.roles.add(super_admin_role)
+        
+        return user
 
 
 class CustomUser(AbstractUser):
@@ -154,8 +269,17 @@ class CustomUser(AbstractUser):
         max_length=5,
         choices=UserRole.choices,
         default=UserRole.DEALING_ASSISTANT,
-        verbose_name=_('Role'),
-        help_text=_('User role in the TMA hierarchy.')
+        verbose_name=_('Role (Deprecated)'),
+        help_text=_('DEPRECATED: Use roles field instead. Kept for migration.')
+    )
+    
+    # New dynamic roles system
+    roles = models.ManyToManyField(
+        Role,
+        blank=True,
+        related_name='users',
+        verbose_name=_('Roles'),
+        help_text=_('Roles assigned to this user.')
     )
     
     # Multi-tenancy: Link user to their organization
@@ -221,30 +345,80 @@ class CustomUser(AbstractUser):
         """Return the user's first name."""
         return self.first_name
     
-    # Role-checking methods for RBAC
+    def get_role_display(self) -> str:
+        """Return comma-separated list of role names."""
+        role_names = list(self.roles.values_list('name', flat=True))
+        if role_names:
+            return ', '.join(role_names)
+        # Fallback to legacy role field
+        if self.role:
+            return dict(UserRole.choices).get(self.role, self.role)
+        return 'No Role'
+    
+    def has_role(self, role_code: str) -> bool:
+        """
+        Check if user has a specific role by code.
+        
+        Args:
+            role_code: The role code to check (e.g., 'TMO', 'ACCOUNTANT').
+            
+        Returns:
+            True if user has the role, False otherwise.
+        """
+        if self.is_superuser:
+            return True
+        return self.roles.filter(code=role_code).exists()
+    
+    def has_any_role(self, role_codes: List[str]) -> bool:
+        """
+        Check if user has any of the specified roles.
+        
+        Args:
+            role_codes: List of role codes to check.
+            
+        Returns:
+            True if user has any of the roles, False otherwise.
+        """
+        if self.is_superuser:
+            return True
+        return self.roles.filter(code__in=role_codes).exists()
+    
+    def get_role_codes(self) -> List[str]:
+        """Return list of role codes assigned to this user."""
+        return list(self.roles.values_list('code', flat=True))
+    
+    # Role-checking methods for RBAC (updated to use new roles M2M)
     def is_maker(self) -> bool:
         """Check if user has Maker (Dealing Assistant) role."""
-        return self.role == UserRole.DEALING_ASSISTANT
+        return self.has_any_role(['DEALING_ASSISTANT', 'DA'])
     
     def is_checker(self) -> bool:
         """Check if user has Checker (Accountant) role."""
-        return self.role == UserRole.ACCOUNTANT
+        return self.has_any_role(['ACCOUNTANT', 'AC'])
     
     def is_approver(self) -> bool:
         """Check if user has Approver (TMO) role."""
-        return self.role == UserRole.TMO
+        return self.has_any_role(['TMO'])
     
     def is_finance_officer(self) -> bool:
-        """Check if user has TO Finance role."""
-        return self.role == UserRole.TO_FINANCE
+        """Check if user has Finance Officer role."""
+        return self.has_any_role(['FINANCE_OFFICER', 'TOF', 'TO_FINANCE'])
     
     def is_cashier(self) -> bool:
         """Check if user has Cashier role."""
-        return self.role == UserRole.CASHIER
+        return self.has_any_role(['CASHIER', 'CSH'])
     
     def is_lcb_officer(self) -> bool:
         """Check if user has LCB Finance Officer role."""
-        return self.role == UserRole.LCB_OFFICER
+        return self.has_any_role(['LCB_OFFICER', 'LCB'])
+    
+    def is_budget_officer(self) -> bool:
+        """Check if user has Budget Officer role."""
+        return self.has_any_role(['BUDGET_OFFICER'])
+    
+    def is_super_admin(self) -> bool:
+        """Check if user has Super Admin role."""
+        return self.is_superuser or self.has_any_role(['SUPER_ADMIN', 'ADM'])
     
     def is_lcb_admin(self) -> bool:
         """
@@ -253,7 +427,7 @@ class CustomUser(AbstractUser):
         LCB admins have organization=None and role=LCB.
         They can view all TMAs but have restricted write access.
         """
-        return self.role == UserRole.LCB_OFFICER and self.organization is None
+        return self.is_lcb_officer() and self.organization is None
     
     def is_oversight_user(self) -> bool:
         """
@@ -262,10 +436,9 @@ class CustomUser(AbstractUser):
         Oversight users can view all organizations but have
         restricted write permissions (only status changes).
         """
-        return self.organization is None and self.role in [
-            UserRole.LCB_OFFICER,
-            UserRole.SYSTEM_ADMIN
-        ]
+        return self.organization is None and (
+            self.is_lcb_officer() or self.is_super_admin()
+        )
     
     def can_access_organization(self, org) -> bool:
         """

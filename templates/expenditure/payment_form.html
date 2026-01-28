@@ -9,6 +9,7 @@ Description: Payment Form Template for Cheque Issuance
 -->
 {% extends "base.html" %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}Issue Payment - KP-CFMS{% endblock %}
 
@@ -43,9 +44,9 @@ Description: Payment Form Template for Cheque Issuance
                             <strong>Description:</strong> {{ bill.description|truncatechars:50 }}
                         </div>
                         <div class="col-md-6">
-                            <strong>Bill Amount:</strong> Rs. {{ bill.gross_amount|floatformat:2 }}<br>
-                            <strong>Tax Deduction:</strong> Rs. {{ bill.tax_amount|floatformat:2 }}<br>
-                            <strong class="fs-5">Net Payable: Rs. {{ bill.net_amount|floatformat:2 }}</strong>
+                            <strong>Bill Amount:</strong> Rs. {{ bill.gross_amount|currency }}<br>
+                            <strong>Tax Deduction:</strong> Rs. {{ bill.tax_amount|currency }}<br>
+                            <strong class="fs-5">Net Payable: Rs. {{ bill.net_amount|currency }}</strong>
                         </div>
                     </div>
                 </div>

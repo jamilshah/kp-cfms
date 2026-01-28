@@ -1,0 +1,328 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Master Data Management - System Admin - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:dashboard' %}">System Admin</a></li>
+            <li class="breadcrumb-item active">Master Data Management</li>
+        </ol>
+    </nav>
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-database-fill-gear me-2"></i>Master Data Management</h2>
+    </div>
+    
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+    
+    <div class="row">
+        <!-- Locations Card -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-geo-alt me-2"></i>Locations</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-muted small">
+                        Manage Divisions, Districts, and Tehsils for geographic organization.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'system_admin:division_list' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-building me-1"></i> Manage Divisions
+                        </a>
+                        <a href="{% url 'system_admin:district_list' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-geo me-1"></i> Manage Districts
+                        </a>
+                        <a href="{% url 'system_admin:tehsil_list' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-geo-alt me-1"></i> Manage Tehsils
+                        </a>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="{% url 'system_admin:locations_template' %}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-download me-1"></i> CSV Template
+                        </a>
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="command" value="import_locations">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="bi bi-upload me-1"></i> Bulk Import
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Roles Card -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>System Roles</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-muted small">
+                        Manage user roles and permissions (Super Admin, TMO, Accountant, etc.)
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'system_admin:role_list' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-list-ul me-1"></i> View & Manage Roles
+                        </a>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="{% url 'system_admin:roles_template' %}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-download me-1"></i> CSV Template
+                        </a>
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="command" value="seed_roles">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="bi bi-play-fill me-1"></i> Seed Defaults
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Funds Card -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-bank me-2"></i>Fund Types</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-muted small">
+                        Manage fund types (PUGF, Non-PUGF, Development, Deposits, etc.)
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'finance:fund_list' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-list-ul me-1"></i> View & Manage Funds
+                        </a>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="{% url 'system_admin:funds_template' %}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-download me-1"></i> CSV Template
+                        </a>
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="command" value="setup_funds">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="bi bi-play-fill me-1"></i> Setup Defaults
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- BPS Scales Card -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>BPS Salary Scales</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-muted small">
+                        Manage Basic Pay Scale grades, pay ranges, and increments.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'budgeting:setup_salary_structure' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-list-ul me-1"></i> View & Manage BPS
+                        </a>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="{% url 'system_admin:bps_scales_template' %}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-download me-1"></i> CSV Template
+                        </a>
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="command" value="import_bps_scales">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="bi bi-upload me-1"></i> Import BPS
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Departments Card -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>Departments</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-muted small">
+                        Manage TMA departments and organizational units.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'budgeting:setup_departments' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-list-ul me-1"></i> View & Manage Departments
+                        </a>
+                        <a href="{% url 'budgeting:setup_designations' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-person-badge me-1"></i> View & Manage Designations
+                        </a>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="{% url 'system_admin:departments_template' %}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-download me-1"></i> CSV Template
+                        </a>
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="command" value="seed_departments">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="bi bi-play-fill me-1"></i> Seed Defaults
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Chart of Accounts Card -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-list-nested me-2"></i>Chart of Accounts</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-muted small">
+                        Manage budget heads, PIFRA objects, and account classifications.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'finance:budget_head_list' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-list-ul me-1"></i> View & Manage Budget Heads
+                        </a>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="{% url 'system_admin:budget_heads_template' %}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-download me-1"></i> CSV Template
+                        </a>
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="command" value="import_coa">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="bi bi-upload me-1"></i> Import CoA
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Fiscal Year Card -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="bi bi-calendar3 me-2"></i>Fiscal Year</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-muted small">
+                        Initialize and manage fiscal year configurations.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'budgeting:fiscal_year_list' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-list-ul me-1"></i> View & Manage Fiscal Years
+                        </a>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="command" value="setup_fy">
+                        <button type="submit" class="btn btn-success btn-sm w-100">
+                            <i class="bi bi-play-fill me-1"></i> Initialize Current FY
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Organizations Card -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header text-white" style="background-color: #6f42c1;">
+                    <h5 class="mb-0"><i class="bi bi-buildings me-2"></i>Organizations</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-muted small">
+                        Manage TMAs and organizational entities.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'system_admin:organization_list' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-list-ul me-1"></i> View & Manage Organizations
+                        </a>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <a href="{% url 'system_admin:organizations_template' %}" class="btn btn-outline-secondary btn-sm w-100">
+                        <i class="bi bi-download me-1"></i> Download CSV Template
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Migration Tools Card -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="bi bi-arrow-repeat me-2"></i>Migration Tools</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-muted small">
+                        Data migration tools for system upgrades.
+                    </p>
+                    <div class="alert alert-warning py-2 small mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Use with caution. These operations modify data.
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="command" value="migrate_roles">
+                        <button type="submit" class="btn btn-warning btn-sm w-100">
+                            <i class="bi bi-arrow-right me-1"></i> Migrate User Roles
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Command Output -->
+    {% if output %}
+    <div class="card shadow-sm mt-4">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0"><i class="bi bi-terminal me-2"></i>Command Output</h5>
+        </div>
+        <div class="card-body bg-light">
+            <pre class="mb-0" style="white-space: pre-wrap;">{{ output }}</pre>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

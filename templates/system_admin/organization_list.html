@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Organizations - System Admin - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:dashboard' %}">System Admin</a></li>
+            <li class="breadcrumb-item active">Organizations</li>
+        </ol>
+    </nav>
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-buildings me-2"></i>Organizations</h2>
+        <a href="{% url 'system_admin:provision_organization' %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i> Provision New TMA
+        </a>
+    </div>
+    
+    <!-- Filters -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Search</label>
+                    <input type="text" name="q" class="form-control" placeholder="Name or DDO code..." value="{{ request.GET.q }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Tehsil</label>
+                    <select name="tehsil" class="form-select searchable-select">
+                        <option value="">All Tehsils</option>
+                        {% for tehsil in tehsils %}
+                        <option value="{{ tehsil.pk }}" {% if request.GET.tehsil == tehsil.pk|stringformat:"d" %}selected{% endif %}>
+                            {{ tehsil.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Type</label>
+                    <select name="org_type" class="form-select">
+                        <option value="">All Types</option>
+                        <option value="TMA" {% if request.GET.org_type == 'TMA' %}selected{% endif %}>TMA</option>
+                        <option value="TOWN" {% if request.GET.org_type == 'TOWN' %}selected{% endif %}>Town</option>
+                        <option value="LCB" {% if request.GET.org_type == 'LCB' %}selected{% endif %}>LCB</option>
+                        <option value="LGD" {% if request.GET.org_type == 'LGD' %}selected{% endif %}>LGD</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="">All Status</option>
+                        <option value="active" {% if request.GET.status == 'active' %}selected{% endif %}>Active</option>
+                        <option value="inactive" {% if request.GET.status == 'inactive' %}selected{% endif %}>Inactive</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-outline-primary me-2">
+                        <i class="bi bi-search me-1"></i> Filter
+                    </button>
+                    <a href="{% url 'system_admin:organization_list' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-x-lg me-1"></i> Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Organizations Table -->
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>DDO Code</th>
+                            <th>Name</th>
+                            <th>Tehsil</th>
+                            <th>Type</th>
+                            <th class="text-center">Users</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for org in organizations %}
+                        <tr>
+                            <td><code>{{ org.ddo_code|default:"-" }}</code></td>
+                            <td>
+                                <strong>{{ org.name }}</strong>
+                            </td>
+                            <td>{{ org.tehsil.name|default:"-" }}</td>
+                            <td>{{ org.get_org_type_display|default:org.org_type }}</td>
+                            <td class="text-center">
+                                <span class="badge bg-info">{{ org.user_count }}</span>
+                            </td>
+                            <td class="text-center">
+                                {% if org.is_active %}
+                                <span class="badge bg-success">Active</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'system_admin:create_tenant_admin' org.pk %}" 
+                                       class="btn btn-outline-primary" title="Create Admin User">
+                                        <i class="bi bi-person-plus"></i>
+                                    </a>
+                                    <a href="{% url 'system_admin:tenant_user_list' org.pk %}" 
+                                       class="btn btn-outline-secondary" title="View Users">
+                                        <i class="bi bi-people"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">
+                                <i class="bi bi-building-x display-4 d-block mb-2"></i>
+                                No organizations found.
+                                <a href="{% url 'system_admin:provision_organization' %}">Provision a new TMA</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% if is_paginated %}
+        <div class="card-footer">
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1">&laquo; First</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                    </li>
+                    {% endif %}
+                    
+                    <li class="page-item disabled">
+                        <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    </li>
+                    
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Last &raquo;</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    $('.searchable-select').select2({
+        theme: 'bootstrap-5',
+        width: '100%'
+    });
+});
+</script>
+{% endblock %}

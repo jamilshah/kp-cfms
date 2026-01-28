@@ -9,6 +9,7 @@ Description: Expenditure Dashboard Template
 -->
 {% extends "base.html" %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}Expenditure Dashboard - KP-CFMS{% endblock %}
 
@@ -100,7 +101,7 @@ Description: Expenditure Dashboard Template
                             <tr>
                                 <td>{{ bill.id }}</td>
                                 <td>{{ bill.payee.name|truncatechars:20 }}</td>
-                                <td>Rs. {{ bill.gross_amount|floatformat:2 }}</td>
+                                <td>Rs. {{ bill.gross_amount|currency }}</td>
                                 <td>
                                     <a href="{% url 'expenditure:bill_detail' bill.pk %}" 
                                        class="btn btn-sm btn-outline-primary">
@@ -162,7 +163,7 @@ Description: Expenditure Dashboard Template
                                     <span class="badge bg-danger">Rejected</span>
                                     {% endif %}
                                 </td>
-                                <td>Rs. {{ bill.gross_amount|floatformat:2 }}</td>
+                                <td>Rs. {{ bill.gross_amount|currency }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>

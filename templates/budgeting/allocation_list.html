@@ -9,6 +9,7 @@ Description: Budget Allocation List template.
 -->
 {% extends "base.html" %}
 {% load humanize %}
+{% load custom_filters %}
 
 {% block title %}Budget Allocations - KP-CFMS{% endblock %}
 
@@ -83,13 +84,13 @@ Description: Budget Allocation List template.
                         <br>
                         <small class="text-muted">{{ alloc.fiscal_year }}</small>
                     </td>
-                    <td class="text-end">Rs {{ alloc.original_allocation|floatformat:2|intcomma }}</td>
-                    <td class="text-end">Rs {{ alloc.released_amount|floatformat:2|intcomma }}</td>
-                    <td class="text-end">Rs {{ alloc.spent_amount|floatformat:2|intcomma }}</td>
+                    <td class="text-end">Rs {{ alloc.original_allocation|currency }}</td>
+                    <td class="text-end">Rs {{ alloc.released_amount|currency }}</td>
+                    <td class="text-end">Rs {{ alloc.spent_amount|currency }}</td>
                     <td class="text-end">
                         {% with available=alloc.get_available_budget %}
                             <span class="{% if available > 0 %}text-success{% elif available == 0 %}text-warning{% else %}text-danger{% endif %}">
-                                Rs {{ available|floatformat:2|intcomma }}
+                                Rs {{ available|currency }}
                             </span>
                         {% endwith %}
                     </td>

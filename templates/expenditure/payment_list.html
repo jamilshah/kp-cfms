@@ -9,6 +9,7 @@ Description: Payment List Template
 -->
 {% extends "base.html" %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}Payments - KP-CFMS{% endblock %}
 
@@ -58,7 +59,7 @@ Description: Payment List Template
                             <small>{{ payment.bank_account.bank_name }}</small><br>
                             <small class="text-muted">{{ payment.bank_account.masked_account_number }}</small>
                         </td>
-                        <td class="text-end fw-bold">Rs. {{ payment.amount|floatformat:2 }}</td>
+                        <td class="text-end fw-bold">Rs. {{ payment.amount|currency }}</td>
                         <td>
                             {% if payment.is_posted %}
                             <span class="badge bg-success">Posted</span>
