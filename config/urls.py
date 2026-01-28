@@ -18,11 +18,14 @@ from django.contrib import admin
 from django.urls import path, include
 from django.views.generic import RedirectView
 from django.contrib.auth import views as auth_views
+from apps.users.forms import CNICAuthenticationForm
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('login/', auth_views.LoginView.as_view(), name='login'),
+    path('login/', auth_views.LoginView.as_view(authentication_form=CNICAuthenticationForm), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
+    # Override the default accounts login to use CNIC-normalizing form
+    path('accounts/login/', auth_views.LoginView.as_view(authentication_form=CNICAuthenticationForm), name='login'),
     path('accounts/', include('django.contrib.auth.urls')),
     path('budgeting/', include('apps.budgeting.urls')),
     path('expenditure/', include('apps.expenditure.urls')),

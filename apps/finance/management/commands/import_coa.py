@@ -16,6 +16,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.finance.models import BudgetHead, FunctionCode, AccountType
+from apps.finance.models import Fund
 
 
 class Command(BaseCommand):
@@ -169,11 +170,31 @@ class Command(BaseCommand):
         project_required = row.get('Project_Required', 'No').strip().lower() == 'yes'
         posting_allowed = row.get('Posting_Allowed', 'Yes').strip().lower() == 'yes'
         
-        # Parse fund_id
+        # Parse fund_id and resolve to an existing Fund id
         try:
-            fund_id = int(row.get('Fund', 1))
+            orig_fund_id = int(row.get('Fund', 1))
         except (ValueError, TypeError):
-            fund_id = 1
+            orig_fund_id = 1
+
+        # If the fund id from CSV does not exist in DB, try to map by common codes
+        fund_id = orig_fund_id
+        if not Fund.objects.filter(pk=fund_id).exists():
+            # Fallback mapping: CSV numeric -> expected Fund.code
+            FALLBACK_FUND_MAP = {
+                1: 'GEN',  # General / Current
+                2: 'DEV',  # Development
+                5: 'PEN',  # Pension
+            }
+            fallback_code = FALLBACK_FUND_MAP.get(orig_fund_id)
+            if fallback_code:
+                fund_obj = Fund.objects.filter(code__iexact=fallback_code).first()
+                if fund_obj:
+                    fund_id = fund_obj.id
+            # If still not found, use any active fund as default
+            if not Fund.objects.filter(pk=fund_id).exists():
+                default_fund = Fund.objects.filter(is_active=True).first()
+                if default_fund:
+                    fund_id = default_fund.id
         
         # Prepare data
         tma_sub_object = row.get('TMA_Sub_Object', '').strip()

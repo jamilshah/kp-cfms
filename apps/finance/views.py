@@ -8,6 +8,7 @@ from django.contrib import messages
 from django.utils.translation import gettext_lazy as _
 from django.shortcuts import get_object_or_404, redirect
 from django.http import HttpResponseRedirect
+from django.db import models
 from typing import Dict, Any
 
 from apps.users.permissions import AdminRequiredMixin
@@ -86,70 +87,121 @@ class FundDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
         return context
 
 class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
-    """List all Budget Heads (Chart of Accounts)."""
+    """List all Budget Heads (Chart of Accounts) with tree structure and filtering."""
     model = BudgetHead
     template_name = 'finance/budget_head_list.html'
     context_object_name = 'budget_heads'
     ordering = ['pifra_object', 'tma_sub_object']
-    # Disable pagination for Tree View
     paginate_by = None
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().select_related('fund', 'function')
+        
+        # Apply filters
         query = self.request.GET.get('q')
         if query:
             qs = qs.filter(
-                tma_description__icontains=query
-            ) | qs.filter(
-                pifra_object__icontains=query
+                models.Q(tma_description__icontains=query) |
+                models.Q(pifra_object__icontains=query) |
+                models.Q(tma_sub_object__icontains=query) |
+                models.Q(pifra_description__icontains=query)
             )
+        
+        # Account type filter
+        account_type = self.request.GET.get('account_type')
+        if account_type:
+            qs = qs.filter(account_type=account_type)
+        
+        # Fund filter
+        fund_id = self.request.GET.get('fund')
+        if fund_id:
+            qs = qs.filter(fund_id=fund_id)
+        
+        # Function filter
+        function_id = self.request.GET.get('function')
+        if function_id:
+            qs = qs.filter(function_id=function_id)
+        
+        # Active status filter
+        is_active = self.request.GET.get('is_active')
+        if is_active:
+            qs = qs.filter(is_active=is_active == 'true')
+        
+        # Fund type filter
+        fund_type = self.request.GET.get('fund_type')
+        if fund_type:
+            qs = qs.filter(fund_type=fund_type)
+        
+        # Major head filter (first 3 characters)
+        major_head = self.request.GET.get('major_head')
+        if major_head:
+            qs = qs.filter(pifra_object__startswith=major_head)
+        
+        # Minor head filter (first 4 characters)
+        minor_head = self.request.GET.get('minor_head')
+        if minor_head:
+            qs = qs.filter(pifra_object__startswith=minor_head)
+        
         return qs
 
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        from apps.finance.models import Fund, FunctionCode, AccountType, FundType
+        
         context = super().get_context_data(**kwargs)
         context['page_title'] = _('Chart of Accounts Management')
         
-        # Build Tree Structure (Flat list with levels)
-        # Assumes queryset is sorted by pifra_object
+        # Filter options for dropdowns
+        context['funds'] = Fund.objects.filter(is_active=True).order_by('code')
+        context['functions'] = FunctionCode.objects.filter(is_active=True).order_by('code')
+        context['account_types'] = AccountType.choices
+        context['fund_types'] = FundType.choices
+        
+        # Get unique major and minor heads for filtering
+        all_heads = BudgetHead.objects.values_list('pifra_object', flat=True).distinct().order_by('pifra_object')
+        major_heads = set()
+        minor_heads = set()
+        
+        for code in all_heads:
+            if len(code) >= 3:
+                major = code[:3]  # First 3 chars (e.g., A01, B02, G05)
+                major_heads.add(major)
+            if len(code) >= 4:
+                minor = code[:4]  # First 4 chars (e.g., A011, B013, G021)
+                minor_heads.add(minor)
+        
+        context['major_heads'] = sorted(major_heads)
+        context['minor_heads'] = sorted(minor_heads)
+        
+        # Build Tree Structure
         heads = list(context['budget_heads'])
         tree_list = []
-        
-        # Stack keeps track of current branch chain: [(code, level), ...]
         stack = []
         
         for head in heads:
             code = head.pifra_object
             
-            # Pop stack until we find the parent (or stack empty)
-            # Parent is defined as: current code starts with parent code AND is strictly longer
+            # Pop stack until we find the parent
             while stack and (not code.startswith(stack[-1][0]) or code == stack[-1][0]):
                 stack.pop()
             
             level = len(stack)
+            parent_code = stack[-1][0] if stack else None
             
-            # Add to tree list wrapper
             tree_list.append({
                 'obj': head,
                 'level': level,
-                'is_leaf': True, # Will update next
-                'parent_code': stack[-1][0] if stack else None
+                'is_leaf': True,
+                'parent_code': parent_code,
+                'has_children': False
             })
             
-            # If previous item was parent of this one, update previous item's leaf status
-            if stack:
-                 # Find the last item added to tree_list which corresponds to stack[-1]
-                 # Actually, simplify: if we added a child, the parent (stack top) is not a leaf.
-                 # We can't easily track back to the dict object unless we keep it in stack.
-                 pass
-
-            # Push current to stack
             stack.append((code, level))
-            
-        # Post-process to identifying leaves (visual polish, optional)
-        # Simple scan: if next item.level > current.level, current is not leaf.
+        
+        # Identify nodes with children
         for i in range(len(tree_list) - 1):
             if tree_list[i+1]['level'] > tree_list[i]['level']:
                 tree_list[i]['is_leaf'] = False
+                tree_list[i]['has_children'] = True
                 
         context['tree_nodes'] = tree_list
         return context

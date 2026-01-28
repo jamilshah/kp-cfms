@@ -376,26 +376,31 @@ Description: Base template with Bootstrap 5 and navigation.
                 </div>
             </div>
 
-            <!-- Administration (visible to admins) -->
-            {% if user.is_superuser or user.role == 'ADM' %}
-            <div class="accordion-item bg-transparent border-0">
+            <!-- Administration (visible to Provincial Super Admin or TMA admins with organization) -->
+            {% if user.is_authenticated %}
+                {% if user.is_superuser or user.organization %}
+                <div class="accordion-item bg-transparent border-0">
                 <h2 class="accordion-header" id="headingAdmin">
                     <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdmin" aria-expanded="false" aria-controls="collapseAdmin">
                         <i class="bi bi-gear me-2"></i> Administration
                     </button>
                 </h2>
-                <div id="collapseAdmin" class="accordion-collapse collapse {% if 'setup' in request.resolver_match.url_name %}show{% endif %}" aria-labelledby="headingAdmin" data-bs-parent="#sidebarAccordion">
+                <div id="collapseAdmin" class="accordion-collapse collapse {% if 'setup' in request.resolver_match.url_name or 'tenant_user' in request.resolver_match.url_name %}show{% endif %}" aria-labelledby="headingAdmin" data-bs-parent="#sidebarAccordion">
                     <div class="accordion-body p-2">
                         <ul class="nav flex-column">
+                            {% if user.organization %}
+                            <li class="nav-item"><a class="nav-link {% if 'tenant_user' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'system_admin:tenant_user_list' org_pk=user.organization.id %}"><i class="bi bi-people me-2"></i> Manage Users</a></li>
+                            {% endif %}
                             <li class="nav-item"><a class="nav-link {% if 'setup' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:setup_dashboard' %}"><i class="bi bi-gear me-2"></i> Setup Workspace</a></li>
                         </ul>
                     </div>
                 </div>
             </div>
+                {% endif %}
             {% endif %}
 
-            <!-- System Admin (visible to superusers only) -->
-            {% if user.is_superuser or user.is_super_admin %}
+            <!-- System Admin (visible to Provincial Super Admin only: is_superuser=True and organization=None) -->
+            {% if user.is_authenticated and user.is_superuser and not user.organization %}
             <div class="accordion-item bg-transparent border-0">
                 <h2 class="accordion-header" id="headingSystemAdmin">
                     <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseSystemAdmin" aria-expanded="false" aria-controls="collapseSystemAdmin">

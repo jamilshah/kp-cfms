@@ -101,7 +101,8 @@ class TenantAdminForm(forms.Form):
             'class': 'form-select',
             'size': '6'
         }),
-        help_text='Select roles to assign to this user.'
+        help_text='Select roles for this user. TMO role is recommended for TMA Admins.',
+        initial=None  # Will be set in __init__
     )
     
     password1 = forms.CharField(
@@ -131,6 +132,13 @@ class TenantAdminForm(forms.Form):
     def __init__(self, organization=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.organization = organization
+        
+        # Default to TMO role for TMA Admins
+        try:
+            tmo_role = Role.objects.get(code='TMO')
+            self.fields['roles'].initial = [tmo_role.pk]
+        except Role.DoesNotExist:
+            pass
     
     def clean_cnic(self):
         """Validate CNIC is unique."""
@@ -157,10 +165,15 @@ class TenantAdminForm(forms.Form):
         
         return cleaned_data
     
-    def save(self):
-        """Create the user with the assigned role."""
+    def save(self, commit=True):
+        """Create the user with the assigned role.
+
+        If `commit` is False, return an unsaved `CustomUser` instance so
+        the caller can set additional attributes (e.g., organization)
+        before saving.
+        """
         data = self.cleaned_data
-        
+
         user = CustomUser(
             cnic=data['cnic'],
             email=data.get('email', ''),
@@ -168,11 +181,18 @@ class TenantAdminForm(forms.Form):
             last_name=data.get('last_name', ''),
             organization=self.organization,
             is_active=data.get('is_active', True),
-            is_staff=True,  # Allow admin access
+            # Note: is_staff and is_superuser remain False for TMA admins
+            # Only Provincial Super Admin should have is_superuser=True
         )
         user.set_password(data['password1'])
-        user.save()
-        
+
+        if commit:
+            user.save()
+            # assign roles if provided
+            roles = data.get('roles') or []
+            if roles:
+                user.roles.set(roles)
+
         return user
 
 

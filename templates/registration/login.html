@@ -1,11 +1,5 @@
-<!--
--------------------------------------------------------------------------
-System: KP-CFMS (Computerized Financial Management System)
-Client: Local Government Department, Khyber Pakhtunkhwa
-Description: Login page template.
--------------------------------------------------------------------------
--->
 {% extends "base.html" %}
+{% load i18n %}
 
 {% block title %}Login - KP-CFMS{% endblock %}
 
@@ -31,8 +25,11 @@ Description: Login page template.
                         <label for="id_username" class="form-label">CNIC</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-person-vcard"></i></span>
-                            <input type="text" name="username" class="form-control" id="id_username" placeholder="12345-1234567-1" required autofocus>
+                            <input type="text" name="username" class="form-control" id="id_username" placeholder="12345-1234567-1" required autofocus value="{{ form.username.value|default_if_none:'' }}">
                         </div>
+                        {% if form.username.errors %}
+                            <div class="text-danger small">{{ form.username.errors }}</div>
+                        {% endif %}
                     </div>
                     
                     <div class="mb-4">
@@ -41,6 +38,9 @@ Description: Login page template.
                             <span class="input-group-text"><i class="bi bi-key"></i></span>
                             <input type="password" name="password" class="form-control" id="id_password" required>
                         </div>
+                        {% if form.password.errors %}
+                            <div class="text-danger small">{{ form.password.errors }}</div>
+                        {% endif %}
                     </div>
                     
                     <div class="d-grid">

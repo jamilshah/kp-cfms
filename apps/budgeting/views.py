@@ -65,12 +65,18 @@ class BudgetingDashboardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
         
-        # Get active fiscal year
-        active_fy = FiscalYear.objects.filter(is_active=True).first()
+        # Get active fiscal year for current user's organization
+        user_org = self.request.user.organization
+        active_fy = FiscalYear.objects.filter(
+            is_active=True,
+            organization=user_org
+        ).first()
         context['active_fiscal_year'] = active_fy
         
-        # Get all fiscal years for dropdown
-        context['fiscal_years'] = FiscalYear.objects.all()[:5]
+        # Get all fiscal years for dropdown (filtered by organization)
+        context['fiscal_years'] = FiscalYear.objects.filter(
+            organization=user_org
+        ).all()[:5]
         
         if active_fy:
             # Calculate totals
@@ -107,6 +113,17 @@ class FiscalYearListView(LoginRequiredMixin, ListView):
     template_name = 'budgeting/fiscal_year_list.html'
     context_object_name = 'fiscal_years'
     ordering = ['-start_date']
+    
+    def get_queryset(self):
+        """Filter fiscal years by user's organization."""
+        qs = super().get_queryset()
+        user_org = self.request.user.organization
+        
+        # Provincial admin sees all, TMA user sees only their org's FYs
+        if user_org:
+            qs = qs.filter(organization=user_org)
+        
+        return qs
 
 
 class FiscalYearCreateView(LoginRequiredMixin, ApproverRequiredMixin, CreateView):
@@ -119,9 +136,22 @@ class FiscalYearCreateView(LoginRequiredMixin, ApproverRequiredMixin, CreateView
     template_name = 'budgeting/fiscal_year_form.html'
     success_url = reverse_lazy('budgeting:fiscal_year_list')
     
+    def get_form_kwargs(self) -> Dict[str, Any]:
+        """Pass request to form."""
+        kwargs = super().get_form_kwargs()
+        kwargs['request'] = self.request
+        return kwargs
+    
     def form_valid(self, form) -> HttpResponse:
         form.instance.created_by = self.request.user
         form.instance.updated_by = self.request.user
+        
+        # Set organization based on user
+        # TMA admin creates for their org, Provincial admin needs to specify
+        if self.request.user.organization:
+            form.instance.organization = self.request.user.organization
+        # Provincial admin should select organization via form or create for all
+        
         messages.success(self.request, _('Fiscal year created successfully.'))
         return super().form_valid(form)
 

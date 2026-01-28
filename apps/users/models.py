@@ -333,6 +333,13 @@ class CustomUser(AbstractUser):
         verbose_name_plural = _('Users')
         ordering = ['first_name', 'last_name']
     
+    def save(self, *args, **kwargs):
+        """Normalize CNIC by stripping non-digit characters before saving."""
+        if self.cnic:
+            import re
+            self.cnic = re.sub(r'\D', '', self.cnic)
+        super().save(*args, **kwargs)
+    
     def __str__(self) -> str:
         """Return user's full name and role."""
         return f"{self.get_full_name()} ({self.get_role_display()})"
@@ -417,8 +424,8 @@ class CustomUser(AbstractUser):
         return self.has_any_role(['BUDGET_OFFICER'])
     
     def is_super_admin(self) -> bool:
-        """Check if user has Super Admin role."""
-        return self.is_superuser or self.has_any_role(['SUPER_ADMIN', 'ADM'])
+        """Check if user is Provincial Super Admin (superuser with no org)."""
+        return self.is_superuser and self.organization is None
     
     def is_lcb_admin(self) -> bool:
         """

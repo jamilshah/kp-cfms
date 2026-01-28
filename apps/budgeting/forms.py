@@ -32,8 +32,11 @@ class FiscalYearForm(forms.ModelForm):
     
     class Meta:
         model = FiscalYear
-        fields = ['year_name', 'start_date', 'end_date', 'is_active']
+        fields = ['organization', 'year_name', 'start_date', 'end_date', 'is_active']
         widgets = {
+            'organization': forms.Select(attrs={
+                'class': 'form-control'
+            }),
             'year_name': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'e.g., 2026-27'
@@ -50,6 +53,17 @@ class FiscalYearForm(forms.ModelForm):
                 'class': 'form-check-input'
             }),
         }
+    
+    def __init__(self, *args, **kwargs):
+        """Initialize form and customize organization field based on user."""
+        self.request = kwargs.pop('request', None)
+        super().__init__(*args, **kwargs)
+        
+        # If user has an organization (TMA admin), hide org field and pre-set it
+        if self.request and self.request.user.organization:
+            self.fields['organization'].widget = forms.HiddenInput()
+            self.fields['organization'].initial = self.request.user.organization
+            self.fields['organization'].disabled = True
     
     def clean(self) -> Dict[str, Any]:
         """Validate fiscal year dates."""

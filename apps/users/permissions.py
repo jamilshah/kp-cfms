@@ -293,30 +293,40 @@ class CanApprovePUGFMixin(UserPassesTestMixin):
 
 class AdminRequiredMixin(RoleRequiredMixin):
     """
-    Mixin that restricts access to System Admin role.
+    Mixin that restricts access to System Admin or TMA Admin (TMO) roles.
     
     Used for configuration and setup views.
+    Provincial Super Admin (is_superuser=True) OR TMA Admin (TMO role).
     """
     
-    required_roles = ['SUPER_ADMIN', 'ADM']
+    required_roles = ['SUPER_ADMIN', 'ADM', 'TMO']
 
 
 class TenantAdminRequiredMixin(UserPassesTestMixin):
     """
-    Mixin that restricts access to TMA Admins (TMO or org admin).
+    Mixin that restricts access to:
+    - Provincial Super Admin (is_superuser=True, organization=None)
+    - TMA Admin (TMO role with assigned organization)
     
-    Used for user management within an organization.
+    TMA Admins can only manage users within their own organization.
+    Provincial Super Admin can manage all organizations.
     """
     
     def test_func(self) -> bool:
-        """Test if the current user is a TMA admin."""
+        """Test if the current user is a TMA admin or Provincial Super Admin."""
         if not self.request.user.is_authenticated:
             return False
-        if self.request.user.is_superuser:
+        
+        # Provincial Super Admin (no organization)
+        if self.request.user.is_superuser and self.request.user.organization is None:
             return True
-        # TMO or users with admin role in their org
-        return self.request.user.has_any_role(['TMO', 'SUPER_ADMIN', 'ADM'])
+        
+        # TMA Admin: TMO with assigned organization
+        if self.request.user.organization is not None:
+            return self.request.user.has_any_role(['TMO'])
+        
+        return False
     
     def handle_no_permission(self) -> None:
         """Handle unauthorized access attempt."""
-        raise PermissionDenied("This action requires TMA Admin access.")
+        raise PermissionDenied("This action requires TMA Admin or Provincial Super Admin access.")

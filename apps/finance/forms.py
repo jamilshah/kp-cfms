@@ -18,10 +18,17 @@ class BudgetHeadForm(forms.ModelForm):
     Form for creating/editing Budget Heads (Chart of Accounts).
     """
     
+    pifra_object = forms.ChoiceField(
+        choices=[],
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label=_('PIFRA Object Code'),
+        help_text=_('Select PIFRA object code from existing entries.')
+    )
+    
     class Meta:
         model = BudgetHead
         fields = [
-            'function', 'pifra_object', 'pifra_description',
+            'function', 'pifra_description',
             'tma_sub_object', 'tma_description',
             'account_type', 'fund',
             'is_active', 'is_charged',
@@ -29,7 +36,6 @@ class BudgetHeadForm(forms.ModelForm):
         ]
         widgets = {
             'function': forms.Select(attrs={'class': 'form-select'}),
-            'pifra_object': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. A01101'}),
             'pifra_description': forms.TextInput(attrs={'class': 'form-control'}),
             'tma_sub_object': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. A01101-000'}),
             'tma_description': forms.TextInput(attrs={'class': 'form-control'}),
@@ -40,6 +46,13 @@ class BudgetHeadForm(forms.ModelForm):
             'budget_control': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'posting_allowed': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Get distinct PIFRA object codes from existing budget heads
+        existing_codes = BudgetHead.objects.values_list('pifra_object', flat=True).distinct().order_by('pifra_object')
+        choices = [('', '--- Select PIFRA Code ---')] + [(code, code) for code in existing_codes]
+        self.fields['pifra_object'].choices = choices
 
 
 class ChequeBookForm(forms.ModelForm):
