@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}General Journal - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0"><i class="bi bi-journal-text me-2"></i>General Journal</h2>
+            <p class="text-muted mb-0">Manage manual journal vouchers</p>
+        </div>
+        <div>
+            <a href="{% url 'finance:voucher_create' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-2"></i>New Journal Voucher
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters Card -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label for="type" class="form-label">Voucher Type</label>
+                    <select name="type" id="type" class="form-select">
+                        <option value="">All Types</option>
+                        <option value="JV" {% if filter_type == 'JV' %}selected{% endif %}>Journal Voucher (JV)</option>
+                        <option value="PV" {% if filter_type == 'PV' %}selected{% endif %}>Payment Voucher (PV)</option>
+                        <option value="RV" {% if filter_type == 'RV' %}selected{% endif %}>Receipt Voucher (RV)</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="date_from" class="form-label">Date From</label>
+                    <input type="date" name="date_from" id="date_from" class="form-control" value="{{ filter_date_from }}">
+                </div>
+                <div class="col-md-2">
+                    <label for="date_to" class="form-label">Date To</label>
+                    <input type="date" name="date_to" id="date_to" class="form-control" value="{{ filter_date_to }}">
+                </div>
+                <div class="col-md-2">
+                    <label for="status" class="form-label">Status</label>
+                    <select name="status" id="status" class="form-select">
+                        <option value="">All</option>
+                        <option value="draft" {% if filter_status == 'draft' %}selected{% endif %}>Draft</option>
+                        <option value="posted" {% if filter_status == 'posted' %}selected{% endif %}>Posted</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="bi bi-filter me-1"></i>Filter
+                    </button>
+                    <a href="{% url 'finance:voucher_list' %}" class="btn btn-secondary">
+                        <i class="bi bi-x-circle me-1"></i>Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Vouchers List Card -->
+    <div class="card">
+        <div class="card-body">
+            {% if vouchers %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Voucher No</th>
+                            <th>Type</th>
+                            <th>Payee</th>
+                            <th>Description</th>
+                            <th class="text-end">Amount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for voucher in vouchers %}
+                        <tr>
+                            <td>{{ voucher.date|date:"Y-m-d" }}</td>
+                            <td>
+                                <a href="{% url 'finance:voucher_detail' voucher.pk %}" class="text-decoration-none">
+                                    <strong>{{ voucher.voucher_no }}</strong>
+                                </a>
+                            </td>
+                            <td>
+                                {% if voucher.voucher_type == 'JV' %}
+                                    <span class="badge bg-info">JV</span>
+                                {% elif voucher.voucher_type == 'PV' %}
+                                    <span class="badge bg-warning text-dark">PV</span>
+                                {% elif voucher.voucher_type == 'RV' %}
+                                    <span class="badge bg-success">RV</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ voucher.payee|default:"—" }}</td>
+                            <td>
+                                <span class="text-truncate d-inline-block" style="max-width: 300px;" title="{{ voucher.description }}">
+                                    {{ voucher.description|truncatewords:10 }}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <strong>{{ voucher.get_total_debit|floatformat:2 }}</strong>
+                            </td>
+                            <td>
+                                {% if voucher.is_posted %}
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-check-circle me-1"></i>Posted
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary">
+                                        <i class="bi bi-pencil me-1"></i>Draft
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'finance:voucher_detail' voucher.pk %}" class="btn btn-sm btn-outline-primary" title="View Details">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if is_paginated %}
+            <nav aria-label="Voucher pagination" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1{% if filter_type %}&type={{ filter_type }}{% endif %}{% if filter_date_from %}&date_from={{ filter_date_from }}{% endif %}{% if filter_date_to %}&date_to={{ filter_date_to }}{% endif %}{% if filter_status %}&status={{ filter_status }}{% endif %}">First</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if filter_type %}&type={{ filter_type }}{% endif %}{% if filter_date_from %}&date_from={{ filter_date_from }}{% endif %}{% if filter_date_to %}&date_to={{ filter_date_to }}{% endif %}{% if filter_status %}&status={{ filter_status }}{% endif %}">Previous</a>
+                    </li>
+                    {% endif %}
+
+                    <li class="page-item active">
+                        <span class="page-link">
+                            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                        </span>
+                    </li>
+
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if filter_type %}&type={{ filter_type }}{% endif %}{% if filter_date_from %}&date_from={{ filter_date_from }}{% endif %}{% if filter_date_to %}&date_to={{ filter_date_to }}{% endif %}{% if filter_status %}&status={{ filter_status }}{% endif %}">Next</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if filter_type %}&type={{ filter_type }}{% endif %}{% if filter_date_from %}&date_from={{ filter_date_from }}{% endif %}{% if filter_date_to %}&date_to={{ filter_date_to }}{% endif %}{% if filter_status %}&status={{ filter_status }}{% endif %}">Last</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+            {% else %}
+            <div class="alert alert-info mb-0">
+                <i class="bi bi-info-circle me-2"></i>No vouchers found. 
+                <a href="{% url 'finance:voucher_create' %}" class="alert-link">Create your first journal voucher</a>.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

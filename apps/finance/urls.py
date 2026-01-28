@@ -29,6 +29,12 @@ from apps.finance.views import (
     UnmatchLineView,
     LockStatementView,
     BRSSummaryView,
+    
+    # Manual Journal Vouchers (Phase 10)
+    VoucherListView,
+    VoucherCreateView,
+    VoucherDetailView,
+    PostVoucherView,
 )
 
 app_name = 'finance'
@@ -52,4 +58,10 @@ urlpatterns = [
     path('statements/<int:pk>/lines/<int:line_pk>/unmatch/', UnmatchLineView.as_view(), name='unmatch_line'),
     path('statements/<int:pk>/lock/', LockStatementView.as_view(), name='lock_statement'),
     path('statements/<int:pk>/brs/', BRSSummaryView.as_view(), name='brs_summary'),
+    
+    # Manual Journal Vouchers (Phase 10: General Journal)
+    path('vouchers/', VoucherListView.as_view(), name='voucher_list'),
+    path('vouchers/create/', VoucherCreateView.as_view(), name='voucher_create'),
+    path('vouchers/<int:pk>/', VoucherDetailView.as_view(), name='voucher_detail'),
+    path('vouchers/<int:pk>/post/', PostVoucherView.as_view(), name='voucher_post'),
 ]

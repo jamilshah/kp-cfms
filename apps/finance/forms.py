@@ -3,9 +3,11 @@ Forms for the Finance module.
 """
 from django import forms
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError
 from apps.finance.models import (
     BudgetHead, FunctionCode, ChequeBook, ChequeLeaf,
-    BankStatement, BankStatementLine, StatementStatus
+    BankStatement, BankStatementLine, StatementStatus,
+    Voucher, JournalEntry
 )
 from apps.core.models import BankAccount
 from apps.budgeting.models import FiscalYear
@@ -328,3 +330,147 @@ class StatementUploadForm(forms.Form):
             raise forms.ValidationError(_('File size must be under 5MB.'))
         
         return file
+
+
+class VoucherForm(forms.ModelForm):
+    """
+    Form for creating/editing Voucher header (Manual Journal Vouchers).
+    
+    For manual journal entries by accountants to post adjustments,
+    opening balances, and corrections. Allows JV and CV voucher types only.
+    """
+    
+    class Meta:
+        model = Voucher
+        fields = ['voucher_type', 'date', 'fund', 'payee', 'reference_no', 'description']
+        widgets = {
+            'voucher_type': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+            'date': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date'
+            }),
+            'fund': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+            'payee': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Payee name (optional)'
+            }),
+            'reference_no': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Reference number (optional)'
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Description of the transaction'
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        self.organization = kwargs.pop('organization', None)
+        super().__init__(*args, **kwargs)
+        
+        # RESTRICT voucher_type choices to only Manual types (exclude automated BP/BR)
+        MANUAL_TYPES = [
+            ('JV', 'Journal Voucher'),
+            ('CV', 'Contra Voucher'),
+        ]
+        self.fields['voucher_type'].choices = MANUAL_TYPES
+        self.fields['voucher_type'].initial = 'JV'
+        
+        # Filter funds by organization if available
+        if self.organization:
+            # Assuming Fund model has organization field or is global
+            # For now, keep all funds available
+            pass
+    
+    def clean_date(self):
+        """Validate that date is not in a locked fiscal year."""
+        date = self.cleaned_data['date']
+        
+        # Check if fiscal year is locked
+        try:
+            fiscal_year = FiscalYear.objects.get(
+                start_date__lte=date,
+                end_date__gte=date
+            )
+            if hasattr(fiscal_year, 'is_locked') and fiscal_year.is_locked:
+                raise ValidationError(
+                    _('Cannot create voucher in a locked fiscal year.')
+                )
+        except FiscalYear.DoesNotExist:
+            raise ValidationError(
+                _('No fiscal year found for the selected date.')
+            )
+        
+        return date
+
+
+class JournalEntryForm(forms.ModelForm):
+    """
+    Form for individual Journal Entry lines in a Voucher.
+    
+    Each line posts to a BudgetHead (GL account) with either a debit or credit.
+    """
+    
+    class Meta:
+        model = JournalEntry
+        fields = ['budget_head', 'description', 'debit', 'credit']
+        widgets = {
+            'budget_head': forms.Select(attrs={
+                'class': 'form-select searchable-select',
+                'data-placeholder': 'Select Budget Head'
+            }),
+            'description': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Line description'
+            }),
+            'debit': forms.NumberInput(attrs={
+                'class': 'form-control debit-amount',
+                'placeholder': '0.00',
+                'step': '0.01',
+                'min': '0'
+            }),
+            'credit': forms.NumberInput(attrs={
+                'class': 'form-control credit-amount',
+                'placeholder': '0.00',
+                'step': '0.01',
+                'min': '0'
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        self.organization = kwargs.pop('organization', None)
+        super().__init__(*args, **kwargs)
+        
+        # Filter budget heads that allow posting
+        self.fields['budget_head'].queryset = BudgetHead.objects.filter(
+            posting_allowed=True,
+            is_active=True
+        ).select_related('function')
+        
+        # If organization-specific filtering is needed
+        if self.organization:
+            # Add organization filter if BudgetHead has organization field
+            pass
+    
+    def clean(self):
+        """Validate that either debit or credit is entered, but not both."""
+        cleaned_data = super().clean()
+        debit = cleaned_data.get('debit', 0)
+        credit = cleaned_data.get('credit', 0)
+        
+        if debit and credit:
+            raise ValidationError(
+                _('A line cannot have both debit and credit. Enter one or the other.')
+            )
+        
+        if not debit and not credit:
+            raise ValidationError(
+                _('Either debit or credit amount must be entered.')
+            )
+        
+        return cleaned_data

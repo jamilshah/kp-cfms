@@ -388,6 +388,18 @@ class Voucher(AuditLogMixin, TenantAwareMixin):
         verbose_name=_('Fund'),
         help_text=_('Fund classification for this transaction.')
     )
+    payee = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name=_('Payee'),
+        help_text=_('Name of payee or party (optional).')
+    )
+    reference_no = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name=_('Reference No'),
+        help_text=_('External reference number (optional).')
+    )
     description = models.TextField(
         verbose_name=_('Description'),
         help_text=_('Narration/explanation of the transaction.')

@@ -11,9 +11,13 @@ from django.http import HttpResponseRedirect
 from typing import Dict, Any
 
 from apps.users.permissions import AdminRequiredMixin
-from apps.finance.models import BudgetHead, Fund, ChequeBook, ChequeLeaf, LeafStatus
-from apps.finance.forms import BudgetHeadForm, ChequeBookForm, ChequeLeafCancelForm
+from apps.finance.models import (
+    BudgetHead, Fund, ChequeBook, ChequeLeaf, LeafStatus,
+    Voucher, JournalEntry
+)
+from apps.finance.forms import BudgetHeadForm, ChequeBookForm, ChequeLeafCancelForm, VoucherForm
 from apps.core.models import BankAccount
+from apps.budgeting.models import FiscalYear
 
 
 class FundListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
@@ -758,3 +762,272 @@ class BRSSummaryView(LoginRequiredMixin, DetailView):
         context['brs'] = engine.get_brs_summary()
         
         return context
+
+
+# =========================================================================
+# Manual Journal Vouchers (Phase 10: General Journal)
+# =========================================================================
+
+class VoucherListView(LoginRequiredMixin, ListView):
+    """
+    List all vouchers (auto-generated and manual).
+    
+    Filter by:
+    - Voucher Type (JV, PV, RV)
+    - Date Range
+    - Posted Status
+    """
+    model = Voucher
+    template_name = 'finance/voucher_list.html'
+    context_object_name = 'vouchers'
+    paginate_by = 25
+    
+    def get_queryset(self):
+        user = self.request.user
+        org = getattr(user, 'organization', None)
+        
+        qs = Voucher.objects.filter(organization=org).select_related(
+            'fiscal_year', 'fund', 'posted_by'
+        ).prefetch_related('entries')
+        
+        # Filter by voucher type
+        voucher_type = self.request.GET.get('type')
+        if voucher_type:
+            qs = qs.filter(voucher_type=voucher_type)
+        
+        # Filter by date range
+        date_from = self.request.GET.get('date_from')
+        date_to = self.request.GET.get('date_to')
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        
+        # Filter by posted status
+        status = self.request.GET.get('status')
+        if status == 'posted':
+            qs = qs.filter(is_posted=True)
+        elif status == 'draft':
+            qs = qs.filter(is_posted=False)
+        
+        return qs.order_by('-date', '-voucher_no')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['page_title'] = 'General Journal'
+        context['filter_type'] = self.request.GET.get('type', '')
+        context['filter_date_from'] = self.request.GET.get('date_from', '')
+        context['filter_date_to'] = self.request.GET.get('date_to', '')
+        context['filter_status'] = self.request.GET.get('status', '')
+        return context
+
+
+class VoucherCreateView(LoginRequiredMixin, CreateView):
+    """
+    Create a manual Journal Voucher with multiple lines.
+    
+    Uses formset for journal entries with dynamic add/remove.
+    Validates that Sum(Debit) == Sum(Credit).
+    """
+    model = Voucher
+    template_name = 'finance/voucher_form.html'
+    form_class = VoucherForm
+    
+    def get_success_url(self):
+        return reverse('finance:voucher_detail', kwargs={'pk': self.object.pk})
+    
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['organization'] = getattr(self.request.user, 'organization', None)
+        return kwargs
+    
+    def get_context_data(self, **kwargs):
+        from django.forms import inlineformset_factory
+        from apps.finance.forms import JournalEntryForm
+        
+        context = super().get_context_data(**kwargs)
+        context['page_title'] = 'Create Journal Voucher'
+        
+        JournalEntryFormSet = inlineformset_factory(
+            Voucher,
+            JournalEntry,
+            form=JournalEntryForm,
+            extra=2,
+            can_delete=True,
+            min_num=2,
+            validate_min=True
+        )
+        
+        if self.request.POST:
+            context['formset'] = JournalEntryFormSet(
+                self.request.POST,
+                instance=self.object,
+                form_kwargs={'organization': getattr(self.request.user, 'organization', None)}
+            )
+        else:
+            context['formset'] = JournalEntryFormSet(
+                instance=self.object,
+                form_kwargs={'organization': getattr(self.request.user, 'organization', None)}
+            )
+        
+        return context
+    
+    def form_valid(self, form):
+        from django.forms import inlineformset_factory
+        from apps.finance.forms import JournalEntryForm
+        from decimal import Decimal
+        
+        context = self.get_context_data()
+        formset = context['formset']
+        
+        # Validate formset
+        if not formset.is_valid():
+            return self.form_invalid(form)
+        
+        # Use atomic transaction
+        with transaction.atomic():
+            # Set organization
+            user = self.request.user
+            org = getattr(user, 'organization', None)
+            
+            form.instance.organization = org
+            # voucher_type is now set from the form (JV or CV)
+            form.instance.created_by = user
+            
+            # Determine fiscal year from date
+            try:
+                fiscal_year = FiscalYear.objects.get(
+                    start_date__lte=form.instance.date,
+                    end_date__gte=form.instance.date
+                )
+                form.instance.fiscal_year = fiscal_year
+            except FiscalYear.DoesNotExist:
+                messages.error(self.request, _('No fiscal year found for the selected date.'))
+                return self.form_invalid(form)
+            
+            # Generate voucher number based on voucher type
+            # Format: JV-YYYY-NNN or CV-YYYY-NNN
+            voucher_type = form.instance.voucher_type
+            year = fiscal_year.year
+            last_voucher = Voucher.objects.filter(
+                organization=org,
+                fiscal_year=fiscal_year,
+                voucher_type=voucher_type
+            ).order_by('-voucher_no').first()
+            
+            if last_voucher and last_voucher.voucher_no:
+                try:
+                    last_num = int(last_voucher.voucher_no.split('-')[-1])
+                    next_num = last_num + 1
+                except (ValueError, IndexError):
+                    next_num = 1
+            else:
+                next_num = 1
+            
+            form.instance.voucher_no = f"{voucher_type}-{year}-{next_num:03d}"
+            
+            # Save voucher
+            self.object = form.save()
+            
+            # Save formset
+            formset.instance = self.object
+            formset.save()
+            
+            # Calculate totals
+            total_debit = Decimal('0.00')
+            total_credit = Decimal('0.00')
+            
+            for entry in self.object.entries.all():
+                total_debit += entry.debit
+                total_credit += entry.credit
+            
+            # Validate balance
+            if total_debit != total_credit:
+                messages.error(
+                    self.request,
+                    _('Voucher is not balanced. Debit: {}, Credit: {}').format(
+                        total_debit, total_credit
+                    )
+                )
+                return self.form_invalid(form)
+            
+            if total_debit == Decimal('0.00'):
+                messages.error(self.request, _('Voucher has no entries or all amounts are zero.'))
+                return self.form_invalid(form)
+            
+            messages.success(self.request, _('Journal Voucher created successfully.'))
+            return HttpResponseRedirect(self.get_success_url())
+
+
+class VoucherDetailView(LoginRequiredMixin, DetailView):
+    """
+    Display voucher header and journal entries.
+    
+    Shows:
+    - Voucher header info
+    - Table of journal entries (Dr/Cr)
+    - Post button if status is DRAFT
+    """
+    model = Voucher
+    template_name = 'finance/voucher_detail.html'
+    context_object_name = 'voucher'
+    
+    def get_queryset(self):
+        user = self.request.user
+        org = getattr(user, 'organization', None)
+        return Voucher.objects.filter(organization=org).select_related(
+            'fiscal_year', 'fund', 'posted_by', 'created_by'
+        ).prefetch_related('entries__budget_head')
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['page_title'] = f"Voucher: {self.object.voucher_no}"
+        context['entries'] = self.object.entries.all().select_related('budget_head')
+        context['total_debit'] = self.object.get_total_debit()
+        context['total_credit'] = self.object.get_total_credit()
+        context['is_balanced'] = self.object.is_balanced()
+        return context
+
+
+class PostVoucherView(LoginRequiredMixin, View):
+    """
+    Post a voucher to the General Ledger.
+    
+    Only allowed if:
+    - Voucher is not already posted
+    - Voucher is balanced
+    """
+    
+    def post(self, request, pk):
+        user = request.user
+        org = getattr(user, 'organization', None)
+        
+        voucher = get_object_or_404(
+            Voucher.objects.filter(organization=org),
+            pk=pk
+        )
+        
+        # Check if already posted
+        if voucher.is_posted:
+            messages.warning(request, _('Voucher is already posted.'))
+            return redirect('finance:voucher_detail', pk=pk)
+        
+        # Check if balanced
+        if not voucher.is_balanced():
+            messages.error(
+                request,
+                _('Cannot post unbalanced voucher. Debit: {}, Credit: {}').format(
+                    voucher.get_total_debit(),
+                    voucher.get_total_credit()
+                )
+            )
+            return redirect('finance:voucher_detail', pk=pk)
+        
+        try:
+            with transaction.atomic():
+                voucher.post_voucher(user)
+                messages.success(request, _('Voucher posted successfully.'))
+        except Exception as e:
+            messages.error(request, _('Error posting voucher: ') + str(e))
+        
+        return redirect('finance:voucher_detail', pk=pk)

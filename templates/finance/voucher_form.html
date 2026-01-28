@@ -1,0 +1,396 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Create Journal Voucher - KP-CFMS{% endblock %}
+
+{% block extra_css %}
+<style>
+    .formset-row {
+        background-color: #f8f9fa;
+        border-radius: 0.25rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .formset-row:hover {
+        background-color: #e9ecef;
+    }
+    
+    .balance-indicator {
+        font-size: 1.25rem;
+        font-weight: 700;
+    }
+    
+    .balance-indicator.balanced {
+        color: #28a745;
+    }
+    
+    .balance-indicator.unbalanced {
+        color: #dc3545;
+    }
+    
+    #submitBtn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="mb-4">
+        <h2 class="mb-0"><i class="bi bi-journal-plus me-2"></i>Create Journal Voucher</h2>
+        <p class="text-muted mb-0">Manual journal entry for adjustments and opening balances</p>
+    </div>
+
+    <form method="post" id="voucherForm">
+        {% csrf_token %}
+        
+        <!-- Voucher Header Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-card-heading me-2"></i>Voucher Header</h5>
+            </div>
+            <div class="card-body">
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label for="{{ form.voucher_type.id_for_label }}" class="form-label">
+                                Voucher Type <span class="text-danger">*</span>
+                            </label>
+                            {{ form.voucher_type }}
+                            {% if form.voucher_type.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.voucher_type.errors }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label for="{{ form.date.id_for_label }}" class="form-label">
+                                Date <span class="text-danger">*</span>
+                            </label>
+                            {{ form.date }}
+                            {% if form.date.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.date.errors }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label for="{{ form.fund.id_for_label }}" class="form-label">
+                                Fund <span class="text-danger">*</span>
+                            </label>
+                            {{ form.fund }}
+                            {% if form.fund.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.fund.errors }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label for="{{ form.reference_no.id_for_label }}" class="form-label">Reference No</label>
+                            {{ form.reference_no }}
+                            {% if form.reference_no.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.reference_no.errors }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="{{ form.payee.id_for_label }}" class="form-label">Payee</label>
+                            {{ form.payee }}
+                            {% if form.payee.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.payee.errors }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-12">
+                        <div class="mb-3">
+                            <label for="{{ form.description.id_for_label }}" class="form-label">
+                                Description <span class="text-danger">*</span>
+                            </label>
+                            {{ form.description }}
+                            {% if form.description.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ form.description.errors }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Journal Entries Card -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-list-ul me-2"></i>Journal Entries</h5>
+                <button type="button" class="btn btn-sm btn-success" id="addLineBtn">
+                    <i class="bi bi-plus-circle me-1"></i>Add Line
+                </button>
+            </div>
+            <div class="card-body">
+                {{ formset.management_form }}
+                
+                {% if formset.non_form_errors %}
+                <div class="alert alert-danger">
+                    {{ formset.non_form_errors }}
+                </div>
+                {% endif %}
+
+                <div class="table-responsive">
+                    <table class="table table-bordered" id="formsetTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 35%;">Budget Head <span class="text-danger">*</span></th>
+                                <th style="width: 30%;">Description <span class="text-danger">*</span></th>
+                                <th style="width: 15%;" class="text-end">Debit</th>
+                                <th style="width: 15%;" class="text-end">Credit</th>
+                                <th style="width: 5%;" class="text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="formsetBody">
+                            {% for form in formset %}
+                            <tr class="formset-row" data-form-index="{{ forloop.counter0 }}">
+                                <td>
+                                    {% for hidden in form.hidden_fields %}
+                                        {{ hidden }}
+                                    {% endfor %}
+                                    {{ form.budget_head }}
+                                    {% if form.budget_head.errors %}
+                                    <div class="text-danger small">{{ form.budget_head.errors }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ form.description }}
+                                    {% if form.description.errors %}
+                                    <div class="text-danger small">{{ form.description.errors }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ form.debit }}
+                                    {% if form.debit.errors %}
+                                    <div class="text-danger small">{{ form.debit.errors }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ form.credit }}
+                                    {% if form.credit.errors %}
+                                    <div class="text-danger small">{{ form.credit.errors }}</div>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <button type="button" class="btn btn-sm btn-danger delete-row" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="table-secondary">
+                            <tr>
+                                <td colspan="2" class="text-end"><strong>Totals:</strong></td>
+                                <td class="text-end">
+                                    <strong id="totalDebit" class="balance-indicator">0.00</strong>
+                                </td>
+                                <td class="text-end">
+                                    <strong id="totalCredit" class="balance-indicator">0.00</strong>
+                                </td>
+                                <td></td>
+                            </tr>
+                            <tr>
+                                <td colspan="2" class="text-end"><strong>Difference:</strong></td>
+                                <td colspan="2" class="text-center">
+                                    <strong id="difference" class="balance-indicator unbalanced">0.00</strong>
+                                </td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div id="balanceAlert" class="alert alert-warning mt-3" style="display: none;">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Warning:</strong> The voucher is not balanced. Total Debit must equal Total Credit.
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="d-flex justify-content-between mb-4">
+            <a href="{% url 'finance:voucher_list' %}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left me-2"></i>Cancel
+            </a>
+            <button type="submit" id="submitBtn" class="btn btn-primary" disabled>
+                <i class="bi bi-save me-2"></i>Save Journal Voucher
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Empty form template for dynamic adding (hidden) -->
+<table style="display: none;">
+    <tbody id="emptyFormTemplate">
+        <tr class="formset-row">
+            <td>
+                <select name="entries-__prefix__-budget_head" class="form-select searchable-select" id="id_entries-__prefix__-budget_head">
+                    <option value="">---------</option>
+                    {% for choice in formset.empty_form.budget_head.field.queryset %}
+                    <option value="{{ choice.pk }}">{{ choice }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td>
+                <input type="text" name="entries-__prefix__-description" class="form-control" id="id_entries-__prefix__-description">
+            </td>
+            <td>
+                <input type="number" name="entries-__prefix__-debit" class="form-control debit-amount" placeholder="0.00" step="0.01" min="0" value="0" id="id_entries-__prefix__-debit">
+            </td>
+            <td>
+                <input type="number" name="entries-__prefix__-credit" class="form-control credit-amount" placeholder="0.00" step="0.01" min="0" value="0" id="id_entries-__prefix__-credit">
+            </td>
+            <td class="text-center">
+                <button type="button" class="btn btn-sm btn-danger delete-row" title="Delete">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    </tbody>
+</table>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const formsetBody = document.getElementById('formsetBody');
+    const totalFormInput = document.querySelector('#id_entries-TOTAL_FORMS');
+    const addLineBtn = document.getElementById('addLineBtn');
+    const submitBtn = document.getElementById('submitBtn');
+    const balanceAlert = document.getElementById('balanceAlert');
+    
+    // Calculate totals and update display
+    function calculateTotals() {
+        let totalDebit = 0;
+        let totalCredit = 0;
+        
+        // Sum all visible (not deleted) rows
+        document.querySelectorAll('.formset-row').forEach(row => {
+            const deleteCheckbox = row.querySelector('input[name$="-DELETE"]');
+            
+            // Skip if marked for deletion
+            if (deleteCheckbox && deleteCheckbox.checked) {
+                return;
+            }
+            
+            const debitInput = row.querySelector('.debit-amount');
+            const creditInput = row.querySelector('.credit-amount');
+            
+            if (debitInput) {
+                const debit = parseFloat(debitInput.value) || 0;
+                totalDebit += debit;
+            }
+            
+            if (creditInput) {
+                const credit = parseFloat(creditInput.value) || 0;
+                totalCredit += credit;
+            }
+        });
+        
+        const difference = Math.abs(totalDebit - totalCredit);
+        
+        // Update display
+        document.getElementById('totalDebit').textContent = totalDebit.toFixed(2);
+        document.getElementById('totalCredit').textContent = totalCredit.toFixed(2);
+        document.getElementById('difference').textContent = difference.toFixed(2);
+        
+        // Color coding
+        const diffElement = document.getElementById('difference');
+        const isBalanced = difference < 0.01 && totalDebit > 0;
+        
+        if (isBalanced) {
+            diffElement.classList.remove('unbalanced');
+            diffElement.classList.add('balanced');
+            balanceAlert.style.display = 'none';
+            submitBtn.disabled = false;
+        } else {
+            diffElement.classList.remove('balanced');
+            diffElement.classList.add('unbalanced');
+            balanceAlert.style.display = 'block';
+            submitBtn.disabled = true;
+        }
+    }
+    
+    // Add event listeners to existing inputs
+    function attachListeners() {
+        document.querySelectorAll('.debit-amount, .credit-amount').forEach(input => {
+            input.removeEventListener('input', calculateTotals);
+            input.addEventListener('input', calculateTotals);
+        });
+        
+        document.querySelectorAll('.delete-row').forEach(btn => {
+            btn.removeEventListener('click', handleDelete);
+            btn.addEventListener('click', handleDelete);
+        });
+    }
+    
+    // Handle delete row
+    function handleDelete(e) {
+        const row = e.target.closest('.formset-row');
+        const deleteCheckbox = row.querySelector('input[name$="-DELETE"]');
+        
+        if (deleteCheckbox) {
+            // Mark for deletion (for existing records)
+            deleteCheckbox.checked = true;
+            row.style.display = 'none';
+        } else {
+            // Remove from DOM (for new rows)
+            row.remove();
+        }
+        
+        calculateTotals();
+    }
+    
+    // Add new line
+    addLineBtn.addEventListener('click', function() {
+        const currentFormCount = parseInt(totalFormInput.value);
+        const emptyFormTemplate = document.getElementById('emptyFormTemplate');
+        const newRow = emptyFormTemplate.innerHTML.replace(/__prefix__/g, currentFormCount);
+        
+        formsetBody.insertAdjacentHTML('beforeend', newRow);
+        totalFormInput.value = currentFormCount + 1;
+        
+        attachListeners();
+        calculateTotals();
+    });
+    
+    // Initial setup
+    attachListeners();
+    calculateTotals();
+});
+</script>
+{% endblock %}

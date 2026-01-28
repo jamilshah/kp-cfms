@@ -655,7 +655,7 @@ class RevenueCollection(AuditLogMixin, TenantAwareMixin):
         JournalEntry.objects.create(
             voucher=voucher,
             budget_head=self.bank_account.gl_code,
-            description=f"Bank - {self.bank_account.account_name}",
+            description=f"Bank - {self.bank_account.title}",
             debit=self.amount_received,
             credit=Decimal('0.00')
         )
