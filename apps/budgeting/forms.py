@@ -87,7 +87,7 @@ class BudgetAllocationBaseForm(forms.ModelForm):
         ]
         widgets = {
             'budget_head': forms.Select(attrs={
-                'class': 'form-select',
+                'class': 'form-select searchable-select',
             }),
             'previous_year_actual': forms.NumberInput(attrs={
                 'class': 'form-control',
@@ -631,7 +631,7 @@ class SupplementaryGrantForm(forms.ModelForm):
                   'date', 'description']
         widgets = {
             'fiscal_year': forms.Select(attrs={'class': 'form-select'}),
-            'budget_head': forms.Select(attrs={'class': 'form-select'}),
+            'budget_head': forms.Select(attrs={'class': 'form-select searchable-select'}),
             'amount': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'step': '0.01',
@@ -657,8 +657,8 @@ class ReappropriationForm(forms.ModelForm):
                   'reference_no', 'date', 'description']
         widgets = {
             'fiscal_year': forms.Select(attrs={'class': 'form-select'}),
-            'from_head': forms.Select(attrs={'class': 'form-select'}),
-            'to_head': forms.Select(attrs={'class': 'form-select'}),
+            'from_head': forms.Select(attrs={'class': 'form-select searchable-select'}),
+            'to_head': forms.Select(attrs={'class': 'form-select searchable-select'}),
             'amount': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'step': '0.01',

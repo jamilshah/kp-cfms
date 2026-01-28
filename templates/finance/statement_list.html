@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Bank Statements - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="bi bi-bank me-2"></i>Bank Statements
+        </h2>
+        <a href="{% url 'finance:statement_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i> New Statement
+        </a>
+    </div>
+    
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+    
+    <div class="card shadow-sm">
+        <div class="card-body">
+            {% if statements %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Bank Account</th>
+                            <th>Period</th>
+                            <th class="text-end">Opening</th>
+                            <th class="text-end">Closing</th>
+                            <th class="text-center">Lines</th>
+                            <th class="text-center">Reconciled</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for statement in statements %}
+                        <tr>
+                            <td>
+                                <strong>{{ statement.bank_account.title }}</strong>
+                                <br><small class="text-muted">{{ statement.bank_account.bank_name }}</small>
+                            </td>
+                            <td>{{ statement }}</td>
+                            <td class="text-end">{{ statement.opening_balance|floatformat:2 }}</td>
+                            <td class="text-end">{{ statement.closing_balance|floatformat:2 }}</td>
+                            <td class="text-center">{{ statement.lines.count }}</td>
+                            <td class="text-center">
+                                <span class="badge bg-{{ statement.unreconciled_count|yesno:'warning,success' }}">
+                                    {{ statement.reconciled_count }} / {{ statement.lines.count }}
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                {% if statement.is_locked %}
+                                <span class="badge bg-secondary"><i class="bi bi-lock"></i> Locked</span>
+                                {% elif statement.status == 'RECONCILED' %}
+                                <span class="badge bg-success">Reconciled</span>
+                                {% elif statement.status == 'RECONCILING' %}
+                                <span class="badge bg-info">In Progress</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark">Draft</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'finance:statement_detail' statement.pk %}" 
+                                       class="btn btn-outline-primary" title="View Details">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    {% if not statement.is_locked %}
+                                    <a href="{% url 'finance:reconciliation_workbench' statement.pk %}" 
+                                       class="btn btn-outline-success" title="Reconcile">
+                                        <i class="bi bi-check2-square"></i>
+                                    </a>
+                                    {% endif %}
+                                    <a href="{% url 'finance:brs_summary' statement.pk %}" 
+                                       class="btn btn-outline-info" title="BRS Summary">
+                                        <i class="bi bi-file-earmark-text"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            {% if is_paginated %}
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                    </li>
+                    {% endif %}
+                    
+                    <li class="page-item disabled">
+                        <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    </li>
+                    
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+            
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-inbox display-1 text-muted"></i>
+                <p class="lead text-muted mt-3">No bank statements found.</p>
+                <a href="{% url 'finance:statement_create' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-circle me-1"></i> Create First Statement
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

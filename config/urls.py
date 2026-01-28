@@ -25,6 +25,10 @@ urlpatterns = [
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('accounts/', include('django.contrib.auth.urls')),
     path('budgeting/', include('apps.budgeting.urls')),
+    path('expenditure/', include('apps.expenditure.urls')),
+    path('revenue/', include('apps.revenue.urls')),
+    path('finance/', include('apps.finance.urls')),
+    path('reports/', include('apps.reporting.urls')),
     path('', RedirectView.as_view(url='/budgeting/', permanent=False), name='home'),
 ]
 

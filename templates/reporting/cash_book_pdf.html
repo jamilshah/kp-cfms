@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cash Book - {{ bank_account.title }} - {{ month_name }} {{ year }}</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 1cm;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 18pt;
+        }
+        .header h2 {
+            margin: 5px 0;
+            font-size: 14pt;
+            font-weight: normal;
+        }
+        .header p {
+            margin: 5px 0;
+            font-size: 10pt;
+            color: #666;
+        }
+        .meta-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 9pt;
+        }
+        .meta-info div {
+            flex: 1;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #333;
+            padding: 6px 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+        }
+        .amount {
+            text-align: right;
+            font-family: 'Courier New', monospace;
+        }
+        .text-center {
+            text-align: center;
+        }
+        .total-row {
+            background-color: #e8e8e8;
+            font-weight: bold;
+        }
+        .opening-row, .closing-row {
+            background-color: #d4edda;
+        }
+        .footer {
+            margin-top: 30px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .signature-block {
+            text-align: center;
+            width: 30%;
+        }
+        .signature-line {
+            border-top: 1px solid #333;
+            margin-top: 50px;
+            padding-top: 5px;
+        }
+        @media print {
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ organization.name }}</h1>
+        <h2>Monthly Cash Book</h2>
+        <p>{{ bank_account.title }} | A/C: {{ bank_account.account_number }} | {{ bank_account.bank_name }}</p>
+        <p>Period: {{ month_name }} {{ year }}</p>
+    </div>
+    
+    <div class="meta-info">
+        <div>
+            <strong>Report Generated:</strong> {{ generated_date|date:"F j, Y" }}
+        </div>
+        <div style="text-align: right;">
+            <strong>Opening Balance:</strong> Rs. {{ opening_balance|floatformat:2 }}
+        </div>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 8%;">Date</th>
+                <th style="width: 12%;">Voucher No</th>
+                <th style="width: 30%;">Description</th>
+                <th style="width: 12%;">Cheque/Ref</th>
+                <th class="amount" style="width: 12%;">Receipts (Dr)</th>
+                <th class="amount" style="width: 12%;">Payments (Cr)</th>
+                <th class="amount" style="width: 14%;">Balance</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="opening-row">
+                <td colspan="4"><strong>Opening Balance B/F</strong></td>
+                <td class="amount"></td>
+                <td class="amount"></td>
+                <td class="amount"><strong>{{ opening_balance|floatformat:2 }}</strong></td>
+            </tr>
+            
+            {% for entry in entries %}
+            <tr>
+                <td>{{ entry.date|date:"d/m/Y" }}</td>
+                <td>{{ entry.voucher_no }}</td>
+                <td>{{ entry.description|truncatechars:50 }}</td>
+                <td>{{ entry.instrument_no|default:"-" }}</td>
+                <td class="amount">{% if entry.debit > 0 %}{{ entry.debit|floatformat:2 }}{% endif %}</td>
+                <td class="amount">{% if entry.credit > 0 %}{{ entry.credit|floatformat:2 }}{% endif %}</td>
+                <td class="amount">{{ entry.balance|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7" class="text-center">No transactions for this period</td>
+            </tr>
+            {% endfor %}
+            
+            <tr class="total-row">
+                <td colspan="4"><strong>Monthly Total</strong></td>
+                <td class="amount"><strong>{{ total_receipts|floatformat:2 }}</strong></td>
+                <td class="amount"><strong>{{ total_payments|floatformat:2 }}</strong></td>
+                <td class="amount"></td>
+            </tr>
+            
+            <tr class="closing-row">
+                <td colspan="4"><strong>Closing Balance C/F</strong></td>
+                <td class="amount"></td>
+                <td class="amount"></td>
+                <td class="amount"><strong>{{ closing_balance|floatformat:2 }}</strong></td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <div class="footer">
+        <div class="signature-block">
+            <div class="signature-line">Prepared By</div>
+        </div>
+        <div class="signature-block">
+            <div class="signature-line">Checked By</div>
+        </div>
+        <div class="signature-block">
+            <div class="signature-line">Approved By</div>
+        </div>
+    </div>
+</body>
+</html>

@@ -44,7 +44,9 @@ from apps.budgeting.views import (
 from apps.finance.views import (
     BudgetHeadListView, BudgetHeadCreateView, 
     BudgetHeadUpdateView, BudgetHeadDeleteView,
-    FundListView, FundCreateView, FundUpdateView, FundDeleteView
+    FundListView, FundCreateView, FundUpdateView, FundDeleteView,
+    ChequeBookListView, ChequeBookCreateView, ChequeBookDetailView,
+    ChequeLeafCancelView, ChequeLeafDamageView
 )
 from apps.core.views import (
     BankAccountListView, BankAccountCreateView, 
@@ -130,6 +132,13 @@ urlpatterns = [
     path('setup/coa/add/', BudgetHeadCreateView.as_view(), name='setup_coa_add'),
     path('setup/coa/<int:pk>/edit/', BudgetHeadUpdateView.as_view(), name='setup_coa_edit'),
     path('setup/coa/<int:pk>/delete/', BudgetHeadDeleteView.as_view(), name='setup_coa_delete'),
+
+    # Cheque Books
+    path('setup/chequebooks/', ChequeBookListView.as_view(), name='setup_chequebooks'),
+    path('setup/chequebooks/add/', ChequeBookCreateView.as_view(), name='setup_chequebook_add'),
+    path('setup/chequebooks/<int:pk>/', ChequeBookDetailView.as_view(), name='setup_chequebook_detail'),
+    path('setup/chequebooks/<int:pk>/leaves/<int:leaf_pk>/cancel/', ChequeLeafCancelView.as_view(), name='setup_chequeleaf_cancel'),
+    path('setup/chequebooks/<int:pk>/leaves/<int:leaf_pk>/damage/', ChequeLeafDamageView.as_view(), name='setup_chequeleaf_damage'),
 
     # Phase 3: Pension Estimate
     path('pension/', PensionEstimateListView.as_view(), name='pension_list'),

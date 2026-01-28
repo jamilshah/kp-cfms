@@ -189,6 +189,29 @@ class FiscalYear(AuditLogMixin, TenantAwareMixin):
         """Check if budget entries can be modified."""
         return self.is_active and not self.is_locked
     
+    @classmethod
+    def get_current_operating_year(cls, organization):
+        """
+        Get the fiscal year that covers the current date.
+        
+        This is used for expenditure/receipt transactions, where we need
+        the fiscal year that contains today's date, not the one open
+        for budget entry (is_active).
+        
+        Args:
+            organization: The organization to filter by.
+            
+        Returns:
+            FiscalYear or None: The fiscal year containing today's date.
+        """
+        from django.utils import timezone
+        today = timezone.now().date()
+        return cls.objects.filter(
+            organization=organization,
+            start_date__lte=today,
+            end_date__gte=today
+        ).first()
+
     def lock_budget(self, sae_number: str) -> None:
         """
         Lock the budget and set SAE number.

@@ -10,7 +10,10 @@ Description: Admin configuration for Finance models.
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 
-from .models import FunctionCode, BudgetHead, Fund, Voucher, JournalEntry
+from .models import (
+    FunctionCode, BudgetHead, Fund, Voucher, JournalEntry, 
+    ChequeBook, ChequeLeaf, BankStatement, BankStatementLine
+)
 
 
 @admin.register(FunctionCode)
@@ -212,4 +215,172 @@ class JournalEntryAdmin(admin.ModelAdmin):
             return f'Dr {obj.debit:,.2f}'
         return f'Cr {obj.credit:,.2f}'
     entry_type.short_description = _('Entry Type')
+
+
+class ChequeLeafInline(admin.TabularInline):
+    """Inline admin for ChequeLeaf within ChequeBook."""
+    
+    model = ChequeLeaf
+    extra = 0
+    readonly_fields = ('leaf_number', 'status', 'void_reason', 'used_at')
+    can_delete = False
+    
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ChequeBook)
+class ChequeBookAdmin(admin.ModelAdmin):
+    """Admin configuration for ChequeBook model."""
+    
+    list_display = (
+        'book_no', 'bank_account', 'prefix', 'start_serial', 'end_serial',
+        'issue_date', 'total_leaves', 'available_count', 'is_active'
+    )
+    list_filter = ('is_active', 'bank_account__organization', 'issue_date')
+    search_fields = ('book_no', 'bank_account__title', 'bank_account__account_number')
+    ordering = ('-issue_date', 'book_no')
+    date_hierarchy = 'issue_date'
+    inlines = [ChequeLeafInline]
+    
+    readonly_fields = ('created_at', 'updated_at', 'created_by', 'updated_by')
+    
+    fieldsets = (
+        (None, {
+            'fields': ('bank_account', 'book_no', 'prefix')
+        }),
+        (_('Serial Range'), {
+            'fields': ('start_serial', 'end_serial', 'issue_date')
+        }),
+        (_('Status'), {
+            'fields': ('is_active',)
+        }),
+        (_('Audit Trail'), {
+            'fields': ('created_at', 'updated_at', 'created_by', 'updated_by'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def total_leaves(self, obj):
+        return obj.total_leaves
+    total_leaves.short_description = _('Total')
+    
+    def available_count(self, obj):
+        return obj.available_count
+    available_count.short_description = _('Available')
+
+
+@admin.register(ChequeLeaf)
+class ChequeLeafAdmin(admin.ModelAdmin):
+    """Admin configuration for ChequeLeaf model."""
+    
+    list_display = ('leaf_number', 'book', 'status', 'used_at')
+    list_filter = ('status', 'book__bank_account')
+    search_fields = ('leaf_number', 'book__book_no')
+    ordering = ('book', 'id')
+    readonly_fields = ('book', 'leaf_number', 'used_at', 'created_at', 'updated_at')
+    
+    fieldsets = (
+        (None, {
+            'fields': ('book', 'leaf_number', 'status')
+        }),
+        (_('Void Information'), {
+            'fields': ('void_reason', 'used_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+# ============================================================================
+# Bank Statement & Reconciliation Admin
+# ============================================================================
+
+class BankStatementLineInline(admin.TabularInline):
+    """Inline admin for BankStatementLine within BankStatement."""
+    
+    model = BankStatementLine
+    extra = 0
+    readonly_fields = ('is_reconciled', 'matched_entry')
+    fields = ('date', 'description', 'debit', 'credit', 'ref_no', 'balance', 'is_reconciled', 'matched_entry')
+
+
+@admin.register(BankStatement)
+class BankStatementAdmin(admin.ModelAdmin):
+    """Admin configuration for BankStatement model."""
+    
+    list_display = (
+        'bank_account', 'month_name', 'year', 'opening_balance', 'closing_balance',
+        'total_lines', 'reconciled_count', 'status', 'is_locked'
+    )
+    list_filter = ('status', 'is_locked', 'bank_account__organization', 'year', 'month')
+    search_fields = ('bank_account__title', 'bank_account__account_number', 'notes')
+    ordering = ('-year__start_date', '-month')
+    date_hierarchy = 'created_at'
+    inlines = [BankStatementLineInline]
+    
+    readonly_fields = ('created_at', 'updated_at', 'created_by', 'updated_by')
+    
+    fieldsets = (
+        (None, {
+            'fields': ('bank_account', 'month', 'year')
+        }),
+        (_('Balances'), {
+            'fields': ('opening_balance', 'closing_balance')
+        }),
+        (_('Status'), {
+            'fields': ('status', 'is_locked')
+        }),
+        (_('Files & Notes'), {
+            'fields': ('file', 'notes'),
+            'classes': ('collapse',)
+        }),
+        (_('Audit Trail'), {
+            'fields': ('created_at', 'updated_at', 'created_by', 'updated_by'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def month_name(self, obj):
+        month_names = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ]
+        return month_names[obj.month - 1]
+    month_name.short_description = _('Month')
+    
+    def total_lines(self, obj):
+        return obj.lines.count()
+    total_lines.short_description = _('Lines')
+
+
+@admin.register(BankStatementLine)
+class BankStatementLineAdmin(admin.ModelAdmin):
+    """Admin configuration for BankStatementLine model."""
+    
+    list_display = ('statement', 'date', 'description_short', 'debit', 'credit', 'ref_no', 'is_reconciled')
+    list_filter = ('is_reconciled', 'statement__bank_account', 'statement__year')
+    search_fields = ('description', 'ref_no', 'statement__bank_account__title')
+    ordering = ('-statement__year__start_date', '-statement__month', 'date', 'id')
+    readonly_fields = ('is_reconciled', 'matched_entry', 'created_at', 'updated_at')
+    
+    fieldsets = (
+        (None, {
+            'fields': ('statement', 'date', 'description')
+        }),
+        (_('Amounts'), {
+            'fields': ('debit', 'credit', 'balance', 'ref_no')
+        }),
+        (_('Reconciliation'), {
+            'fields': ('is_reconciled', 'matched_entry'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def description_short(self, obj):
+        """Truncate description for display."""
+        if len(obj.description) > 40:
+            return f'{obj.description[:40]}...'
+        return obj.description
+    description_short.short_description = _('Description')
+
 

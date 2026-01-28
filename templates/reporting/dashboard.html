@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Reports Dashboard - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="bi bi-file-earmark-bar-graph me-2"></i>Reports Dashboard
+        </h2>
+    </div>
+    
+    <div class="row">
+        <!-- Cash Book Report -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-journal-text me-2"></i>Monthly Cash Book
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Generate monthly cash book report for a specific bank account.</p>
+                    <form id="cashBookForm">
+                        <div class="mb-3">
+                            <label for="bankAccount" class="form-label">Bank Account</label>
+                            <select id="bankAccount" class="form-select" required>
+                                <option value="">Select Bank Account</option>
+                                {% for account in bank_accounts %}
+                                <option value="{{ account.pk }}">{{ account.title }} - {{ account.account_number }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="cbMonth" class="form-label">Month</label>
+                                <select id="cbMonth" class="form-select" required>
+                                    {% for num, name in months %}
+                                    <option value="{{ num }}" {% if num == current_month %}selected{% endif %}>{{ name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="cbYear" class="form-label">Year</label>
+                                <input type="number" id="cbYear" class="form-control" value="{{ current_year }}" min="2000" max="2099" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-file-pdf me-1"></i> Generate Report
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Monthly Summary -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-bar-chart me-2"></i>Monthly Summary
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">View summary of all bank account transactions for a month.</p>
+                    <form id="summaryForm">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="sumMonth" class="form-label">Month</label>
+                                <select id="sumMonth" class="form-select" required>
+                                    {% for num, name in months %}
+                                    <option value="{{ num }}" {% if num == current_month %}selected{% endif %}>{{ name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="sumYear" class="form-label">Year</label>
+                                <input type="number" id="sumYear" class="form-control" value="{{ current_year }}" min="2000" max="2099" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-info">
+                            <i class="bi bi-eye me-1"></i> View Summary
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- BRS Reports -->
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-file-earmark-check me-2"></i>Bank Reconciliation Statements
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        BRS reports are generated from reconciled bank statements.
+                        <a href="{% url 'finance:statement_list' %}">View Bank Statements</a> to access BRS reports.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Cash Book Form
+    $('#cashBookForm').on('submit', function(e) {
+        e.preventDefault();
+        var accountId = $('#bankAccount').val();
+        var year = $('#cbYear').val();
+        var month = $('#cbMonth').val();
+        
+        if (!accountId) {
+            alert('Please select a bank account');
+            return;
+        }
+        
+        var url = "{% url 'reporting:cash_book_report' 0 0 0 %}";
+        url = url.replace('/0/0/0/', '/' + accountId + '/' + year + '/' + month + '/');
+        window.open(url, '_blank');
+    });
+    
+    // Summary Form
+    $('#summaryForm').on('submit', function(e) {
+        e.preventDefault();
+        var year = $('#sumYear').val();
+        var month = $('#sumMonth').val();
+        
+        var url = "{% url 'reporting:monthly_summary_detail' 0 0 %}";
+        url = url.replace('/0/0/', '/' + year + '/' + month + '/');
+        window.location.href = url;
+    });
+});
+</script>
+{% endblock %}

@@ -184,6 +184,28 @@ class BudgetHead(AuditLogMixin, StatusMixin):
         verbose_name=_('Is Charged (Non-Votable)'),
         help_text=_('Charged expenditure that Council cannot reduce.')
     )
+    is_system_head = models.BooleanField(
+        default=False,
+        verbose_name=_('Is System Head'),
+        help_text=_('Whether this is a system-controlled head for automated GL posting.')
+    )
+    
+    SYSTEM_CODE_CHOICES = [
+        ('AP', 'Accounts Payable'),
+        ('TAX_IT', 'Income Tax'),
+        ('TAX_GST', 'GST/Sales Tax'),
+        ('AR', 'Accounts Receivable'),
+    ]
+    
+    system_code = models.CharField(
+        max_length=10,
+        choices=SYSTEM_CODE_CHOICES,
+        null=True,
+        blank=True,
+        unique=True,
+        verbose_name=_('System Code'),
+        help_text=_('Unique code for system-controlled heads (AP, TAX_IT, TAX_GST, AR).')
+    )
     
     class Meta:
         verbose_name = _('Budget Head')
@@ -520,6 +542,26 @@ class JournalEntry(TimeStampedMixin):
         help_text=_('Credit amount (leave 0 for debit entries).')
     )
     
+    # Bank Reconciliation fields
+    instrument_no = models.CharField(
+        max_length=50,
+        blank=True,
+        db_index=True,
+        verbose_name=_('Instrument No'),
+        help_text=_('Cheque number or transaction reference for bank reconciliation.')
+    )
+    is_reconciled = models.BooleanField(
+        default=False,
+        verbose_name=_('Is Reconciled'),
+        help_text=_('Whether this entry has been reconciled with bank statement.')
+    )
+    reconciled_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name=_('Reconciled Date'),
+        help_text=_('Date when this entry was reconciled.')
+    )
+    
     class Meta:
         verbose_name = _('Journal Entry')
         verbose_name_plural = _('Journal Entries')
@@ -527,6 +569,8 @@ class JournalEntry(TimeStampedMixin):
         indexes = [
             models.Index(fields=['voucher']),
             models.Index(fields=['budget_head']),
+            models.Index(fields=['is_reconciled']),
+            models.Index(fields=['instrument_no']),
         ]
     
     def __str__(self) -> str:
@@ -553,4 +597,587 @@ class JournalEntry(TimeStampedMixin):
         """Override save to run validation."""
         self.clean()
         super().save(*args, **kwargs)
+
+
+class LeafStatus(models.TextChoices):
+    """
+    Status choices for ChequeLeaf.
+    """
+    AVAILABLE = 'AVAILABLE', _('Available')
+    ISSUED = 'ISSUED', _('Issued')
+    CANCELLED = 'CANCELLED', _('Cancelled')
+    DAMAGED = 'DAMAGED', _('Damaged')
+
+
+class ChequeBook(AuditLogMixin, StatusMixin):
+    """
+    Cheque Book linked to a Bank Account.
+    
+    Tracks physical cheque books received from the bank.
+    On creation, automatically generates ChequeLeaf records.
+    
+    Attributes:
+        bank_account: The bank account this book belongs to
+        book_no: Unique book identifier (e.g., "BK-2025-01")
+        prefix: Leaf number prefix (e.g., "00" or "CHQ")
+        start_serial: Starting serial number (e.g., 1001)
+        end_serial: Ending serial number (e.g., 1050)
+        issue_date: Date the book was received from bank
+        is_active: Whether the book is currently in use
+    """
+    
+    bank_account = models.ForeignKey(
+        'core.BankAccount',
+        on_delete=models.PROTECT,
+        related_name='cheque_books',
+        verbose_name=_('Bank Account'),
+        help_text=_('Bank account this cheque book belongs to.')
+    )
+    book_no = models.CharField(
+        max_length=50,
+        verbose_name=_('Book Number'),
+        help_text=_('Unique cheque book identifier (e.g., BK-2025-01).')
+    )
+    prefix = models.CharField(
+        max_length=10,
+        blank=True,
+        default='',
+        verbose_name=_('Prefix'),
+        help_text=_('Prefix for leaf numbers (e.g., "00", "CHQ").')
+    )
+    start_serial = models.PositiveIntegerField(
+        verbose_name=_('Start Serial'),
+        help_text=_('Starting serial number (e.g., 1001).')
+    )
+    end_serial = models.PositiveIntegerField(
+        verbose_name=_('End Serial'),
+        help_text=_('Ending serial number (e.g., 1050).')
+    )
+    issue_date = models.DateField(
+        verbose_name=_('Issue Date'),
+        help_text=_('Date the book was received from bank.')
+    )
+    # is_active inherited from StatusMixin
+    
+    class Meta:
+        verbose_name = _('Cheque Book')
+        verbose_name_plural = _('Cheque Books')
+        ordering = ['-issue_date', 'book_no']
+        unique_together = ['bank_account', 'book_no']
+        indexes = [
+            models.Index(fields=['bank_account', 'is_active']),
+        ]
+    
+    def __str__(self) -> str:
+        return f"{self.book_no} ({self.bank_account.title})"
+    
+    def clean(self) -> None:
+        """Validate serial range."""
+        from django.core.exceptions import ValidationError
+        
+        if self.end_serial < self.start_serial:
+            raise ValidationError({
+                'end_serial': _('End serial must be greater than or equal to start serial.')
+            })
+        
+        # Check for overlapping ranges in the same bank account
+        if not self.pk:  # Only on creation
+            overlapping = ChequeBook.objects.filter(
+                bank_account=self.bank_account
+            ).filter(
+                models.Q(start_serial__lte=self.end_serial, end_serial__gte=self.start_serial)
+            ).exists()
+            
+            if overlapping:
+                raise ValidationError(
+                    _('Serial range overlaps with an existing cheque book for this bank account.')
+                )
+    
+    def save(self, *args, **kwargs) -> None:
+        """
+        Override save to validate and generate leaves on creation.
+        """
+        from django.db import transaction
+        
+        self.clean()
+        is_new = self.pk is None
+        
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            
+            if is_new:
+                # Generate cheque leaves for this book
+                self._generate_leaves()
+    
+    def _generate_leaves(self) -> None:
+        """Generate ChequeLeaf records for the serial range."""
+        leaves = []
+        for serial in range(self.start_serial, self.end_serial + 1):
+            leaf_number = f"{self.prefix}{serial}"
+            leaves.append(ChequeLeaf(
+                book=self,
+                leaf_number=leaf_number,
+                status=LeafStatus.AVAILABLE
+            ))
+        
+        ChequeLeaf.objects.bulk_create(leaves)
+    
+    @property
+    def total_leaves(self) -> int:
+        """Total number of leaves in this book."""
+        return self.end_serial - self.start_serial + 1
+    
+    @property
+    def available_count(self) -> int:
+        """Count of available leaves."""
+        return self.leaves.filter(status=LeafStatus.AVAILABLE).count()
+    
+    @property
+    def issued_count(self) -> int:
+        """Count of issued leaves."""
+        return self.leaves.filter(status=LeafStatus.ISSUED).count()
+    
+    @property
+    def cancelled_count(self) -> int:
+        """Count of cancelled leaves."""
+        return self.leaves.filter(status=LeafStatus.CANCELLED).count()
+    
+    @property
+    def damaged_count(self) -> int:
+        """Count of damaged leaves."""
+        return self.leaves.filter(status=LeafStatus.DAMAGED).count()
+    
+    def get_next_available_leaf(self) -> Optional['ChequeLeaf']:
+        """Get the next available leaf in this book."""
+        return self.leaves.filter(status=LeafStatus.AVAILABLE).order_by('id').first()
+
+
+class ChequeLeaf(TimeStampedMixin):
+    """
+    Individual cheque leaf (page) in a cheque book.
+    
+    Tracks the status of each physical cheque page.
+    
+    Attributes:
+        book: Parent cheque book
+        leaf_number: Full composite number (e.g., "A1001")
+        status: Current status (Available, Issued, Cancelled, Damaged)
+        void_reason: Reason if cancelled/damaged
+    """
+    
+    book = models.ForeignKey(
+        ChequeBook,
+        on_delete=models.CASCADE,
+        related_name='leaves',
+        verbose_name=_('Cheque Book')
+    )
+    leaf_number = models.CharField(
+        max_length=30,
+        verbose_name=_('Leaf Number'),
+        help_text=_('Full composite cheque number (e.g., A1001).')
+    )
+    status = models.CharField(
+        max_length=15,
+        choices=LeafStatus.choices,
+        default=LeafStatus.AVAILABLE,
+        verbose_name=_('Status')
+    )
+    void_reason = models.TextField(
+        blank=True,
+        verbose_name=_('Void Reason'),
+        help_text=_('Reason for cancellation or damage.')
+    )
+    used_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Used At'),
+        help_text=_('When the leaf was issued/used.')
+    )
+    
+    class Meta:
+        verbose_name = _('Cheque Leaf')
+        verbose_name_plural = _('Cheque Leaves')
+        ordering = ['book', 'id']
+        # Leaf number must be unique per bank account (across all books)
+        constraints = [
+            models.UniqueConstraint(
+                fields=['book', 'leaf_number'],
+                name='unique_leaf_per_book'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['book', 'status']),
+            models.Index(fields=['leaf_number']),
+        ]
+    
+    def __str__(self) -> str:
+        return f"{self.leaf_number} - {self.get_status_display()}"
+    
+    def mark_issued(self) -> None:
+        """Mark this leaf as issued."""
+        from django.utils import timezone
+        
+        if self.status != LeafStatus.AVAILABLE:
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                _(f'Cannot issue leaf. Current status: {self.get_status_display()}')
+            )
+        
+        self.status = LeafStatus.ISSUED
+        self.used_at = timezone.now()
+        self.save(update_fields=['status', 'used_at', 'updated_at'])
+    
+    def mark_cancelled(self, reason: str = '') -> None:
+        """Mark this leaf as cancelled."""
+        if self.status == LeafStatus.ISSUED:
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                _('Cannot cancel an issued leaf. It may already be used in a payment.')
+            )
+        
+        self.status = LeafStatus.CANCELLED
+        self.void_reason = reason
+        self.save(update_fields=['status', 'void_reason', 'updated_at'])
+    
+    def mark_damaged(self, reason: str = '') -> None:
+        """Mark this leaf as damaged."""
+        if self.status == LeafStatus.ISSUED:
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                _('Cannot mark an issued leaf as damaged.')
+            )
+        
+        self.status = LeafStatus.DAMAGED
+        self.void_reason = reason
+        self.save(update_fields=['status', 'void_reason', 'updated_at'])
+
+
+class StatementStatus(models.TextChoices):
+    """
+    Status choices for BankStatement.
+    """
+    DRAFT = 'DRAFT', _('Draft')
+    RECONCILING = 'RECONCILING', _('Reconciling')
+    RECONCILED = 'RECONCILED', _('Reconciled')
+    LOCKED = 'LOCKED', _('Locked')
+
+
+class BankStatement(AuditLogMixin):
+    """
+    Bank statement header for a specific month.
+    
+    Represents an external bank statement uploaded for reconciliation
+    against the internal General Ledger (Cash Book).
+    
+    Attributes:
+        bank_account: The bank account this statement is for
+        month: Month number (1-12)
+        year: Fiscal year reference
+        opening_balance: Statement opening balance
+        closing_balance: Statement closing balance
+        is_locked: Whether statement is locked after reconciliation
+        file: Uploaded statement file (CSV/PDF)
+        status: Current reconciliation status
+    """
+    
+    bank_account = models.ForeignKey(
+        'core.BankAccount',
+        on_delete=models.PROTECT,
+        related_name='statements',
+        verbose_name=_('Bank Account'),
+        help_text=_('Bank account this statement belongs to.')
+    )
+    month = models.PositiveSmallIntegerField(
+        verbose_name=_('Month'),
+        help_text=_('Statement month (1-12).')
+    )
+    year = models.ForeignKey(
+        'budgeting.FiscalYear',
+        on_delete=models.PROTECT,
+        related_name='bank_statements',
+        verbose_name=_('Fiscal Year'),
+        help_text=_('Fiscal year this statement belongs to.')
+    )
+    opening_balance = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Opening Balance'),
+        help_text=_('Balance at the start of the statement period.')
+    )
+    closing_balance = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Closing Balance'),
+        help_text=_('Balance at the end of the statement period.')
+    )
+    status = models.CharField(
+        max_length=15,
+        choices=StatementStatus.choices,
+        default=StatementStatus.DRAFT,
+        verbose_name=_('Status')
+    )
+    is_locked = models.BooleanField(
+        default=False,
+        verbose_name=_('Is Locked'),
+        help_text=_('Whether this statement is locked after reconciliation.')
+    )
+    file = models.FileField(
+        upload_to='bank_statements/%Y/%m/',
+        blank=True,
+        null=True,
+        verbose_name=_('Statement File'),
+        help_text=_('Uploaded bank statement file (CSV or PDF).')
+    )
+    notes = models.TextField(
+        blank=True,
+        verbose_name=_('Notes'),
+        help_text=_('Additional notes about this statement.')
+    )
+    
+    class Meta:
+        verbose_name = _('Bank Statement')
+        verbose_name_plural = _('Bank Statements')
+        ordering = ['-year__start_date', '-month']
+        unique_together = ['bank_account', 'month', 'year']
+        indexes = [
+            models.Index(fields=['bank_account', 'year', 'month']),
+            models.Index(fields=['status']),
+        ]
+    
+    def __str__(self) -> str:
+        month_name = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ][self.month - 1]
+        return f"{self.bank_account.title} - {month_name} {self.year.year_name}"
+    
+    def clean(self) -> None:
+        """Validate month range."""
+        from django.core.exceptions import ValidationError
+        
+        if self.month < 1 or self.month > 12:
+            raise ValidationError({
+                'month': _('Month must be between 1 and 12.')
+            })
+    
+    def save(self, *args, **kwargs) -> None:
+        """Override save to validate."""
+        self.clean()
+        super().save(*args, **kwargs)
+    
+    @property
+    def total_debits(self) -> Decimal:
+        """Total debit (withdrawal) amount from statement lines."""
+        from django.db.models import Sum
+        result = self.lines.aggregate(total=Sum('debit'))
+        return result['total'] or Decimal('0.00')
+    
+    @property
+    def total_credits(self) -> Decimal:
+        """Total credit (deposit) amount from statement lines."""
+        from django.db.models import Sum
+        result = self.lines.aggregate(total=Sum('credit'))
+        return result['total'] or Decimal('0.00')
+    
+    @property
+    def reconciled_count(self) -> int:
+        """Count of reconciled lines."""
+        return self.lines.filter(is_reconciled=True).count()
+    
+    @property
+    def unreconciled_count(self) -> int:
+        """Count of unreconciled lines."""
+        return self.lines.filter(is_reconciled=False).count()
+    
+    @property
+    def calculated_closing(self) -> Decimal:
+        """Calculate closing balance from opening + credits - debits."""
+        return self.opening_balance + self.total_credits - self.total_debits
+    
+    def lock(self) -> None:
+        """Lock the statement after reconciliation is complete."""
+        from django.core.exceptions import ValidationError
+        
+        if self.is_locked:
+            raise ValidationError(_('Statement is already locked.'))
+        
+        self.is_locked = True
+        self.status = StatementStatus.LOCKED
+        self.save(update_fields=['is_locked', 'status', 'updated_at'])
+
+
+class BankStatementLine(TimeStampedMixin):
+    """
+    Individual line item from a bank statement.
+    
+    Represents a single transaction from the bank's perspective.
+    Can be matched to a JournalEntry from our GL.
+    
+    Attributes:
+        statement: Parent bank statement
+        date: Transaction date
+        description: Transaction description from bank
+        debit: Withdrawal amount (money out)
+        credit: Deposit amount (money in)
+        ref_no: Bank's reference/cheque number
+        balance: Running balance after this transaction
+        is_reconciled: Whether this line has been matched
+        matched_entry: Link to the matching JournalEntry
+    """
+    
+    statement = models.ForeignKey(
+        BankStatement,
+        on_delete=models.CASCADE,
+        related_name='lines',
+        verbose_name=_('Statement')
+    )
+    date = models.DateField(
+        verbose_name=_('Transaction Date'),
+        help_text=_('Date of the transaction as per bank.')
+    )
+    description = models.CharField(
+        max_length=255,
+        verbose_name=_('Description'),
+        help_text=_('Transaction description from bank statement.')
+    )
+    debit = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Debit (Withdrawal)'),
+        help_text=_('Amount debited/withdrawn from account.')
+    )
+    credit = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Credit (Deposit)'),
+        help_text=_('Amount credited/deposited to account.')
+    )
+    ref_no = models.CharField(
+        max_length=50,
+        blank=True,
+        db_index=True,
+        verbose_name=_('Reference No'),
+        help_text=_('Cheque number or transaction reference from bank.')
+    )
+    balance = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Balance'),
+        help_text=_('Running balance after this transaction.')
+    )
+    is_reconciled = models.BooleanField(
+        default=False,
+        verbose_name=_('Is Reconciled'),
+        help_text=_('Whether this line has been matched with GL entry.')
+    )
+    matched_entry = models.OneToOneField(
+        JournalEntry,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bank_match',
+        verbose_name=_('Matched Entry'),
+        help_text=_('The GL journal entry this line is matched to.')
+    )
+    
+    class Meta:
+        verbose_name = _('Bank Statement Line')
+        verbose_name_plural = _('Bank Statement Lines')
+        ordering = ['statement', 'date', 'id']
+        indexes = [
+            models.Index(fields=['statement', 'is_reconciled']),
+            models.Index(fields=['ref_no']),
+            models.Index(fields=['date']),
+        ]
+    
+    def __str__(self) -> str:
+        amount = self.debit if self.debit > 0 else self.credit
+        txn_type = 'DR' if self.debit > 0 else 'CR'
+        return f"{self.date} - {txn_type} {amount} - {self.description[:30]}"
+    
+    def clean(self) -> None:
+        """Validate that either debit or credit is set."""
+        from django.core.exceptions import ValidationError
+        
+        if self.debit > 0 and self.credit > 0:
+            raise ValidationError(
+                _('A statement line cannot have both debit and credit amounts.')
+            )
+    
+    def save(self, *args, **kwargs) -> None:
+        """Override save to validate."""
+        self.clean()
+        super().save(*args, **kwargs)
+    
+    @property
+    def amount(self) -> Decimal:
+        """Get the transaction amount (positive for credit, negative for debit)."""
+        if self.credit > 0:
+            return self.credit
+        return -self.debit
+    
+    def match_with_entry(self, entry: JournalEntry) -> None:
+        """
+        Match this statement line with a GL journal entry.
+        
+        Args:
+            entry: The JournalEntry to match with.
+            
+        Raises:
+            ValidationError: If already reconciled or entry already matched.
+        """
+        from django.core.exceptions import ValidationError
+        from django.utils import timezone
+        
+        if self.is_reconciled:
+            raise ValidationError(_('This statement line is already reconciled.'))
+        
+        if entry.is_reconciled:
+            raise ValidationError(_('This journal entry is already reconciled.'))
+        
+        if hasattr(entry, 'bank_match') and entry.bank_match:
+            raise ValidationError(_('This journal entry is already matched.'))
+        
+        # Update statement line
+        self.is_reconciled = True
+        self.matched_entry = entry
+        self.save(update_fields=['is_reconciled', 'matched_entry', 'updated_at'])
+        
+        # Update journal entry
+        entry.is_reconciled = True
+        entry.reconciled_date = timezone.now().date()
+        entry.save(update_fields=['is_reconciled', 'reconciled_date', 'updated_at'])
+    
+    def unmatch(self) -> None:
+        """
+        Remove the match between this line and its journal entry.
+        
+        Raises:
+            ValidationError: If not reconciled or statement is locked.
+        """
+        from django.core.exceptions import ValidationError
+        
+        if not self.is_reconciled:
+            raise ValidationError(_('This statement line is not reconciled.'))
+        
+        if self.statement.is_locked:
+            raise ValidationError(_('Cannot unmatch - statement is locked.'))
+        
+        # Update journal entry first
+        if self.matched_entry:
+            self.matched_entry.is_reconciled = False
+            self.matched_entry.reconciled_date = None
+            self.matched_entry.save(update_fields=['is_reconciled', 'reconciled_date', 'updated_at'])
+        
+        # Update statement line
+        self.is_reconciled = False
+        self.matched_entry = None
+        self.save(update_fields=['is_reconciled', 'matched_entry', 'updated_at'])
 

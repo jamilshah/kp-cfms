@@ -1,0 +1,220 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Expenditure Dashboard Template
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Expenditure Dashboard - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item active">Expenditure</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-receipt"></i> Expenditure Dashboard</h2>
+    <div>
+        <a href="{% url 'expenditure:bill_create' %}" class="btn btn-cfms">
+            <i class="bi bi-plus-circle"></i> New Bill
+        </a>
+    </div>
+</div>
+
+{% if active_fiscal_year %}
+<div class="alert alert-info">
+    <i class="bi bi-calendar3"></i> 
+    Active Fiscal Year: <strong>{{ active_fiscal_year.year_name }}</strong>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-value">{{ total_bills|default:0 }}</div>
+                <div class="stat-label">Total Bills</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card warning">
+            <div class="card-body">
+                <div class="stat-value text-warning">{{ submitted_bills|default:0 }}</div>
+                <div class="stat-label">Pending Approval</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card success">
+            <div class="card-body">
+                <div class="stat-value text-success">{{ approved_bills|default:0 }}</div>
+                <div class="stat-label">Ready for Payment</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-value text-primary">{{ paid_bills|default:0 }}</div>
+                <div class="stat-label">Paid Bills</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Pending Approvals -->
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-hourglass-split"></i> Pending Approvals</span>
+                <a href="{% url 'expenditure:bill_list' %}?status=SUBMITTED" class="btn btn-sm btn-outline-primary">
+                    View All
+                </a>
+            </div>
+            <div class="card-body">
+                {% if pending_approval %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>Bill #</th>
+                                <th>Payee</th>
+                                <th>Amount</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for bill in pending_approval|slice:":5" %}
+                            <tr>
+                                <td>{{ bill.id }}</td>
+                                <td>{{ bill.payee.name|truncatechars:20 }}</td>
+                                <td>Rs. {{ bill.gross_amount|floatformat:2 }}</td>
+                                <td>
+                                    <a href="{% url 'expenditure:bill_detail' bill.pk %}" 
+                                       class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted text-center mb-0">No bills pending approval.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Bills -->
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-clock-history"></i> Recent Bills</span>
+                <a href="{% url 'expenditure:bill_list' %}" class="btn btn-sm btn-outline-primary">
+                    View All
+                </a>
+            </div>
+            <div class="card-body">
+                {% if recent_bills %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>Bill #</th>
+                                <th>Payee</th>
+                                <th>Status</th>
+                                <th>Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for bill in recent_bills %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'expenditure:bill_detail' bill.pk %}">
+                                        {{ bill.id }}
+                                    </a>
+                                </td>
+                                <td>{{ bill.payee.name|truncatechars:20 }}</td>
+                                <td>
+                                    {% if bill.status == 'DRAFT' %}
+                                    <span class="badge bg-secondary">Draft</span>
+                                    {% elif bill.status == 'SUBMITTED' %}
+                                    <span class="badge bg-warning text-dark">Submitted</span>
+                                    {% elif bill.status == 'APPROVED' %}
+                                    <span class="badge bg-success">Approved</span>
+                                    {% elif bill.status == 'PAID' %}
+                                    <span class="badge bg-primary">Paid</span>
+                                    {% elif bill.status == 'REJECTED' %}
+                                    <span class="badge bg-danger">Rejected</span>
+                                    {% endif %}
+                                </td>
+                                <td>Rs. {{ bill.gross_amount|floatformat:2 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted text-center mb-0">No bills found.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Links -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-lightning"></i> Quick Actions
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <a href="{% url 'expenditure:bill_create' %}" class="btn btn-outline-primary w-100 mb-2">
+                            <i class="bi bi-plus-circle"></i> Create Bill
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{% url 'expenditure:payee_create' %}" class="btn btn-outline-secondary w-100 mb-2">
+                            <i class="bi bi-person-plus"></i> Add Payee
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{% url 'expenditure:payment_create' %}" class="btn btn-outline-success w-100 mb-2">
+                            <i class="bi bi-credit-card"></i> Issue Payment
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{% url 'expenditure:payment_list' %}" class="btn btn-outline-info w-100 mb-2">
+                            <i class="bi bi-list-check"></i> View Payments
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle"></i>
+    No active fiscal year found. Please contact your administrator to activate a fiscal year.
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,191 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Payment Form Template for Cheque Issuance
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Issue Payment - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'expenditure:dashboard' %}">Expenditure</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'expenditure:payment_list' %}">Payments</a></li>
+        <li class="breadcrumb-item active">Issue Payment</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-credit-card"></i> Issue Payment
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if bill %}
+                <!-- Pre-selected Bill Info -->
+                <div class="alert alert-info mb-4">
+                    <h6><i class="bi bi-info-circle"></i> Payment for Bill #{{ bill.id }}</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Payee:</strong> {{ bill.payee.name }}<br>
+                            <strong>Description:</strong> {{ bill.description|truncatechars:50 }}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Bill Amount:</strong> Rs. {{ bill.gross_amount|floatformat:2 }}<br>
+                            <strong>Tax Deduction:</strong> Rs. {{ bill.tax_amount|floatformat:2 }}<br>
+                            <strong class="fs-5">Net Payable: Rs. {{ bill.net_amount|floatformat:2 }}</strong>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    
+                    {% if form.errors %}
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Please correct the errors below.
+                        {{ form.non_field_errors }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if not bill %}
+                    <!-- Bill Selection (if not pre-selected) -->
+                    <div class="mb-4">
+                        <label for="{{ form.bill.id_for_label }}" class="form-label">
+                            Select Approved Bill <span class="text-danger">*</span>
+                        </label>
+                        {{ form.bill }}
+                        {% if form.bill.errors %}
+                        <div class="invalid-feedback d-block">{{ form.bill.errors.0 }}</div>
+                        {% endif %}
+                        <small class="text-muted">Only approved bills are shown.</small>
+                    </div>
+                    
+                    <!-- Bill Details (populated via JS) -->
+                    <div id="bill_details" class="alert alert-light mb-4" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <strong>Payee:</strong> <span id="payee_name">-</span><br>
+                                <strong>Description:</strong> <span id="bill_description">-</span>
+                            </div>
+                            <div class="col-md-6">
+                                <strong class="fs-5">Net Payable: Rs. <span id="bill_net_amount">0.00</span></strong>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <!-- Hidden bill field when pre-selected -->
+                    <input type="hidden" name="bill" value="{{ bill.pk }}">
+                    {% endif %}
+                    
+                    <!-- Bank Account -->
+                    <div class="mb-4">
+                        <label for="{{ form.bank_account.id_for_label }}" class="form-label">
+                            Bank Account <span class="text-danger">*</span>
+                        </label>
+                        {{ form.bank_account }}
+                        {% if form.bank_account.errors %}
+                        <div class="invalid-feedback d-block">{{ form.bank_account.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label for="{{ form.cheque_number.id_for_label }}" class="form-label">
+                                Cheque Number <span class="text-danger">*</span>
+                            </label>
+                            {{ form.cheque_number }}
+                            {% if form.cheque_number.errors %}
+                            <div class="invalid-feedback d-block">{{ form.cheque_number.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.cheque_date.id_for_label }}" class="form-label">
+                                Cheque Date <span class="text-danger">*</span>
+                            </label>
+                            {{ form.cheque_date }}
+                            {% if form.cheque_date.errors %}
+                            <div class="invalid-feedback d-block">{{ form.cheque_date.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Amount (Read-only) -->
+                    <div class="mb-4">
+                        <label for="{{ form.amount.id_for_label }}" class="form-label">
+                            Payment Amount (Rs.)
+                        </label>
+                        {{ form.amount }}
+                        {% if form.amount.errors %}
+                        <div class="invalid-feedback d-block">{{ form.amount.errors.0 }}</div>
+                        {% endif %}
+                        <small class="text-muted">Auto-set from bill net amount.</small>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>Note:</strong> Submitting this form will immediately post the payment to the General Ledger
+                        and mark the bill as PAID. This action cannot be undone.
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{% if bill %}{% url 'expenditure:bill_detail' bill.pk %}{% else %}{% url 'expenditure:bill_list' %}{% endif %}" 
+                           class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-success" 
+                                onclick="return confirm('Issue this payment? This will post to GL and mark the bill as PAID.');">
+                            <i class="bi bi-check-circle"></i> Issue Payment
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if not bill %}
+<script>
+    // Load bill details when bill is selected
+    document.getElementById('{{ form.bill.id_for_label }}').addEventListener('change', function() {
+        const billId = this.value;
+        const detailsDiv = document.getElementById('bill_details');
+        
+        if (billId) {
+            fetch(`/expenditure/api/bills/${billId}/amount/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('payee_name').textContent = data.payee_name;
+                        document.getElementById('bill_description').textContent = data.description;
+                        document.getElementById('bill_net_amount').textContent = data.net_amount;
+                        document.getElementById('{{ form.amount.id_for_label }}').value = data.net_amount;
+                        detailsDiv.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching bill details:', error);
+                });
+        } else {
+            detailsDiv.style.display = 'none';
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Create Bank Statement - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0">
+                    <i class="bi bi-plus-circle me-2"></i>{{ page_title }}
+                </h2>
+                <a href="{% url 'finance:statement_list' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i> Back to List
+                </a>
+            </div>
+            
+            {% if messages %}
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
+            
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-bank me-2"></i>Statement Details
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label for="id_bank_account" class="form-label">Bank Account *</label>
+                                {{ form.bank_account }}
+                                {% if form.bank_account.errors %}
+                                <div class="invalid-feedback d-block">{{ form.bank_account.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="id_month" class="form-label">Month *</label>
+                                {{ form.month }}
+                                {% if form.month.errors %}
+                                <div class="invalid-feedback d-block">{{ form.month.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="id_year" class="form-label">Fiscal Year *</label>
+                                {{ form.year }}
+                                {% if form.year.errors %}
+                                <div class="invalid-feedback d-block">{{ form.year.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="id_opening_balance" class="form-label">Opening Balance *</label>
+                                {{ form.opening_balance }}
+                                <small class="text-muted">Balance at the start of the month per bank statement</small>
+                                {% if form.opening_balance.errors %}
+                                <div class="invalid-feedback d-block">{{ form.opening_balance.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="id_closing_balance" class="form-label">Closing Balance *</label>
+                                {{ form.closing_balance }}
+                                <small class="text-muted">Balance at the end of the month per bank statement</small>
+                                {% if form.closing_balance.errors %}
+                                <div class="invalid-feedback d-block">{{ form.closing_balance.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label for="id_file" class="form-label">Statement File (Optional)</label>
+                                {{ form.file }}
+                                <small class="text-muted">Upload CSV or PDF. CSV will be auto-parsed to create statement lines.</small>
+                                {% if form.file.errors %}
+                                <div class="invalid-feedback d-block">{{ form.file.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label for="id_notes" class="form-label">Notes (Optional)</label>
+                                {{ form.notes }}
+                                {% if form.notes.errors %}
+                                <div class="invalid-feedback d-block">{{ form.notes.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {% for error in form.non_field_errors %}
+                            <p class="mb-0">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        
+                        <hr>
+                        
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{% url 'finance:statement_list' %}" class="btn btn-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save me-1"></i> Create Statement
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- CSV Format Help -->
+            <div class="card shadow-sm mt-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-question-circle me-2"></i>CSV Format Guide
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2">The CSV file should have the following columns:</p>
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Column</th>
+                                <th>Required</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Date</td><td>Yes</td><td>Transaction date (YYYY-MM-DD or DD/MM/YYYY)</td></tr>
+                            <tr><td>Description</td><td>Yes</td><td>Transaction description</td></tr>
+                            <tr><td>Debit</td><td>Yes</td><td>Withdrawal amount (can be blank for deposits)</td></tr>
+                            <tr><td>Credit</td><td>Yes</td><td>Deposit amount (can be blank for withdrawals)</td></tr>
+                            <tr><td>Balance</td><td>Yes</td><td>Running balance after transaction</td></tr>
+                            <tr><td>Reference</td><td>No</td><td>Cheque number or transaction reference</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    $('.searchable-select').select2({
+        theme: 'bootstrap-5',
+        width: '100%'
+    });
+});
+</script>
+{% endblock %}

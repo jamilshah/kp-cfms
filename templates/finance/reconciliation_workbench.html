@@ -1,0 +1,336 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ page_title }} - CFMS{% endblock %}
+
+{% block extra_css %}
+<style>
+    .workbench-column {
+        max-height: 600px;
+        overflow-y: auto;
+    }
+    .item-row {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .item-row:hover {
+        background-color: rgba(0, 123, 255, 0.1);
+    }
+    .item-row.selected {
+        background-color: rgba(25, 135, 84, 0.2);
+        border-left: 3px solid #198754;
+    }
+    .amount-dr { color: #dc3545; }
+    .amount-cr { color: #198754; }
+    .totals-bar {
+        position: sticky;
+        bottom: 0;
+        background: #f8f9fa;
+        border-top: 2px solid #dee2e6;
+        padding: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="bi bi-check2-square me-2"></i>{{ page_title }}
+        </h2>
+        <div>
+            <form method="post" action="{% url 'finance:auto_reconcile' statement.pk %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-magic me-1"></i> Auto-Reconcile
+                </button>
+            </form>
+            <a href="{% url 'finance:brs_summary' statement.pk %}" class="btn btn-info">
+                <i class="bi bi-file-earmark-text me-1"></i> BRS
+            </a>
+            <a href="{% url 'finance:statement_detail' statement.pk %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Back
+            </a>
+        </div>
+    </div>
+    
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+    
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body text-center">
+                    <h4 class="mb-0">Rs. {{ brs_summary.balance_per_cash_book|floatformat:2 }}</h4>
+                    <small>Cash Book Balance</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body text-center">
+                    <h4 class="mb-0">Rs. {{ brs_summary.add_unpresented_cheques|floatformat:2 }}</h4>
+                    <small>+ Unpresented Cheques</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body text-center">
+                    <h4 class="mb-0">Rs. {{ brs_summary.less_uncredited_deposits|floatformat:2 }}</h4>
+                    <small>- Uncredited Deposits</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card {% if brs_summary.difference == 0 %}bg-success{% else %}bg-danger{% endif %} text-white">
+                <div class="card-body text-center">
+                    <h4 class="mb-0">Rs. {{ brs_summary.difference|floatformat:2 }}</h4>
+                    <small>Difference</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Two-Column Workbench -->
+    <div class="row">
+        <!-- Left Column: GL Entries (Cash Book) -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-book me-2"></i>Cash Book (GL Entries)
+                    </h5>
+                    <span class="badge bg-light text-dark">{{ gl_entries|length }} items</span>
+                </div>
+                <div class="card-body workbench-column p-0">
+                    {% if gl_entries %}
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th style="width: 30px;"><input type="checkbox" id="selectAllGL" class="form-check-input"></th>
+                                <th>Date</th>
+                                <th>Voucher</th>
+                                <th>Ref No</th>
+                                <th class="text-end">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody id="glEntriesList">
+                            {% for entry in gl_entries %}
+                            <tr class="item-row" data-id="{{ entry.id }}" data-type="gl"
+                                data-debit="{{ entry.debit }}" data-credit="{{ entry.credit }}">
+                                <td>
+                                    <input type="checkbox" class="form-check-input gl-checkbox" value="{{ entry.id }}">
+                                </td>
+                                <td>{{ entry.voucher.date }}</td>
+                                <td>
+                                    <small>{{ entry.voucher.voucher_no }}</small>
+                                    <br><span class="text-muted" style="font-size: 0.75rem;">{{ entry.description|truncatechars:30 }}</span>
+                                </td>
+                                <td><code>{{ entry.instrument_no|default:"-" }}</code></td>
+                                <td class="text-end">
+                                    {% if entry.debit > 0 %}
+                                    <span class="amount-dr">Dr {{ entry.debit|floatformat:2 }}</span>
+                                    {% else %}
+                                    <span class="amount-cr">Cr {{ entry.credit|floatformat:2 }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <div class="totals-bar">
+                        <strong>Selected:</strong>
+                        <span id="glSelectedDebit" class="amount-dr">Dr 0.00</span> |
+                        <span id="glSelectedCredit" class="amount-cr">Cr 0.00</span>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-check-circle display-4 text-success"></i>
+                        <p class="text-muted mt-2">All GL entries are reconciled!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right Column: Bank Statement Lines -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-bank me-2"></i>Bank Statement
+                    </h5>
+                    <span class="badge bg-light text-dark">{{ statement_lines|length }} items</span>
+                </div>
+                <div class="card-body workbench-column p-0">
+                    {% if statement_lines %}
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th style="width: 30px;"><input type="checkbox" id="selectAllBank" class="form-check-input"></th>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th>Ref No</th>
+                                <th class="text-end">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bankLinesList">
+                            {% for line in statement_lines %}
+                            <tr class="item-row" data-id="{{ line.id }}" data-type="bank"
+                                data-debit="{{ line.debit }}" data-credit="{{ line.credit }}">
+                                <td>
+                                    <input type="checkbox" class="form-check-input bank-checkbox" value="{{ line.id }}">
+                                </td>
+                                <td>{{ line.date }}</td>
+                                <td>
+                                    <span title="{{ line.description }}">{{ line.description|truncatechars:30 }}</span>
+                                </td>
+                                <td><code>{{ line.ref_no|default:"-" }}</code></td>
+                                <td class="text-end">
+                                    {% if line.debit > 0 %}
+                                    <span class="amount-dr">Dr {{ line.debit|floatformat:2 }}</span>
+                                    {% else %}
+                                    <span class="amount-cr">Cr {{ line.credit|floatformat:2 }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <div class="totals-bar">
+                        <strong>Selected:</strong>
+                        <span id="bankSelectedDebit" class="amount-dr">Dr 0.00</span> |
+                        <span id="bankSelectedCredit" class="amount-cr">Cr 0.00</span>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-check-circle display-4 text-success"></i>
+                        <p class="text-muted mt-2">All statement lines are reconciled!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Match Action Bar -->
+    <div class="card shadow-sm bg-light">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <strong>Manual Match:</strong>
+                Select items from both columns with matching totals, then click Match.
+            </div>
+            <div>
+                <button id="matchBtn" class="btn btn-success btn-lg" disabled>
+                    <i class="bi bi-link-45deg me-1"></i> Match Selected
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden form for manual matching -->
+<form id="matchForm" method="post" action="{% url 'finance:manual_match' statement.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="statement_line_ids" id="statementLineIds">
+    <input type="hidden" name="journal_entry_ids" id="journalEntryIds">
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Calculate selected totals
+    function updateTotals() {
+        let glDebit = 0, glCredit = 0, bankDebit = 0, bankCredit = 0;
+        
+        $('.gl-checkbox:checked').each(function() {
+            const row = $(this).closest('tr');
+            glDebit += parseFloat(row.data('debit')) || 0;
+            glCredit += parseFloat(row.data('credit')) || 0;
+        });
+        
+        $('.bank-checkbox:checked').each(function() {
+            const row = $(this).closest('tr');
+            bankDebit += parseFloat(row.data('debit')) || 0;
+            bankCredit += parseFloat(row.data('credit')) || 0;
+        });
+        
+        $('#glSelectedDebit').text('Dr ' + glDebit.toFixed(2));
+        $('#glSelectedCredit').text('Cr ' + glCredit.toFixed(2));
+        $('#bankSelectedDebit').text('Dr ' + bankDebit.toFixed(2));
+        $('#bankSelectedCredit').text('Cr ' + bankCredit.toFixed(2));
+        
+        // Enable match button if totals match
+        // Bank Debit should equal GL Credit, Bank Credit should equal GL Debit
+        const canMatch = (
+            ($('.gl-checkbox:checked').length > 0 && $('.bank-checkbox:checked').length > 0) &&
+            (Math.abs(bankDebit - glCredit) < 0.01 && Math.abs(bankCredit - glDebit) < 0.01)
+        );
+        
+        $('#matchBtn').prop('disabled', !canMatch);
+        
+        if (canMatch) {
+            $('#matchBtn').removeClass('btn-success').addClass('btn-success');
+        }
+    }
+    
+    // Checkbox handlers
+    $('.gl-checkbox, .bank-checkbox').on('change', function() {
+        $(this).closest('tr').toggleClass('selected', this.checked);
+        updateTotals();
+    });
+    
+    // Select all handlers
+    $('#selectAllGL').on('change', function() {
+        $('.gl-checkbox').prop('checked', this.checked).trigger('change');
+    });
+    
+    $('#selectAllBank').on('change', function() {
+        $('.bank-checkbox').prop('checked', this.checked).trigger('change');
+    });
+    
+    // Row click to toggle
+    $('.item-row').on('click', function(e) {
+        if (!$(e.target).is('input')) {
+            const checkbox = $(this).find('input[type="checkbox"]');
+            checkbox.prop('checked', !checkbox.prop('checked')).trigger('change');
+        }
+    });
+    
+    // Match button handler
+    $('#matchBtn').on('click', function() {
+        const glIds = $('.gl-checkbox:checked').map(function() { return this.value; }).get();
+        const bankIds = $('.bank-checkbox:checked').map(function() { return this.value; }).get();
+        
+        $('#journalEntryIds').val(glIds.join(','));
+        $('#statementLineIds').val(bankIds.join(','));
+        
+        // Submit via AJAX
+        $.ajax({
+            url: '{% url "finance:manual_match" statement.pk %}',
+            method: 'POST',
+            data: $('#matchForm').serialize(),
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + response.error);
+                }
+            },
+            error: function() {
+                alert('An error occurred. Please try again.');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

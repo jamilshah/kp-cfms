@@ -1,0 +1,182 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Bill Create/Edit Form Template
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if object %}Edit Bill{% else %}Create Bill{% endif %} - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'expenditure:dashboard' %}">Expenditure</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'expenditure:bill_list' %}">Bills</a></li>
+        <li class="breadcrumb-item active">{% if object %}Edit{% else %}Create{% endif %}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-receipt"></i>
+                    {% if object %}Edit Bill #{{ object.id }}{% else %}Create New Bill{% endif %}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    
+                    {% if form.errors %}
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Please correct the errors below.
+                        {{ form.non_field_errors }}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Header Information -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label">Fiscal Year</label>
+                            <input type="text" class="form-control bg-light" 
+                                   value="FY {{ current_fiscal_year.year_name }}" readonly>
+                            <small class="text-muted">Current operating fiscal year (auto-selected)</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.bill_date.id_for_label }}" class="form-label">
+                                Bill Date <span class="text-danger">*</span>
+                            </label>
+                            {{ form.bill_date }}
+                            {% if form.bill_date.errors %}
+                            <div class="invalid-feedback d-block">{{ form.bill_date.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label for="{{ form.payee.id_for_label }}" class="form-label">
+                                Payee/Vendor <span class="text-danger">*</span>
+                            </label>
+                            {{ form.payee }}
+                            {% if form.payee.errors %}
+                            <div class="invalid-feedback d-block">{{ form.payee.errors.0 }}</div>
+                            {% endif %}
+                            <small class="text-muted">
+                                <a href="{% url 'expenditure:payee_create' %}" target="_blank">
+                                    <i class="bi bi-plus-circle"></i> Add new payee
+                                </a>
+                            </small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.bill_number.id_for_label }}" class="form-label">
+                                Vendor Invoice Number <span class="text-danger">*</span>
+                            </label>
+                            {{ form.bill_number }}
+                            {% if form.bill_number.errors %}
+                            <div class="invalid-feedback d-block">{{ form.bill_number.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="{{ form.budget_head.id_for_label }}" class="form-label">
+                            Budget Head (Expense Account) <span class="text-danger">*</span>
+                        </label>
+                        {{ form.budget_head }}
+                        {% if form.budget_head.errors %}
+                        <div class="invalid-feedback d-block">{{ form.budget_head.errors.0 }}</div>
+                        {% endif %}
+                        <small class="text-muted">Select the expense head to charge.</small>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="{{ form.description.id_for_label }}" class="form-label">
+                            Description <span class="text-danger">*</span>
+                        </label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                        <div class="invalid-feedback d-block">{{ form.description.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Amount Section -->
+                    <div class="card bg-light mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="bi bi-calculator"></i> Amount Details</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <label for="{{ form.gross_amount.id_for_label }}" class="form-label">
+                                        Gross Amount (Rs.) <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.gross_amount }}
+                                    {% if form.gross_amount.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.gross_amount.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.tax_amount.id_for_label }}" class="form-label">
+                                        Tax Deduction (Rs.)
+                                    </label>
+                                    {{ form.tax_amount }}
+                                    {% if form.tax_amount.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.tax_amount.errors.0 }}</div>
+                                    {% endif %}
+                                    <small class="text-muted">Income Tax + GST</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Net Payable (Rs.)</label>
+                                    <input type="text" id="net_amount_display" class="form-control" readonly 
+                                           value="0.00" style="background-color: #e9ecef; font-weight: bold;">
+                                    <small class="text-muted">Auto-calculated</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'expenditure:bill_list' %}" class="btn btn-secondary">
+                            <i class="bi bi-x-circle"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-cfms">
+                            <i class="bi bi-check-circle"></i> 
+                            {% if object %}Update Bill{% else %}Create Bill{% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-calculate net amount
+    function calculateNetAmount() {
+        const grossAmount = parseFloat(document.getElementById('{{ form.gross_amount.id_for_label }}').value) || 0;
+        const taxAmount = parseFloat(document.getElementById('{{ form.tax_amount.id_for_label }}').value) || 0;
+        const netAmount = grossAmount - taxAmount;
+        document.getElementById('net_amount_display').value = netAmount.toFixed(2);
+    }
+    
+    document.getElementById('{{ form.gross_amount.id_for_label }}').addEventListener('input', calculateNetAmount);
+    document.getElementById('{{ form.tax_amount.id_for_label }}').addEventListener('input', calculateNetAmount);
+    
+    // Calculate on page load
+    calculateNetAmount();
+</script>
+{% endblock %}

@@ -1,0 +1,206 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Cheque Book Detail Template with Leaf Grid
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Cheque Book {{ chequebook.book_no }} - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:setup_dashboard' %}">Setup</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:setup_chequebooks' %}">Cheque Books</a></li>
+        <li class="breadcrumb-item active">{{ chequebook.book_no }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">
+        <i class="bi bi-journal-bookmark"></i> {{ page_title }}
+        {% if chequebook.is_active %}
+        <span class="badge bg-success">Active</span>
+        {% else %}
+        <span class="badge bg-secondary">Inactive</span>
+        {% endif %}
+    </h2>
+    <a href="{% url 'budgeting:setup_chequebooks' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to List
+    </a>
+</div>
+
+<!-- Book Info -->
+<div class="row mb-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> Book Details
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Book Number</dt>
+                    <dd class="col-sm-8">{{ chequebook.book_no }}</dd>
+                    
+                    <dt class="col-sm-4">Bank Account</dt>
+                    <dd class="col-sm-8">{{ chequebook.bank_account.title }}</dd>
+                    
+                    <dt class="col-sm-4">Bank</dt>
+                    <dd class="col-sm-8">{{ chequebook.bank_account.bank_name }}</dd>
+                    
+                    <dt class="col-sm-4">Account No</dt>
+                    <dd class="col-sm-8">{{ chequebook.bank_account.account_number }}</dd>
+                    
+                    <dt class="col-sm-4">Prefix</dt>
+                    <dd class="col-sm-8">{{ chequebook.prefix|default:"-" }}</dd>
+                    
+                    <dt class="col-sm-4">Serial Range</dt>
+                    <dd class="col-sm-8">{{ chequebook.start_serial }} - {{ chequebook.end_serial }}</dd>
+                    
+                    <dt class="col-sm-4">Issue Date</dt>
+                    <dd class="col-sm-8">{{ chequebook.issue_date|date:"d-M-Y" }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-pie-chart"></i> Leaf Summary
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-3">
+                        <div class="border rounded p-3">
+                            <h3 class="mb-1">{{ chequebook.total_leaves }}</h3>
+                            <small class="text-muted">Total</small>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="border rounded p-3 bg-success bg-opacity-10">
+                            <h3 class="mb-1 text-success">{{ chequebook.available_count }}</h3>
+                            <small class="text-muted">Available</small>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="border rounded p-3 bg-primary bg-opacity-10">
+                            <h3 class="mb-1 text-primary">{{ chequebook.issued_count }}</h3>
+                            <small class="text-muted">Issued</small>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="border rounded p-3 bg-danger bg-opacity-10">
+                            <h3 class="mb-1 text-danger">{{ chequebook.cancelled_count|add:chequebook.damaged_count }}</h3>
+                            <small class="text-muted">Void</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <span class="badge bg-success me-2">●</span> Available
+                        <span class="badge bg-primary mx-2">●</span> Issued
+                        <span class="badge bg-danger mx-2">●</span> Cancelled
+                        <span class="badge bg-secondary mx-2">●</span> Damaged
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Leaf Grid -->
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-grid-3x3"></i> Cheque Leaves
+    </div>
+    <div class="card-body">
+        <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 row-cols-xl-8 g-2">
+            {% for leaf in leaves %}
+            <div class="col">
+                <div class="card h-100 
+                    {% if leaf.status == 'AVAILABLE' %}border-success
+                    {% elif leaf.status == 'ISSUED' %}border-primary
+                    {% elif leaf.status == 'CANCELLED' %}border-danger
+                    {% elif leaf.status == 'DAMAGED' %}border-secondary
+                    {% endif %}">
+                    <div class="card-body p-2 text-center">
+                        <small class="fw-bold">{{ leaf.leaf_number }}</small>
+                        <br>
+                        {% if leaf.status == 'AVAILABLE' %}
+                        <span class="badge bg-success">Available</span>
+                        {% elif leaf.status == 'ISSUED' %}
+                        <span class="badge bg-primary">Issued</span>
+                        {% elif leaf.status == 'CANCELLED' %}
+                        <span class="badge bg-danger">Cancelled</span>
+                        {% elif leaf.status == 'DAMAGED' %}
+                        <span class="badge bg-secondary">Damaged</span>
+                        {% endif %}
+                        
+                        {% if leaf.status == 'AVAILABLE' %}
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#cancelModal{{ leaf.pk }}"
+                                    title="Cancel this leaf">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                        </div>
+                        {% endif %}
+                        
+                        {% if leaf.void_reason %}
+                        <small class="text-muted d-block mt-1" title="{{ leaf.void_reason }}">
+                            <i class="bi bi-chat-text"></i>
+                        </small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Cancel Modal for this leaf -->
+            {% if leaf.status == 'AVAILABLE' %}
+            <div class="modal fade" id="cancelModal{{ leaf.pk }}" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <form method="post" action="{% url 'budgeting:setup_chequeleaf_cancel' chequebook.pk leaf.pk %}">
+                            {% csrf_token %}
+                            <div class="modal-header">
+                                <h5 class="modal-title">Cancel Cheque Leaf {{ leaf.leaf_number }}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert alert-warning">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    This action cannot be undone. The leaf will be marked as cancelled.
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Reason for Cancellation</label>
+                                    <textarea name="reason" class="form-control" rows="2" 
+                                              placeholder="e.g., page torn, printing error" required></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="bi bi-x-circle"></i> Cancel Leaf
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

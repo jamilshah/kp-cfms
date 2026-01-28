@@ -20,6 +20,10 @@ Description: Base template with Bootstrap 5 and navigation.
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Select2 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <!-- Select2 Bootstrap 5 Theme -->
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.9"></script>
     
@@ -48,31 +52,56 @@ Description: Base template with Bootstrap 5 and navigation.
             bottom: 0;
             left: 0;
             z-index: 100;
-            padding: 20px 0;
-            box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
-            background-color: #212529;
-            width: 250px;
+            padding: 12px 12px;
+            box-shadow: inset -1px 0 0 rgba(0, 0, 0, .15);
+            background: #000000; /* enforced black */
+            width: 240px;
+            overflow-y: auto;
+            border-right: 1px solid rgba(255,255,255,0.03);
         }
-        
+
+        .sidebar .accordion-button {
+            background: transparent;
+            color: #ffffff; /* white text */
+            padding: 0.5rem 0.75rem;
+            border: none;
+            font-weight: 600;
+        }
+
+        .sidebar .accordion-button:not(.collapsed) {
+            background-color: rgba(255,255,255,0.03);
+        }
+
+        .sidebar .accordion-button::after {
+            filter: brightness(0.9);
+            color: rgba(255,255,255,0.65);
+        }
+
         .sidebar .nav-link {
-            color: rgba(255, 255, 255, 0.75);
-            padding: 0.75rem 1rem;
-            border-radius: 0.25rem;
-            margin: 0.1rem 0.5rem;
+            color: #ffffff; /* white text */
+            padding: 0.45rem 0.6rem;
+            border-radius: 0.35rem;
+            margin: 0.18rem 0;
+            padding-left: 1.1rem;
+            font-size: 0.95rem;
         }
-        
+
         .sidebar .nav-link:hover {
-            color: white;
-            background-color: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            background-color: rgba(255, 255, 255, 0.04);
         }
-        
+
         .sidebar .nav-link.active {
-            color: white;
-            background-color: var(--cfms-primary);
+            color: #ffffff;
+            background-color: rgba(255,255,255,0.02);
+            border-left: 4px solid var(--cfms-primary);
+            padding-left: 0.8rem;
+            margin-left: -0.4rem;
         }
-        
+
         .sidebar .nav-link i {
-            margin-right: 0.5rem;
+            margin-right: 0.55rem;
+            color: #ffffff;
         }
         
         .sidebar-heading {
@@ -214,60 +243,157 @@ Description: Base template with Bootstrap 5 and navigation.
         </div>
     </nav>
 
-    <!-- Sidebar -->
+    <!-- Sidebar (collapsible categories) -->
     <nav class="sidebar">
-        <ul class="nav flex-column">
-            <li class="nav-item">
-                <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'budgeting:dashboard' %}">
-                    <i class="bi bi-speedometer2"></i> Dashboard
+        <div class="accordion" id="sidebarAccordion">
+            <div class="mb-2 px-2">
+                <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %} d-flex align-items-center" href="{% url 'budgeting:dashboard' %}">
+                    <i class="bi bi-speedometer2 me-2"></i> Dashboard
                 </a>
-            </li>
-            
-            <li class="sidebar-heading">Budget Planning</li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'fiscal_year' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:fiscal_year_list' %}">
-                    <i class="bi bi-calendar3"></i> Fiscal Years
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'allocation' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:allocation_list' %}">
-                    <i class="bi bi-list-ul"></i> Budget Allocations
-                </a>
-            </li>
-            
-            <li class="sidebar-heading">Budget Entry</li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'receipt' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:receipt_create' %}">
-                    <i class="bi bi-arrow-down-circle"></i> BDR-1: Receipts
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'expenditure' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:expenditure_create' %}">
-                    <i class="bi bi-arrow-up-circle"></i> BDC-1: Expenditure
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'establishment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:establishment_list' %}">
-                    <i class="bi bi-people"></i> BDC-2: Establishment
-                </a>
-            </li>
-            
-            <li class="sidebar-heading">Reports</li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'sae' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:sae_list' %}">
-                    <i class="bi bi-file-earmark-text"></i> SAE Records
-                </a>
-            </li>
-            
+            </div>
+
+            <!-- Budget Planning -->
+            <div class="accordion-item bg-transparent border-0">
+                <h2 class="accordion-header" id="headingBudgetPlanning">
+                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseBudgetPlanning" aria-expanded="false" aria-controls="collapseBudgetPlanning">
+                        <i class="bi bi-calendar3 me-2"></i> Budget Planning
+                    </button>
+                </h2>
+                <div id="collapseBudgetPlanning" class="accordion-collapse collapse {% if 'fiscal_year' in request.resolver_match.url_name or 'allocation' in request.resolver_match.url_name %}show{% endif %}" aria-labelledby="headingBudgetPlanning" data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body p-2">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link {% if 'fiscal_year' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:fiscal_year_list' %}"><i class="bi bi-calendar2 me-2"></i> Fiscal Years</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'allocation' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:allocation_list' %}"><i class="bi bi-list-ul me-2"></i> Budget Allocations</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Budget Entry -->
+            <div class="accordion-item bg-transparent border-0">
+                <h2 class="accordion-header" id="headingBudgetEntry">
+                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseBudgetEntry" aria-expanded="false" aria-controls="collapseBudgetEntry">
+                        <i class="bi bi-journal-text me-2"></i> Budget Entry
+                    </button>
+                </h2>
+                <div id="collapseBudgetEntry" class="accordion-collapse collapse {% if 'receipt' in request.resolver_match.url_name or 'expenditure' in request.resolver_match.url_name or 'establishment' in request.resolver_match.url_name %}show{% endif %}" aria-labelledby="headingBudgetEntry" data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body p-2">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link {% if 'receipt' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:receipt_create' %}"><i class="bi bi-arrow-down-circle me-2"></i> BDR-1: Receipts</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'expenditure' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:expenditure_create' %}"><i class="bi bi-arrow-up-circle me-2"></i> BDC-1: Expenditure</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'establishment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:establishment_list' %}"><i class="bi bi-people me-2"></i> BDC-2: Establishment</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Budget Reports -->
+            <div class="accordion-item bg-transparent border-0">
+                <h2 class="accordion-header" id="headingBudgetReports">
+                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseBudgetReports" aria-expanded="false" aria-controls="collapseBudgetReports">
+                        <i class="bi bi-file-earmark-text me-2"></i> Budget Reports
+                    </button>
+                </h2>
+                <div id="collapseBudgetReports" class="accordion-collapse collapse {% if 'sae' in request.resolver_match.url_name %}show{% endif %}" aria-labelledby="headingBudgetReports" data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body p-2">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link {% if 'sae' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:sae_list' %}"><i class="bi bi-file-earmark-text me-2"></i> SAE Records</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Expenditure -->
+            <div class="accordion-item bg-transparent border-0">
+                <h2 class="accordion-header" id="headingExpenditure">
+                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExpenditure" aria-expanded="false" aria-controls="collapseExpenditure">
+                        <i class="bi bi-receipt me-2"></i> Expenditure
+                    </button>
+                </h2>
+                <div id="collapseExpenditure" class="accordion-collapse collapse {% if request.resolver_match.app_name == 'expenditure' or 'bill' in request.resolver_match.url_name or 'payment' in request.resolver_match.url_name or 'payee' in request.resolver_match.url_name %}show{% endif %}" aria-labelledby="headingExpenditure" data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body p-2">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'expenditure' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'expenditure:dashboard' %}"><i class="bi bi-receipt me-2"></i> Exp. Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'bill' in request.resolver_match.url_name and request.resolver_match.app_name == 'expenditure' %}active{% endif %}" href="{% url 'expenditure:bill_list' %}"><i class="bi bi-receipt-cutoff me-2"></i> Bills</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'payment' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'expenditure:payment_list' %}"><i class="bi bi-credit-card me-2"></i> Payments</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'payee' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'expenditure:payee_list' %}"><i class="bi bi-people me-2"></i> Payees/Vendors</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Revenue -->
+            <div class="accordion-item bg-transparent border-0">
+                <h2 class="accordion-header" id="headingRevenue">
+                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRevenue" aria-expanded="false" aria-controls="collapseRevenue">
+                        <i class="bi bi-graph-up me-2"></i> Revenue
+                    </button>
+                </h2>
+                <div id="collapseRevenue" class="accordion-collapse collapse {% if request.resolver_match.app_name == 'revenue' or 'demand' in request.resolver_match.url_name or 'collection' in request.resolver_match.url_name or 'payer' in request.resolver_match.url_name %}show{% endif %}" aria-labelledby="headingRevenue" data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body p-2">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'revenue' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'revenue:dashboard' %}"><i class="bi bi-graph-up me-2"></i> Rev. Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'demand' in request.resolver_match.url_name and request.resolver_match.app_name == 'revenue' %}active{% endif %}" href="{% url 'revenue:demand_list' %}"><i class="bi bi-file-earmark-text me-2"></i> Demands</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'collection' in request.resolver_match.url_name and request.resolver_match.app_name == 'revenue' %}active{% endif %}" href="{% url 'revenue:collection_list' %}"><i class="bi bi-wallet2 me-2"></i> Collections</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'payer' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:payer_list' %}"><i class="bi bi-person-badge me-2"></i> Payers</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Finance / Bank Reconciliation -->
+            <div class="accordion-item bg-transparent border-0">
+                <h2 class="accordion-header" id="headingFinance">
+                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFinance" aria-expanded="false" aria-controls="collapseFinance">
+                        <i class="bi bi-bank me-2"></i> Finance
+                    </button>
+                </h2>
+                <div id="collapseFinance" class="accordion-collapse collapse {% if request.resolver_match.app_name == 'finance' %}show{% endif %}" aria-labelledby="headingFinance" data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body p-2">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link {% if 'statement' in request.resolver_match.url_name and request.resolver_match.app_name == 'finance' %}active{% endif %}" href="{% url 'finance:statement_list' %}"><i class="bi bi-file-text me-2"></i> Bank Statements</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'reconciliation' in request.resolver_match.url_name or 'brs' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'finance:statement_list' %}"><i class="bi bi-check2-square me-2"></i> Reconciliation</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reports -->
+            <div class="accordion-item bg-transparent border-0">
+                <h2 class="accordion-header" id="headingReporting">
+                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseReporting" aria-expanded="false" aria-controls="collapseReporting">
+                        <i class="bi bi-file-earmark-bar-graph me-2"></i> Reports
+                    </button>
+                </h2>
+                <div id="collapseReporting" class="accordion-collapse collapse {% if request.resolver_match.app_name == 'reporting' %}show{% endif %}" aria-labelledby="headingReporting" data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body p-2">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'reporting' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'reporting:dashboard' %}"><i class="bi bi-speedometer2 me-2"></i> Reports Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'cash_book' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:dashboard' %}"><i class="bi bi-journal-text me-2"></i> Cash Book</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'monthly_summary' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:monthly_summary' %}"><i class="bi bi-bar-chart me-2"></i> Monthly Summary</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Administration (visible to admins) -->
             {% if user.is_superuser or user.role == 'ADM' %}
-                <li class="sidebar-heading">Administration</li>
-                <li class="nav-item">
-                    <a class="nav-link {% if 'setup' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:setup_dashboard' %}">
-                        <i class="bi bi-gear"></i> Setup Workspace
-                    </a>
-                </li>
+            <div class="accordion-item bg-transparent border-0">
+                <h2 class="accordion-header" id="headingAdmin">
+                    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdmin" aria-expanded="false" aria-controls="collapseAdmin">
+                        <i class="bi bi-gear me-2"></i> Administration
+                    </button>
+                </h2>
+                <div id="collapseAdmin" class="accordion-collapse collapse {% if 'setup' in request.resolver_match.url_name %}show{% endif %}" aria-labelledby="headingAdmin" data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body p-2">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link {% if 'setup' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:setup_dashboard' %}"><i class="bi bi-gear me-2"></i> Setup Workspace</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
             {% endif %}
-        </ul>
+        </div>
     </nav>
 
     <!-- Main Content -->
@@ -289,10 +415,24 @@ Description: Base template with Bootstrap 5 and navigation.
         {% block content %}{% endblock %}
     </main>
 
+    <!-- jQuery (required for Select2) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <!-- Bootstrap 5 JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Select2 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     
     <script>
+        // Initialize Select2 for searchable dropdowns
+        $(document).ready(function() {
+            $('.searchable-select').select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                placeholder: "Type to search...",
+                allowClear: true
+            });
+        });
+        
         // Auto-dismiss alerts after 5 seconds
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(function() {

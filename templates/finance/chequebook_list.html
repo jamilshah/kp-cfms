@@ -1,0 +1,107 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Cheque Book List Template
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Cheque Books - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:setup_dashboard' %}">Setup</a></li>
+        <li class="breadcrumb-item active">Cheque Books</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0"><i class="bi bi-journal-bookmark"></i> {{ page_title }}</h2>
+    <a href="{% url 'budgeting:setup_chequebook_add' %}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Register New Book
+    </a>
+</div>
+
+{% if grouped_books %}
+    {% for bank_id, data in grouped_books.items %}
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <i class="bi bi-bank"></i> <strong>{{ data.bank.title }}</strong>
+            <span class="text-muted ms-2">{{ data.bank.bank_name }} - {{ data.bank.account_number }}</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Book No</th>
+                        <th>Prefix</th>
+                        <th>Range</th>
+                        <th>Issue Date</th>
+                        <th class="text-center">Total</th>
+                        <th class="text-center">Available</th>
+                        <th class="text-center">Issued</th>
+                        <th class="text-center">Cancelled</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for book in data.books %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'budgeting:setup_chequebook_detail' book.pk %}">
+                                {{ book.book_no }}
+                            </a>
+                        </td>
+                        <td>{{ book.prefix|default:"-" }}</td>
+                        <td>{{ book.start_serial }} - {{ book.end_serial }}</td>
+                        <td>{{ book.issue_date|date:"d-M-Y" }}</td>
+                        <td class="text-center">{{ book.total_leaves }}</td>
+                        <td class="text-center">
+                            <span class="badge bg-success">{{ book.available_count }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-primary">{{ book.issued_count }}</span>
+                        </td>
+                        <td class="text-center">
+                            {% if book.cancelled_count or book.damaged_count %}
+                            <span class="badge bg-danger">{{ book.cancelled_count|add:book.damaged_count }}</span>
+                            {% else %}
+                            <span class="text-muted">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if book.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'budgeting:setup_chequebook_detail' book.pk %}" 
+                               class="btn btn-sm btn-outline-primary" title="View Details">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> No cheque books registered yet.
+        <a href="{% url 'budgeting:setup_chequebook_add' %}">Register your first cheque book</a>.
+    </div>
+{% endif %}
+{% endblock %}

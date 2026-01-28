@@ -1,0 +1,265 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}BRS - {{ statement }} - CFMS{% endblock %}
+
+{% block extra_css %}
+<style>
+    .brs-table th { background-color: #f8f9fa; }
+    .brs-table .amount { text-align: right; font-family: monospace; }
+    .brs-highlight { background-color: #fff3cd; }
+    .brs-total { font-weight: bold; font-size: 1.1rem; }
+    @media print {
+        .no-print { display: none !important; }
+        .card { border: 1px solid #000 !important; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+        <h2 class="mb-0">
+            <i class="bi bi-file-earmark-text me-2"></i>Bank Reconciliation Statement
+        </h2>
+        <div>
+            <button onclick="window.print()" class="btn btn-outline-primary">
+                <i class="bi bi-printer me-1"></i> Print
+            </button>
+            <a href="{% url 'finance:reconciliation_workbench' statement.pk %}" class="btn btn-success">
+                <i class="bi bi-check2-square me-1"></i> Reconcile
+            </a>
+            <a href="{% url 'finance:statement_detail' statement.pk %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Back
+            </a>
+        </div>
+    </div>
+    
+    <!-- Statement Header -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white text-center">
+            <h4 class="mb-0">Bank Reconciliation Statement</h4>
+        </div>
+        <div class="card-body">
+            <div class="row text-center">
+                <div class="col-md-4">
+                    <strong>Bank Account:</strong><br>
+                    {{ statement.bank_account.title }}<br>
+                    <small class="text-muted">{{ statement.bank_account.bank_name }}</small>
+                </div>
+                <div class="col-md-4">
+                    <strong>Period:</strong><br>
+                    {{ statement }}
+                </div>
+                <div class="col-md-4">
+                    <strong>As of Date:</strong><br>
+                    {% now "F j, Y" %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- BRS Summary -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">Reconciliation Summary</h5>
+        </div>
+        <div class="card-body">
+            <table class="table table-bordered brs-table">
+                <tbody>
+                    <tr>
+                        <th style="width: 60%;">Balance as per Cash Book</th>
+                        <td class="amount">Rs. {{ brs.balance_per_cash_book|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="brs-highlight">
+                        <th>Add: Cheques Issued but not Presented (Unpresented)</th>
+                        <td class="amount">Rs. {{ brs.add_unpresented_cheques|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="brs-highlight">
+                        <th>Less: Deposits not Credited by Bank (Uncredited)</th>
+                        <td class="amount">(Rs. {{ brs.less_uncredited_deposits|floatformat:2 }})</td>
+                    </tr>
+                    <tr class="brs-total">
+                        <th>Calculated Balance as per Bank Statement</th>
+                        <td class="amount">Rs. {{ brs.calculated_bank_balance|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                        <th>Actual Balance as per Bank Statement</th>
+                        <td class="amount">Rs. {{ brs.actual_bank_balance|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="{% if brs.difference == 0 %}table-success{% else %}table-danger{% endif %} brs-total">
+                        <th>Difference</th>
+                        <td class="amount">Rs. {{ brs.difference|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Unpresented Cheques -->
+    {% if brs.unpresented_cheques_list %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-arrow-up-circle me-2"></i>Unpresented Cheques
+                <span class="badge bg-light text-dark float-end">{{ brs.unpresented_cheques_list|length }} items</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Cheques issued by us but not yet debited by the bank:</p>
+            <table class="table table-sm table-striped">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>Voucher No</th>
+                        <th>Description</th>
+                        <th>Cheque/Ref No</th>
+                        <th class="text-end">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in brs.unpresented_cheques_list %}
+                    <tr>
+                        <td>{{ item.date }}</td>
+                        <td>{{ item.voucher_no }}</td>
+                        <td>{{ item.description|truncatechars:40 }}</td>
+                        <td><code>{{ item.instrument_no|default:"-" }}</code></td>
+                        <td class="text-end">{{ item.amount|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-light">
+                    <tr class="fw-bold">
+                        <td colspan="4">Total Unpresented Cheques</td>
+                        <td class="text-end">Rs. {{ brs.add_unpresented_cheques|floatformat:2 }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Uncredited Deposits -->
+    {% if brs.uncredited_deposits_list %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0">
+                <i class="bi bi-arrow-down-circle me-2"></i>Uncredited Deposits
+                <span class="badge bg-dark float-end">{{ brs.uncredited_deposits_list|length }} items</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Deposits recorded by us but not yet credited by the bank:</p>
+            <table class="table table-sm table-striped">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>Voucher No</th>
+                        <th>Description</th>
+                        <th>Reference</th>
+                        <th class="text-end">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in brs.uncredited_deposits_list %}
+                    <tr>
+                        <td>{{ item.date }}</td>
+                        <td>{{ item.voucher_no }}</td>
+                        <td>{{ item.description|truncatechars:40 }}</td>
+                        <td><code>{{ item.instrument_no|default:"-" }}</code></td>
+                        <td class="text-end">{{ item.amount|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-light">
+                    <tr class="fw-bold">
+                        <td colspan="4">Total Uncredited Deposits</td>
+                        <td class="text-end">Rs. {{ brs.less_uncredited_deposits|floatformat:2 }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Unmatched Bank Items -->
+    {% if brs.unmatched_bank_items %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-exclamation-triangle me-2"></i>Unmatched Bank Items
+                <span class="badge bg-light text-dark float-end">{{ brs.unmatched_bank_items|length }} items</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Items in bank statement not found in our books (may require journal entries):</p>
+            <table class="table table-sm table-striped">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th>Reference</th>
+                        <th class="text-end">Debit</th>
+                        <th class="text-end">Credit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in brs.unmatched_bank_items %}
+                    <tr>
+                        <td>{{ item.date }}</td>
+                        <td>{{ item.description|truncatechars:40 }}</td>
+                        <td><code>{{ item.ref_no|default:"-" }}</code></td>
+                        <td class="text-end text-danger">
+                            {% if item.debit > 0 %}{{ item.debit|floatformat:2 }}{% endif %}
+                        </td>
+                        <td class="text-end text-success">
+                            {% if item.credit > 0 %}{{ item.credit|floatformat:2 }}{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Status Summary -->
+    <div class="card shadow-sm">
+        <div class="card-body text-center">
+            {% if brs.difference == 0 and not brs.unmatched_bank_items and not brs.unpresented_cheques_list and not brs.uncredited_deposits_list %}
+            <div class="text-success">
+                <i class="bi bi-check-circle-fill display-4"></i>
+                <h4 class="mt-3">Reconciliation Complete!</h4>
+                <p class="text-muted">All items have been matched successfully.</p>
+                {% if not statement.is_locked %}
+                <form method="post" action="{% url 'finance:lock_statement' statement.pk %}" class="mt-3 no-print">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="bi bi-lock me-1"></i> Lock Statement
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+            {% elif brs.difference == 0 %}
+            <div class="text-warning">
+                <i class="bi bi-exclamation-triangle-fill display-4"></i>
+                <h4 class="mt-3">Balances Match - Items Pending</h4>
+                <p class="text-muted">
+                    Calculated balance matches bank statement, but some items remain unreconciled.
+                    <br>Review the lists above and complete reconciliation.
+                </p>
+            </div>
+            {% else %}
+            <div class="text-danger">
+                <i class="bi bi-x-circle-fill display-4"></i>
+                <h4 class="mt-3">Reconciliation Incomplete</h4>
+                <p class="text-muted">
+                    There is a difference of <strong>Rs. {{ brs.difference|floatformat:2 }}</strong> between
+                    calculated and actual bank balance. Please review and reconcile all items.
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

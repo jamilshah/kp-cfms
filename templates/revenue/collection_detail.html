@@ -1,0 +1,187 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Revenue Collection Detail Template
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Collection {{ collection.receipt_no }} - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'revenue:dashboard' %}">Revenue</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'revenue:collection_list' %}">Collections</a></li>
+        <li class="breadcrumb-item active">{{ collection.receipt_no }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">
+        <i class="bi bi-wallet2"></i> Receipt {{ collection.receipt_no }}
+        {% if collection.status == 'DRAFT' %}
+        <span class="badge bg-secondary">Draft</span>
+        {% elif collection.status == 'POSTED' %}
+        <span class="badge bg-success">Posted</span>
+        {% elif collection.status == 'CANCELLED' %}
+        <span class="badge bg-danger">Cancelled</span>
+        {% endif %}
+    </h2>
+</div>
+
+<div class="row">
+    <!-- Collection Details -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> Collection Details
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Receipt No</dt>
+                    <dd class="col-sm-8">{{ collection.receipt_no }}</dd>
+                    
+                    <dt class="col-sm-4">Receipt Date</dt>
+                    <dd class="col-sm-8">{{ collection.receipt_date|date:"d-M-Y" }}</dd>
+                    
+                    <dt class="col-sm-4">Amount</dt>
+                    <dd class="col-sm-8 text-success fw-bold">Rs. {{ collection.amount_received|intcomma }}</dd>
+                    
+                    <dt class="col-sm-4">Instrument</dt>
+                    <dd class="col-sm-8">
+                        {{ collection.get_instrument_type_display }}
+                        {% if collection.instrument_no %} - {{ collection.instrument_no }}{% endif %}
+                    </dd>
+                    
+                    <dt class="col-sm-4">Bank Account</dt>
+                    <dd class="col-sm-8">{{ collection.bank_account.account_name }}</dd>
+                    
+                    {% if collection.remarks %}
+                    <dt class="col-sm-4">Remarks</dt>
+                    <dd class="col-sm-8">{{ collection.remarks }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Linked Demand -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-link-45deg"></i> Linked Demand
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Challan No</dt>
+                    <dd class="col-sm-8">
+                        <a href="{% url 'revenue:demand_detail' collection.demand.pk %}">
+                            {{ collection.demand.challan_no }}
+                        </a>
+                    </dd>
+                    
+                    <dt class="col-sm-4">Payer</dt>
+                    <dd class="col-sm-8">
+                        <a href="{% url 'revenue:payer_detail' collection.demand.payer.pk %}">
+                            {{ collection.demand.payer.name }}
+                        </a>
+                    </dd>
+                    
+                    <dt class="col-sm-4">Revenue Head</dt>
+                    <dd class="col-sm-8">{{ collection.demand.budget_head.tma_sub_object }}</dd>
+                    
+                    <dt class="col-sm-4">Demand Amount</dt>
+                    <dd class="col-sm-8">Rs. {{ collection.demand.amount|intcomma }}</dd>
+                    
+                    <dt class="col-sm-4">Demand Status</dt>
+                    <dd class="col-sm-8">
+                        {% if collection.demand.status == 'DRAFT' %}
+                        <span class="badge bg-secondary">Draft</span>
+                        {% elif collection.demand.status == 'POSTED' %}
+                        <span class="badge bg-primary">Posted</span>
+                        {% elif collection.demand.status == 'PARTIAL' %}
+                        <span class="badge bg-warning text-dark">Partial</span>
+                        {% elif collection.demand.status == 'PAID' %}
+                        <span class="badge bg-success">Paid</span>
+                        {% endif %}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Workflow Actions -->
+{% if can_post or can_cancel %}
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-lightning"></i> Actions
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {% if can_post %}
+            <div class="col-md-6">
+                <form method="post" action="{% url 'revenue:collection_post' collection.pk %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-success" 
+                            onclick="return confirm('Are you sure you want to post this collection? This will create a GL entry.');">
+                        <i class="bi bi-send"></i> Post to GL
+                    </button>
+                </form>
+                <small class="text-muted d-block mt-2">
+                    Posts the collection and creates receipt entry (Dr Bank, Cr AR)
+                </small>
+            </div>
+            {% endif %}
+            
+            {% if can_cancel %}
+            <div class="col-md-6">
+                <form method="post" action="{% url 'revenue:collection_cancel' collection.pk %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-danger" 
+                            onclick="return confirm('Are you sure you want to cancel this collection?');">
+                        <i class="bi bi-x-circle"></i> Cancel Collection
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- GL Voucher Info -->
+{% if collection.receipt_voucher %}
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-journal-text"></i> GL Voucher
+    </div>
+    <div class="card-body">
+        <dl class="row mb-0">
+            <dt class="col-sm-3">Voucher No</dt>
+            <dd class="col-sm-9">{{ collection.receipt_voucher.voucher_no }}</dd>
+            
+            <dt class="col-sm-3">Date</dt>
+            <dd class="col-sm-9">{{ collection.receipt_voucher.date|date:"d-M-Y" }}</dd>
+            
+            <dt class="col-sm-3">Type</dt>
+            <dd class="col-sm-9">{{ collection.receipt_voucher.get_voucher_type_display }}</dd>
+            
+            <dt class="col-sm-3">Posted By</dt>
+            <dd class="col-sm-9">{{ collection.posted_by.get_full_name|default:collection.posted_by.email }}</dd>
+            
+            <dt class="col-sm-3">Posted At</dt>
+            <dd class="col-sm-9">{{ collection.posted_at|date:"d-M-Y H:i" }}</dd>
+        </dl>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

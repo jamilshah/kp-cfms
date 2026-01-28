@@ -946,9 +946,10 @@ class SetupDashboardView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
         context['department_count'] = Department.objects.count()
         context['designation_count'] = DesignationMaster.objects.count()
         
-        from apps.finance.models import BudgetHead, Fund
+        from apps.finance.models import BudgetHead, Fund, ChequeBook
         context['coa_count'] = BudgetHead.objects.count()
         context['fund_count'] = Fund.objects.count()
+        context['chequebook_count'] = ChequeBook.objects.count()
         
         from apps.core.models import BankAccount
         context['bank_account_count'] = BankAccount.objects.count()

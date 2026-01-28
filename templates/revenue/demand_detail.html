@@ -1,0 +1,288 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Revenue Demand Detail Template with Collection History
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Demand {{ demand.challan_no }} - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'revenue:dashboard' %}">Revenue</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'revenue:demand_list' %}">Demands</a></li>
+        <li class="breadcrumb-item active">{{ demand.challan_no }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">
+        <i class="bi bi-receipt"></i> Demand {{ demand.challan_no }}
+        {% if demand.status == 'DRAFT' %}
+        <span class="badge bg-secondary">Draft</span>
+        {% elif demand.status == 'POSTED' %}
+        <span class="badge bg-primary">Posted</span>
+        {% elif demand.status == 'PARTIAL' %}
+        <span class="badge bg-warning text-dark">Partially Paid</span>
+        {% elif demand.status == 'PAID' %}
+        <span class="badge bg-success">Paid</span>
+        {% elif demand.status == 'CANCELLED' %}
+        <span class="badge bg-danger">Cancelled</span>
+        {% endif %}
+    </h2>
+    <div>
+        {% if can_collect %}
+        <a href="{% url 'revenue:collection_create' %}?demand={{ demand.pk }}" class="btn btn-success">
+            <i class="bi bi-wallet2"></i> Record Collection
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <!-- Demand Details -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> Demand Details
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Challan No</dt>
+                    <dd class="col-sm-8">{{ demand.challan_no }}</dd>
+                    
+                    <dt class="col-sm-4">Fiscal Year</dt>
+                    <dd class="col-sm-8">{{ demand.fiscal_year.year_name }}</dd>
+                    
+                    <dt class="col-sm-4">Payer</dt>
+                    <dd class="col-sm-8">
+                        <a href="{% url 'revenue:payer_detail' demand.payer.pk %}">{{ demand.payer.name }}</a>
+                    </dd>
+                    
+                    <dt class="col-sm-4">Revenue Head</dt>
+                    <dd class="col-sm-8">
+                        {{ demand.budget_head.tma_sub_object }}<br>
+                        <small class="text-muted">{{ demand.budget_head.tma_description }}</small>
+                    </dd>
+                    
+                    <dt class="col-sm-4">Issue Date</dt>
+                    <dd class="col-sm-8">{{ demand.issue_date|date:"d-M-Y" }}</dd>
+                    
+                    <dt class="col-sm-4">Due Date</dt>
+                    <dd class="col-sm-8">{{ demand.due_date|date:"d-M-Y" }}</dd>
+                    
+                    <dt class="col-sm-4">Period</dt>
+                    <dd class="col-sm-8">{{ demand.period_description|default:"-" }}</dd>
+                    
+                    {% if demand.description %}
+                    <dt class="col-sm-4">Description</dt>
+                    <dd class="col-sm-8">{{ demand.description }}</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Financial Summary -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-currency-exchange"></i> Financial Summary
+            </div>
+            <div class="card-body">
+                <div class="row text-center mb-4">
+                    <div class="col-4">
+                        <h4 class="text-primary">Rs. {{ demand.amount|intcomma }}</h4>
+                        <small class="text-muted">Demand Amount</small>
+                    </div>
+                    <div class="col-4">
+                        <h4 class="text-success">Rs. {{ total_collected|intcomma }}</h4>
+                        <small class="text-muted">Collected</small>
+                    </div>
+                    <div class="col-4">
+                        <h4 class="text-warning">Rs. {{ outstanding|intcomma }}</h4>
+                        <small class="text-muted">Outstanding</small>
+                    </div>
+                </div>
+                
+                <!-- Progress Bar -->
+                {% if demand.amount > 0 %}
+                {% widthratio total_collected demand.amount 100 as percent %}
+                <div class="progress" style="height: 25px;">
+                    <div class="progress-bar bg-success" role="progressbar" 
+                         style="width: {{ percent }}%;" 
+                         aria-valuenow="{{ percent }}" aria-valuemin="0" aria-valuemax="100">
+                        {{ percent }}% Collected
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Workflow Actions -->
+{% if can_post or can_cancel %}
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-lightning"></i> Actions
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {% if can_post %}
+            <div class="col-md-6">
+                <form method="post" action="{% url 'revenue:demand_post' demand.pk %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary" 
+                            onclick="return confirm('Are you sure you want to post this demand? This will create a GL entry.');">
+                        <i class="bi bi-send"></i> Post to GL
+                    </button>
+                </form>
+                <small class="text-muted d-block mt-2">
+                    Posts the demand and creates accrual entry (Dr AR, Cr Revenue)
+                </small>
+            </div>
+            {% endif %}
+            
+            {% if can_cancel %}
+            <div class="col-md-6">
+                <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#cancelModal">
+                    <i class="bi bi-x-circle"></i> Cancel Demand
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- GL Voucher Info -->
+{% if demand.accrual_voucher %}
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-journal-text"></i> GL Voucher
+    </div>
+    <div class="card-body">
+        <dl class="row mb-0">
+            <dt class="col-sm-3">Voucher No</dt>
+            <dd class="col-sm-9">{{ demand.accrual_voucher.voucher_no }}</dd>
+            
+            <dt class="col-sm-3">Date</dt>
+            <dd class="col-sm-9">{{ demand.accrual_voucher.date|date:"d-M-Y" }}</dd>
+            
+            <dt class="col-sm-3">Type</dt>
+            <dd class="col-sm-9">{{ demand.accrual_voucher.get_voucher_type_display }}</dd>
+            
+            <dt class="col-sm-3">Posted By</dt>
+            <dd class="col-sm-9">{{ demand.posted_by.get_full_name|default:demand.posted_by.email }}</dd>
+            
+            <dt class="col-sm-3">Posted At</dt>
+            <dd class="col-sm-9">{{ demand.posted_at|date:"d-M-Y H:i" }}</dd>
+        </dl>
+    </div>
+</div>
+{% endif %}
+
+<!-- Collection History -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-ul"></i> Collection History</span>
+        {% if can_collect %}
+        <a href="{% url 'revenue:collection_create' %}?demand={{ demand.pk }}" class="btn btn-sm btn-success">
+            <i class="bi bi-plus"></i> Add Collection
+        </a>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        {% if collections %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Receipt #</th>
+                        <th>Date</th>
+                        <th>Instrument</th>
+                        <th class="text-end">Amount</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for collection in collections %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'revenue:collection_detail' collection.pk %}">{{ collection.receipt_no }}</a>
+                        </td>
+                        <td>{{ collection.receipt_date|date:"d-M-Y" }}</td>
+                        <td>
+                            {{ collection.get_instrument_type_display }}
+                            {% if collection.instrument_no %} - {{ collection.instrument_no }}{% endif %}
+                        </td>
+                        <td class="text-end fw-bold">Rs. {{ collection.amount_received|intcomma }}</td>
+                        <td>
+                            {% if collection.status == 'DRAFT' %}
+                            <span class="badge bg-secondary">Draft</span>
+                            {% elif collection.status == 'POSTED' %}
+                            <span class="badge bg-success">Posted</span>
+                            {% elif collection.status == 'CANCELLED' %}
+                            <span class="badge bg-danger">Cancelled</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <a href="{% url 'revenue:collection_detail' collection.pk %}" 
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted text-center mb-0">No collections recorded yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Cancel Modal -->
+{% if can_cancel %}
+<div class="modal fade" id="cancelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{% url 'revenue:demand_cancel' demand.pk %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Cancel Demand</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        This action will cancel the demand and reverse any GL entries.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Cancellation Reason <span class="text-danger">*</span></label>
+                        <textarea name="reason" class="form-control" rows="3" required 
+                                  placeholder="Enter reason for cancellation"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-danger">Cancel Demand</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

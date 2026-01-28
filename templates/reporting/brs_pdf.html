@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BRS - {{ statement }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1cm;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 18pt;
+        }
+        .header h2 {
+            margin: 5px 0;
+            font-size: 14pt;
+            font-weight: normal;
+        }
+        .header p {
+            margin: 5px 0;
+            font-size: 10pt;
+            color: #666;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #333;
+            padding: 6px 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+        }
+        .amount {
+            text-align: right;
+            font-family: 'Courier New', monospace;
+        }
+        .text-center {
+            text-align: center;
+        }
+        .highlight-row {
+            background-color: #fff3cd;
+        }
+        .total-row {
+            background-color: #d4edda;
+            font-weight: bold;
+        }
+        .difference-row {
+            font-weight: bold;
+            font-size: 11pt;
+        }
+        .difference-match {
+            background-color: #d4edda;
+        }
+        .difference-mismatch {
+            background-color: #f8d7da;
+        }
+        .section-title {
+            background-color: #343a40;
+            color: white;
+            padding: 8px;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .list-table {
+            font-size: 9pt;
+        }
+        .list-table th {
+            background-color: #e9ecef;
+        }
+        .footer {
+            margin-top: 30px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .signature-block {
+            text-align: center;
+            width: 30%;
+        }
+        .signature-line {
+            border-top: 1px solid #333;
+            margin-top: 50px;
+            padding-top: 5px;
+        }
+        @media print {
+            .no-print { display: none; }
+            .page-break { page-break-before: always; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ organization.name }}</h1>
+        <h2>Bank Reconciliation Statement</h2>
+        <p>{{ statement.bank_account.title }} | A/C: {{ statement.bank_account.account_number }}</p>
+        <p>Period: {{ statement }}</p>
+    </div>
+    
+    <!-- Main BRS Table -->
+    <table>
+        <tbody>
+            <tr>
+                <th style="width: 70%;">Particulars</th>
+                <th class="amount" style="width: 30%;">Amount (Rs.)</th>
+            </tr>
+            <tr>
+                <td>Balance as per Cash Book</td>
+                <td class="amount">{{ brs.balance_per_cash_book|floatformat:2 }}</td>
+            </tr>
+            <tr class="highlight-row">
+                <td><strong>Add:</strong> Cheques issued but not yet presented at bank (Unpresented Cheques)</td>
+                <td class="amount">{{ brs.add_unpresented_cheques|floatformat:2 }}</td>
+            </tr>
+            <tr class="highlight-row">
+                <td><strong>Less:</strong> Deposits recorded but not yet credited by bank (Uncredited Deposits)</td>
+                <td class="amount">({{ brs.less_uncredited_deposits|floatformat:2 }})</td>
+            </tr>
+            <tr class="total-row">
+                <td>Calculated Balance as per Bank Statement</td>
+                <td class="amount">{{ brs.calculated_bank_balance|floatformat:2 }}</td>
+            </tr>
+            <tr>
+                <td>Actual Balance as per Bank Statement</td>
+                <td class="amount">{{ brs.actual_bank_balance|floatformat:2 }}</td>
+            </tr>
+            <tr class="difference-row {% if brs.difference == 0 %}difference-match{% else %}difference-mismatch{% endif %}">
+                <td>Difference</td>
+                <td class="amount">{{ brs.difference|floatformat:2 }}</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    {% if brs.unpresented_cheques_list %}
+    <div class="section-title">
+        Unpresented Cheques ({{ brs.unpresented_cheques_list|length }} items)
+    </div>
+    <table class="list-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Voucher No</th>
+                <th>Description</th>
+                <th>Cheque No</th>
+                <th class="amount">Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in brs.unpresented_cheques_list %}
+            <tr>
+                <td>{{ item.date|date:"d/m/Y" }}</td>
+                <td>{{ item.voucher_no }}</td>
+                <td>{{ item.description|truncatechars:40 }}</td>
+                <td>{{ item.instrument_no|default:"-" }}</td>
+                <td class="amount">{{ item.amount|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="4"><strong>Total</strong></td>
+                <td class="amount">{{ brs.add_unpresented_cheques|floatformat:2 }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    {% endif %}
+    
+    {% if brs.uncredited_deposits_list %}
+    <div class="section-title">
+        Uncredited Deposits ({{ brs.uncredited_deposits_list|length }} items)
+    </div>
+    <table class="list-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Voucher No</th>
+                <th>Description</th>
+                <th>Reference</th>
+                <th class="amount">Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in brs.uncredited_deposits_list %}
+            <tr>
+                <td>{{ item.date|date:"d/m/Y" }}</td>
+                <td>{{ item.voucher_no }}</td>
+                <td>{{ item.description|truncatechars:40 }}</td>
+                <td>{{ item.instrument_no|default:"-" }}</td>
+                <td class="amount">{{ item.amount|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="4"><strong>Total</strong></td>
+                <td class="amount">{{ brs.less_uncredited_deposits|floatformat:2 }}</td>
+            </tr>
+        </tfoot>
+    </table>
+    {% endif %}
+    
+    {% if brs.unmatched_bank_items %}
+    <div class="section-title" style="background-color: #dc3545;">
+        Unmatched Bank Items ({{ brs.unmatched_bank_items|length }} items)
+    </div>
+    <table class="list-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Reference</th>
+                <th class="amount">Debit</th>
+                <th class="amount">Credit</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in brs.unmatched_bank_items %}
+            <tr>
+                <td>{{ item.date|date:"d/m/Y" }}</td>
+                <td>{{ item.description|truncatechars:40 }}</td>
+                <td>{{ item.ref_no|default:"-" }}</td>
+                <td class="amount">{% if item.debit > 0 %}{{ item.debit|floatformat:2 }}{% endif %}</td>
+                <td class="amount">{% if item.credit > 0 %}{{ item.credit|floatformat:2 }}{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+    
+    <div class="footer">
+        <div class="signature-block">
+            <div class="signature-line">Prepared By</div>
+        </div>
+        <div class="signature-block">
+            <div class="signature-line">Accounts Officer</div>
+        </div>
+        <div class="signature-block">
+            <div class="signature-line">DDO / Head of Office</div>
+        </div>
+    </div>
+    
+    <p style="text-align: center; font-size: 8pt; color: #666; margin-top: 20px;">
+        Generated on {{ generated_date|date:"F j, Y" }} | CFMS - Consolidated Financial Management System
+    </p>
+</body>
+</html>
