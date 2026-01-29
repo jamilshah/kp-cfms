@@ -203,7 +203,7 @@ Description: Base template with Bootstrap 5 and navigation.
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark fixed-top" style="background-color: var(--cfms-primary);">
         <div class="container-fluid">
-            <a class="navbar-brand" href="{% url 'budgeting:dashboard' %}">
+            <a class="navbar-brand" href="{% url 'dashboard:index' %}">
                 <i class="bi bi-bank"></i> KP-CFMS
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -247,10 +247,18 @@ Description: Base template with Bootstrap 5 and navigation.
     <nav class="sidebar">
         <div class="accordion" id="sidebarAccordion">
             <div class="mb-2 px-2">
-                <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %} d-flex align-items-center" href="{% url 'budgeting:dashboard' %}">
+                <a class="nav-link {% if request.resolver_match.app_name == 'dashboard' and request.resolver_match.url_name == 'index' %}active{% endif %} d-flex align-items-center" href="{% url 'dashboard:index' %}">
                     <i class="bi bi-speedometer2 me-2"></i> Dashboard
                 </a>
             </div>
+            
+            {% if user.is_lcb_officer or user.is_super_admin %}
+            <div class="mb-2 px-2">
+                <a class="nav-link {% if request.resolver_match.url_name == 'provincial' %}active{% endif %} d-flex align-items-center" href="{% url 'dashboard:provincial' %}">
+                    <i class="bi bi-globe-asia-australia me-2"></i> Provincial Dashboard
+                </a>
+            </div>
+            {% endif %}
 
             <!-- Budget Planning -->
             <div class="accordion-item bg-transparent border-0">

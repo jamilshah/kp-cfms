@@ -40,8 +40,8 @@
                     <div class="col-5">
                         <div class="p-3 border rounded bg-light">
                             <h6 class="text-danger mb-2">Source (From)</h6>
-                            <h5 class="mb-1">{{ reappropriation.from_head.pifra_object }}</h5>
-                            <small class="text-muted d-block text-truncate">{{ reappropriation.from_head.tma_sub_object }}</small>
+                            <h5 class="mb-1">{{ reappropriation.from_head.code }}</h5>
+                            <small class="text-muted d-block text-truncate">{{ reappropriation.from_head.name }}</small>
                             <span class="badge bg-danger mt-2">- Rs {{ reappropriation.amount|intcomma }}</span>
                         </div>
                     </div>
@@ -51,8 +51,8 @@
                     <div class="col-5">
                         <div class="p-3 border rounded bg-light">
                             <h6 class="text-success mb-2">Destination (To)</h6>
-                            <h5 class="mb-1">{{ reappropriation.to_head.pifra_object }}</h5>
-                            <small class="text-muted d-block text-truncate">{{ reappropriation.to_head.tma_sub_object }}</small>
+                            <h5 class="mb-1">{{ reappropriation.to_head.code }}</h5>
+                            <small class="text-muted d-block text-truncate">{{ reappropriation.to_head.name }}</small>
                             <span class="badge bg-success mt-2">+ Rs {{ reappropriation.amount|intcomma }}</span>
                         </div>
                     </div>

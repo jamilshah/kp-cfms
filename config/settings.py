@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'apps.expenditure',
     'apps.revenue',
     'apps.reporting',
+    'apps.dashboard',
     'apps.system_admin',
 ]
 
@@ -147,7 +148,7 @@ STATIC_URL = 'static/'
 
 # Login/Logout Configuration
 LOGIN_URL = 'login'
-LOGIN_REDIRECT_URL = 'budgeting:dashboard'
+LOGIN_REDIRECT_URL = 'dashboard:index'
 LOGOUT_REDIRECT_URL = 'login'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
@@ -165,3 +166,16 @@ EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
 EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='KP-CFMS <noreply@cfms.gov.pk>')
+
+
+# Cache Configuration
+# Dashboard uses 15-minute caching for performance
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'cfms-cache',
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000
+        }
+    }
+}

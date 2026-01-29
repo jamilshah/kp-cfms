@@ -16,43 +16,33 @@ from apps.budgeting.models import FiscalYear
 class BudgetHeadForm(forms.ModelForm):
     """
     Form for creating/editing Budget Heads (Chart of Accounts).
+    Links a Fund to a GlobalHead.
     """
-    
-    pifra_object = forms.ChoiceField(
-        choices=[],
-        widget=forms.Select(attrs={'class': 'form-select'}),
-        label=_('PIFRA Object Code'),
-        help_text=_('Select PIFRA object code from existing entries.')
-    )
     
     class Meta:
         model = BudgetHead
         fields = [
-            'function', 'pifra_description',
-            'tma_sub_object', 'tma_description',
-            'account_type', 'fund',
-            'is_active', 'is_charged',
-            'budget_control', 'posting_allowed'
+            'fund', 'global_head', 'function',
+            'current_budget', 'is_active',
+            'budget_control', 'posting_allowed', 'project_required'
         ]
         widgets = {
-            'function': forms.Select(attrs={'class': 'form-select'}),
-            'pifra_description': forms.TextInput(attrs={'class': 'form-control'}),
-            'tma_sub_object': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. A01101-000'}),
-            'tma_description': forms.TextInput(attrs={'class': 'form-control'}),
-            'account_type': forms.Select(attrs={'class': 'form-select'}),
             'fund': forms.Select(attrs={'class': 'form-select'}),
+            'global_head': forms.Select(attrs={'class': 'form-select searchable-select'}),
+            'function': forms.Select(attrs={'class': 'form-select'}),
+            'current_budget': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'is_charged': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'budget_control': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'posting_allowed': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'project_required': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Get distinct PIFRA object codes from existing budget heads
-        existing_codes = BudgetHead.objects.values_list('pifra_object', flat=True).distinct().order_by('pifra_object')
-        choices = [('', '--- Select PIFRA Code ---')] + [(code, code) for code in existing_codes]
-        self.fields['pifra_object'].choices = choices
+        # Order global heads by code for easier selection
+        self.fields['global_head'].queryset = self.fields['global_head'].queryset.select_related(
+            'minor__major'
+        ).order_by('code')
 
 
 class ChequeBookForm(forms.ModelForm):

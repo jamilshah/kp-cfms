@@ -138,12 +138,12 @@ class BillForm(forms.ModelForm):
         # Filter budget heads to expenditure accounts only
         # Exclude salary heads (A01xxx) as they are paid through payroll, not vendor bills
         self.fields['budget_head'].queryset = BudgetHead.objects.filter(
-            account_type=AccountType.EXPENDITURE,
+            global_head__account_type=AccountType.EXPENDITURE,
             posting_allowed=True,
             is_active=True
         ).exclude(
-            pifra_object__startswith='A01'  # Exclude salary heads
-        ).order_by('tma_sub_object')
+            global_head__code__startswith='A01'  # Exclude salary heads
+        ).order_by('global_head__code')
         
         # Set default tax amount
         if not self.instance.pk:

@@ -16,7 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import Organization, BankAccount
-from apps.finance.models import BudgetHead, FunctionCode, Fund, AccountType
+from apps.finance.models import BudgetHead, FunctionCode, Fund, AccountType, MajorHead, MinorHead, GlobalHead
 from apps.budgeting.models import FiscalYear, BudgetAllocation
 from apps.expenditure.models import Payee, Bill, BillStatus
 from apps.users.models import CustomUser
@@ -144,69 +144,49 @@ class Command(BaseCommand):
             defaults={'name': 'Administration', 'is_active': True}
         )
         
-        system_heads = [
-            {
-                'tma_sub_object': 'L02001-000',
-                'pifra_object': 'L02001',
-                'pifra_description': 'Accounts Payable - Creditors',
-                'tma_description': 'Accounts Payable',
-                'account_type': AccountType.LIABILITY,
-                'system_code': 'AP',
-                'is_system_head': True,
-            },
-            {
-                'tma_sub_object': 'L02101-000',
-                'pifra_object': 'L02101',
-                'pifra_description': 'Tax Payable - Income Tax',
-                'tma_description': 'Income Tax Withheld',
-                'account_type': AccountType.LIABILITY,
-                'system_code': 'TAX_IT',
-                'is_system_head': True,
-            },
-            {
-                'tma_sub_object': 'L02102-000',
-                'pifra_object': 'L02102',
-                'pifra_description': 'Tax Payable - GST',
-                'tma_description': 'GST/Sales Tax Withheld',
-                'account_type': AccountType.LIABILITY,
-                'system_code': 'TAX_GST',
-                'is_system_head': True,
-            },
-            {
-                'tma_sub_object': 'A02001-000',
-                'pifra_object': 'A02001',
-                'pifra_description': 'Accounts Receivable - Debtors',
-                'tma_description': 'Accounts Receivable',
-                'account_type': AccountType.ASSET,
-                'system_code': 'AR',
-                'is_system_head': True,
-            },
+        system_heads_data = [
+            {'code': 'L02001', 'name': 'Accounts Payable - Creditors', 'minor': 'L020', 'minor_name': 'Creditors', 'major': 'L02', 'major_name': 'Liabilities', 'type': AccountType.LIABILITY, 'sys': 'AP'},
+            {'code': 'L02101', 'name': 'Tax Payable - Income Tax', 'minor': 'L021', 'minor_name': 'Tax Payables', 'major': 'L02', 'major_name': 'Liabilities', 'type': AccountType.LIABILITY, 'sys': 'TAX_IT'},
+            {'code': 'L02102', 'name': 'Tax Payable - GST', 'minor': 'L021', 'minor_name': 'Tax Payables', 'major': 'L02', 'major_name': 'Liabilities', 'type': AccountType.LIABILITY, 'sys': 'TAX_GST'},
+            {'code': 'A02001', 'name': 'Accounts Receivable - Debtors', 'minor': 'A020', 'minor_name': 'Receivables', 'major': 'A02', 'major_name': 'Assets', 'type': AccountType.ASSET, 'sys': 'AR'},
         ]
         
-        for head_data in system_heads:
+        for data in system_heads_data:
+            major, _ = MajorHead.objects.get_or_create(
+                code=data['major'], defaults={'name': data['major_name'], 'account_type': data['type']}
+            )
+            minor, _ = MinorHead.objects.get_or_create(
+                code=data['minor'], major_head=major, defaults={'name': data['minor_name']}
+            )
+            gh, _ = GlobalHead.objects.get_or_create(
+                code=data['code'], minor_head=minor,
+                defaults={'name': data['name'], 'account_type': data['type'], 'system_code': data['sys']}
+            )
+            
             head, created = BudgetHead.objects.update_or_create(
-                tma_sub_object=head_data['tma_sub_object'],
+                global_head=gh,
+                fund=fund,
                 defaults={
-                    **head_data,
-                    'fund': fund,
                     'function': func,
+                    'is_system_head': True,
                     'budget_control': False,
                     'posting_allowed': True,
                 }
             )
             status = 'created' if created else 'updated'
-            self.stdout.write(f'    {head_data["system_code"]}: {status}')
+            self.stdout.write(f'    {data["sys"]}: {status}')
         
-        # Create bank GL head if not exists
+        # Create bank GL head if not exists (A01001)
+        major, _ = MajorHead.objects.get_or_create(code='A01', defaults={'name': 'Employees Related Expenses', 'account_type': AccountType.ASSET})
+        minor, _ = MinorHead.objects.get_or_create(code='A010', major_head=major, defaults={'name': 'Basic Pay'})
+        gh_bank, _ = GlobalHead.objects.get_or_create(code='A01001', minor_head=minor, defaults={'name': 'Cash at Bank', 'account_type': AccountType.ASSET})
+
         bank_head, created = BudgetHead.objects.get_or_create(
-            tma_sub_object='A01001-000',
+            global_head=gh_bank,
+            fund=fund,
             defaults={
-                'pifra_object': 'A01001',
-                'pifra_description': 'Cash at Bank',
-                'tma_description': 'Bank Account - NBP',
-                'account_type': AccountType.ASSET,
-                'fund': fund,
                 'function': func,
+                'is_system_head': False,
                 'budget_control': False,
                 'posting_allowed': True,
             }
@@ -311,14 +291,18 @@ class Command(BaseCommand):
         fund = Fund.objects.filter(code='GEN').first()
         func = FunctionCode.objects.filter(code='AD').first()
         
+        # Create hierarchy for Stationery (A03901)
+        major_a03, _ = MajorHead.objects.get_or_create(code='A03', defaults={'name': 'Operating Expenses', 'account_type': AccountType.EXPENDITURE})
+        minor_a039, _ = MinorHead.objects.get_or_create(code='A039', major_head=major_a03, defaults={'name': 'General - Other'})
+        gh_stationery, _ = GlobalHead.objects.get_or_create(
+            code='A03901', minor_head=minor_a039, 
+            defaults={'name': 'Stationery', 'account_type': AccountType.EXPENDITURE}
+        )
+        
         stationery_head, _ = BudgetHead.objects.get_or_create(
-            tma_sub_object='A03901-000',
+            global_head=gh_stationery,
+            fund=fund,
             defaults={
-                'pifra_object': 'A03901',
-                'pifra_description': 'Stationery',
-                'tma_description': 'Stationery & Office Supplies',
-                'account_type': AccountType.EXPENDITURE,
-                'fund': fund,
                 'function': func,
                 'budget_control': True,
                 'posting_allowed': True,
@@ -326,21 +310,29 @@ class Command(BaseCommand):
         )
         
         # Create other expense heads
-        other_heads = [
-            ('A03902-000', 'A03902', 'POL', 'Petrol, Oil & Lubricants'),
-            ('A03903-000', 'A03903', 'Repair', 'Repair & Maintenance'),
-            ('A03801-000', 'A03801', 'Electricity', 'Electricity Charges'),
+        expense_heads = [
+            {'code': 'A03902', 'name': 'POL', 'minor': minor_a039},
+            {'code': 'A03903', 'name': 'Repair & Maintenance', 'minor': minor_a039},
+            {'code': 'A03801', 'name': 'Electricity Charges', 'minor_code': 'A038', 'minor_name': 'Utilities'},
         ]
         
-        for tma_sub, pifra, short_desc, full_desc in other_heads:
+        for data in expense_heads:
+            if 'minor' in data:
+                minor = data['minor']
+            else:
+                minor, _ = MinorHead.objects.get_or_create(
+                    code=data['minor_code'], major_head=major_a03, defaults={'name': data['minor_name']}
+                )
+            
+            gh, _ = GlobalHead.objects.get_or_create(
+                code=data['code'], minor_head=minor,
+                defaults={'name': data['name'], 'account_type': AccountType.EXPENDITURE}
+            )
+            
             BudgetHead.objects.get_or_create(
-                tma_sub_object=tma_sub,
+                global_head=gh,
+                fund=fund,
                 defaults={
-                    'pifra_object': pifra,
-                    'pifra_description': short_desc,
-                    'tma_description': full_desc,
-                    'account_type': AccountType.EXPENDITURE,
-                    'fund': fund,
                     'function': func,
                     'budget_control': True,
                     'posting_allowed': True,
@@ -426,7 +418,7 @@ class Command(BaseCommand):
             )
         
         # Create a bank account for payments (if not exists)
-        bank_gl = BudgetHead.objects.filter(tma_sub_object='A01001-000').first()
+        bank_gl = BudgetHead.objects.filter(global_head__code='A01001').first()
         if bank_gl:
             BankAccount.objects.get_or_create(
                 organization=org,

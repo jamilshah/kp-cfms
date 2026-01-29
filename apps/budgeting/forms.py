@@ -154,7 +154,7 @@ class ReceiptEstimateForm(BudgetAllocationBaseForm):
         
         # Filter to revenue heads only
         self.fields['budget_head'].queryset = BudgetHead.objects.filter(
-            account_type=AccountType.REVENUE,
+            global_head__account_type=AccountType.REVENUE,
             is_active=True
         )
         self.fields['budget_head'].label = _('Revenue Head')
@@ -194,7 +194,7 @@ class ExpenditureEstimateForm(BudgetAllocationBaseForm):
         
         # Filter to expenditure heads only
         self.fields['budget_head'].queryset = BudgetHead.objects.filter(
-            account_type=AccountType.EXPENDITURE,
+            global_head__account_type=AccountType.EXPENDITURE,
             is_active=True
         )
         self.fields['budget_head'].label = _('Expenditure Head')
@@ -298,7 +298,7 @@ class ScheduleOfEstablishmentForm(forms.ModelForm):
         
         # Filter to salary heads only (A01*)
         self.fields['budget_head'].queryset = BudgetHead.objects.filter(
-            pifra_object__startswith='A01',
+            global_head__code__startswith='A01',
             is_active=True
         )
         
@@ -432,7 +432,7 @@ class NewPostProposalForm(forms.ModelForm):
         
         # Try to find specific head
         head = BudgetHead.objects.filter(
-            pifra_object__startswith=code_prefix,
+            global_head__code__startswith=code_prefix,
             is_active=True
         ).first()
         
@@ -440,14 +440,14 @@ class NewPostProposalForm(forms.ModelForm):
             # Fallback to generic Salary of Officers/Staff
             search_term = 'Officer' if instance.bps_scale >= 17 else 'Other Staff'
             head = BudgetHead.objects.filter(
-                tma_description__icontains=search_term,
+                global_head__name__icontains=search_term,
                 is_active=True
             ).first()
             
         if not head:
             # Last resort: A01 (Total Basic Pay)
             head = BudgetHead.objects.filter(
-                pifra_object='A01', is_active=True
+                global_head__code='A01', is_active=True
             ).first()
             
         if not head:

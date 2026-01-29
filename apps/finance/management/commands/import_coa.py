@@ -16,7 +16,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.finance.models import BudgetHead, FunctionCode, AccountType
-from apps.finance.models import Fund
+from apps.finance.models import Fund, MajorHead, MinorHead, GlobalHead
 
 
 class Command(BaseCommand):
@@ -65,6 +65,13 @@ class Command(BaseCommand):
         dry_run = options['dry_run']
         clear_existing = options['clear']
         
+        # Use New COA.csv as default if not specified
+        if file_path.name == 'CoA.csv' and not file_path.exists():
+            new_file_path = file_path.parent / 'New COA.csv'
+            if new_file_path.exists():
+                file_path = new_file_path
+                self.stdout.write(self.style.NOTICE(f"Defaulting to: {file_path}"))
+        
         if not file_path.exists():
             raise CommandError(f"CSV file not found: {file_path}")
         
@@ -81,7 +88,7 @@ class Command(BaseCommand):
                         self.style.WARNING(f"Deleted {deleted_count} existing records.")
                     )
                 
-                created_count, updated_count, error_count = self._import_csv(file_path, dry_run)
+                created_count, updated_count, error_count = self._import_csv_new(file_path, dry_run)
                 
                 if dry_run:
                     raise transaction.TransactionManagementError("Dry run - rolling back.")
@@ -96,130 +103,136 @@ class Command(BaseCommand):
             f"  Updated: {updated_count}\n"
             f"  Errors: {error_count}"
         ))
-    
-    def _import_csv(self, file_path: Path, dry_run: bool) -> tuple:
-        """
-        Import CSV data into BudgetHead model.
-        
-        Args:
-            file_path: Path to the CSV file.
-            dry_run: If True, don't save to database.
-            
-        Returns:
-            Tuple of (created_count, updated_count, error_count).
-        """
+
+    def _import_csv_new(self, file_path: Path, dry_run: bool) -> tuple:
+        """Import from New COA.csv format (6 columns, 2 header rows)."""
         created_count = 0
         updated_count = 0
         error_count = 0
         
-        # Pre-create function codes
-        function_cache: Dict[str, FunctionCode] = {}
+        # Caches
+        major_cache = {}
+        minor_cache = {}
+        global_cache = {}
         
-        with open(file_path, 'r', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile)
+        # Defaults for BudgetHead (since CSV lacks them)
+        default_function, _ = FunctionCode.objects.get_or_create(
+            code='AD', defaults={'name': 'Administration'}
+        )
+        
+        default_fund = Fund.objects.filter(code='GEN').first()
+        if not default_fund:
+            default_fund = Fund.objects.filter(is_active=True).first()
             
-            for row_num, row in enumerate(reader, start=2):  # Start at 2 (1 is header)
+        if not default_fund:
+             self.stdout.write(self.style.ERROR("No active Fund found. Cannot create BudgetHeads."))
+             return 0, 0, 1
+
+        self.stdout.write(f"Using Default Fund: {default_fund.code}")
+        self.stdout.write(f"Using Default Function: {default_function.code}")
+
+        with open(file_path, 'r', encoding='latin-1') as csvfile:
+            reader = csv.reader(csvfile)
+            
+            # Skip first 2 header rows
+            try:
+                next(reader) # Row 1: Major Object...
+                next(reader) # Row 2: Code Description...
+            except StopIteration:
+                pass
+            
+            for row_num, row in enumerate(reader, start=3):
+                if not row or len(row) < 6:
+                    continue
+                    
                 try:
-                    result = self._process_row(row, function_cache, dry_run)
-                    if result == 'created':
+                    # Columns: 
+                    # 0: Major Code, 1: Major Desc
+                    # 2: Minor Code, 3: Minor Desc
+                    # 4: Global Code, 5: Global Desc
+                    
+                    # 1. Major Head
+                    major_code = row[0].strip()
+                    major_desc = row[1].strip()
+                    
+                    if major_code and major_code not in major_cache:
+                        major_obj, _ = MajorHead.objects.get_or_create(
+                            code=major_code,
+                            defaults={'name': major_desc or f"Major Head {major_code}"}
+                        )
+                        major_cache[major_code] = major_obj
+                    major_obj = major_cache.get(major_code)
+                    
+                    # 2. Minor Head
+                    minor_code = row[2].strip()
+                    minor_desc = row[3].strip()
+                    
+                    if minor_code and minor_code not in minor_cache and major_obj:
+                        minor_obj, _ = MinorHead.objects.get_or_create(
+                            code=minor_code,
+                            defaults={'name': minor_desc or f"Minor Head {minor_code}", 'major': major_obj}
+                        )
+                        minor_cache[minor_code] = minor_obj
+                    minor_obj = minor_cache.get(minor_code)
+                    
+                    # 3. Global Head
+                    pifra_code = row[4].strip()
+                    pifra_desc = row[5].strip()
+                    
+                    # Infer account type from first letter
+                    account_type = AccountType.EXPENDITURE
+                    if pifra_code:
+                        first_char = pifra_code[0].upper()
+                        if first_char == 'C': account_type = AccountType.REVENUE
+                        elif first_char == 'G': account_type = AccountType.LIABILITY
+                        elif first_char == 'F': account_type = AccountType.ASSET
+                        elif first_char == '3': account_type = AccountType.EQUITY # Equity usually starts with 3
+                    
+                    if pifra_code and pifra_code not in global_cache and minor_obj:
+                        global_obj, _ = GlobalHead.objects.get_or_create(
+                            code=pifra_code,
+                            defaults={
+                                'name': pifra_desc, 
+                                'minor': minor_obj,
+                                'account_type': account_type
+                            }
+                        )
+                        global_cache[pifra_code] = global_obj
+                    global_obj = global_cache.get(pifra_code)
+                    
+                    if not global_obj:
+                         continue
+
+                    # 4. Create/Update BudgetHead (Default Fund/Function)
+                    if dry_run:
                         created_count += 1
-                    elif result == 'updated':
+                        continue
+                        
+                    budget_head, created = BudgetHead.objects.update_or_create(
+                        fund=default_fund,
+                        global_head=global_obj,
+                        function=default_function,
+                        defaults={
+                            'budget_control': True,
+                            'project_required': False,
+                            'posting_allowed': True,
+                            'is_active': True 
+                        }
+                    )
+                    
+                    if created:
+                        created_count += 1
+                    else:
                         updated_count += 1
+                        
                 except Exception as e:
                     error_count += 1
                     self.stdout.write(self.style.ERROR(
-                        f"Row {row_num}: Error processing {row.get('TMA_Sub_Object', 'UNKNOWN')} - {e}"
+                        f"Row {row_num}: Error - {e}"
                     ))
-        
+                    
         return created_count, updated_count, error_count
-    
-    def _process_row(
-        self,
-        row: Dict[str, Any],
-        function_cache: Dict[str, FunctionCode],
-        dry_run: bool
-    ) -> str:
-        """
-        Process a single CSV row.
-        
-        Args:
-            row: Dictionary of CSV columns.
-            function_cache: Cache of FunctionCode objects.
-            dry_run: If True, don't save to database.
-            
-        Returns:
-            'created' or 'updated' status string.
-        """
-        # Get or create FunctionCode
-        func_code = row.get('Function', '').strip()
-        if func_code and func_code not in function_cache:
-            func_obj, _ = FunctionCode.objects.get_or_create(
-                code=func_code,
-                defaults={'name': func_code}
-            )
-            function_cache[func_code] = func_obj
-        
-        function_obj = function_cache.get(func_code)
-        
-        # Map account type
-        account_type_str = row.get('Account_Type', 'Expenditure').strip()
-        account_type = self.ACCOUNT_TYPE_MAP.get(account_type_str, AccountType.EXPENDITURE)
-        
-        # Parse boolean fields
-        budget_control = row.get('Budget_Control', 'Yes').strip().lower() == 'yes'
-        project_required = row.get('Project_Required', 'No').strip().lower() == 'yes'
-        posting_allowed = row.get('Posting_Allowed', 'Yes').strip().lower() == 'yes'
-        
-        # Parse fund_id and resolve to an existing Fund id
-        try:
-            orig_fund_id = int(row.get('Fund', 1))
-        except (ValueError, TypeError):
-            orig_fund_id = 1
 
-        # If the fund id from CSV does not exist in DB, try to map by common codes
-        fund_id = orig_fund_id
-        if not Fund.objects.filter(pk=fund_id).exists():
-            # Fallback mapping: CSV numeric -> expected Fund.code
-            FALLBACK_FUND_MAP = {
-                1: 'GEN',  # General / Current
-                2: 'DEV',  # Development
-                5: 'PEN',  # Pension
-            }
-            fallback_code = FALLBACK_FUND_MAP.get(orig_fund_id)
-            if fallback_code:
-                fund_obj = Fund.objects.filter(code__iexact=fallback_code).first()
-                if fund_obj:
-                    fund_id = fund_obj.id
-            # If still not found, use any active fund as default
-            if not Fund.objects.filter(pk=fund_id).exists():
-                default_fund = Fund.objects.filter(is_active=True).first()
-                if default_fund:
-                    fund_id = default_fund.id
-        
-        # Prepare data
-        tma_sub_object = row.get('TMA_Sub_Object', '').strip()
-        
-        data = {
-            'fund_id': fund_id,
-            'function': function_obj,
-            'pifra_object': row.get('PIFRA_Object', '').strip(),
-            'pifra_description': row.get('PIFRA_Description', '').strip(),
-            'tma_description': row.get('TMA_Sub_Description', '').strip(),
-            'account_type': account_type,
-            'budget_control': budget_control,
-            'project_required': project_required,
-            'posting_allowed': posting_allowed,
-        }
-        
-        if dry_run:
-            # Validate only
-            self.stdout.write(f"  [DRY] Would process: {tma_sub_object}")
-            return 'created'
-        
-        # Create or update
-        budget_head, created = BudgetHead.objects.update_or_create(
-            tma_sub_object=tma_sub_object,
-            defaults=data
-        )
-        
-        return 'created' if created else 'updated'
+    def _process_row(self, *args, **kwargs):
+        # Deprecated method, kept for safety but unused
+        pass

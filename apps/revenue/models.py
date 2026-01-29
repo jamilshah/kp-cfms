@@ -331,7 +331,7 @@ class RevenueDemand(AuditLogMixin, TenantAwareMixin):
         # Get the Accounts Receivable system head
         ar_head = BudgetHead.objects.filter(
             is_system_head=True,
-            system_code='AR'
+            global_head__system_code='AR'
         ).first()
         
         if not ar_head:
@@ -377,7 +377,7 @@ class RevenueDemand(AuditLogMixin, TenantAwareMixin):
         JournalEntry.objects.create(
             voucher=voucher,
             budget_head=self.budget_head,
-            description=f"Revenue - {self.budget_head.tma_description}",
+            description=f"Revenue - {self.budget_head.name}",
             debit=Decimal('0.00'),
             credit=self.amount
         )
@@ -613,7 +613,7 @@ class RevenueCollection(AuditLogMixin, TenantAwareMixin):
         # Get the Accounts Receivable system head
         ar_head = BudgetHead.objects.filter(
             is_system_head=True,
-            system_code='AR'
+            global_head__system_code='AR'
         ).first()
         
         if not ar_head:

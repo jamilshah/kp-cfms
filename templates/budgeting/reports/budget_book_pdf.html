@@ -269,8 +269,8 @@ Description: Budget Book PDF Template - A4 government formatting
         <tbody>
             {% for allocation in operating_receipts %}
             <tr>
-                <td>{{ allocation.budget_head.pifra_object }}</td>
-                <td>{{ allocation.budget_head.pifra_description }}</td>
+                <td>{{ allocation.budget_head.code }}</td>
+                <td>{{ allocation.budget_head.name }}</td>
                 <td class="text-center">{{ allocation.budget_head.function.code|default:"-" }}</td>
                 <td class="text-right">{{ allocation.original_allocation|floatformat:2 }}</td>
             </tr>
@@ -303,8 +303,8 @@ Description: Budget Book PDF Template - A4 government formatting
         <tbody>
             {% for allocation in operating_expenditure_salary %}
             <tr>
-                <td>{{ allocation.budget_head.pifra_object }}</td>
-                <td>{{ allocation.budget_head.pifra_description }}</td>
+                <td>{{ allocation.budget_head.code }}</td>
+                <td>{{ allocation.budget_head.name }}</td>
                 <td class="text-center">{{ allocation.budget_head.function.code|default:"-" }}</td>
                 <td class="text-right">{{ allocation.original_allocation|floatformat:2 }}</td>
             </tr>
@@ -334,8 +334,8 @@ Description: Budget Book PDF Template - A4 government formatting
         <tbody>
             {% for allocation in operating_expenditure_nonsalary %}
             <tr>
-                <td>{{ allocation.budget_head.pifra_object }}</td>
-                <td>{{ allocation.budget_head.pifra_description }}</td>
+                <td>{{ allocation.budget_head.code }}</td>
+                <td>{{ allocation.budget_head.name }}</td>
                 <td class="text-center">{{ allocation.budget_head.function.code|default:"-" }}</td>
                 <td class="text-right">{{ allocation.original_allocation|floatformat:2 }}</td>
             </tr>
@@ -384,8 +384,8 @@ Description: Budget Book PDF Template - A4 government formatting
         <tbody>
             {% for allocation in capital_receipts %}
             <tr>
-                <td>{{ allocation.budget_head.pifra_object }}</td>
-                <td>{{ allocation.budget_head.pifra_description }}</td>
+                <td>{{ allocation.budget_head.code }}</td>
+                <td>{{ allocation.budget_head.name }}</td>
                 <td class="text-center">{{ allocation.budget_head.function.code|default:"-" }}</td>
                 <td class="text-right">{{ allocation.original_allocation|floatformat:2 }}</td>
             </tr>
@@ -415,8 +415,8 @@ Description: Budget Book PDF Template - A4 government formatting
         <tbody>
             {% for allocation in capital_expenditure %}
             <tr>
-                <td>{{ allocation.budget_head.pifra_object }}</td>
-                <td>{{ allocation.budget_head.pifra_description }}</td>
+                <td>{{ allocation.budget_head.code }}</td>
+                <td>{{ allocation.budget_head.name }}</td>
                 <td class="text-center">{{ allocation.budget_head.function.code|default:"-" }}</td>
                 <td class="text-right">{{ allocation.original_allocation|floatformat:2 }}</td>
             </tr>

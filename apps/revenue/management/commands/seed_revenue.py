@@ -16,7 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import Organization, BankAccount
-from apps.finance.models import BudgetHead, FunctionCode, Fund, AccountType
+from apps.finance.models import BudgetHead, FunctionCode, Fund, AccountType, MajorHead, MinorHead, GlobalHead
 from apps.budgeting.models import FiscalYear
 from apps.revenue.models import Payer, RevenueDemand, RevenueCollection, DemandStatus
 from apps.users.models import CustomUser
@@ -130,15 +130,32 @@ class Command(BaseCommand):
             defaults={'name': 'Administration', 'is_active': True}
         )
         
-        ar_head, created = BudgetHead.objects.get_or_create(
-            system_code='AR',
+        # Create Master Data for AR (A01001)
+        # Note: A01 is normally Employee Expenses, but legacy seed used A01001 for AR.
+        # We preserve the code but ensure account_type is ASSET.
+        major, _ = MajorHead.objects.get_or_create(
+            code='A01', 
+            defaults={'name': 'Employees Related Expenses', 'account_type': AccountType.ASSET}
+        )
+        minor, _ = MinorHead.objects.get_or_create(
+            code='A010', 
+            major_head=major, 
+            defaults={'name': 'Basic Pay'}
+        )
+        gh, _ = GlobalHead.objects.get_or_create(
+            code='A01001', 
+            minor_head=minor, 
             defaults={
-                'tma_sub_object': 'A01001-000',
-                'pifra_object': 'A01001',
-                'pifra_description': 'Accounts Receivable',
-                'tma_description': 'Accounts Receivable - Revenue',
-                'account_type': AccountType.ASSET,
-                'fund': fund,
+                'name': 'Accounts Receivable', 
+                'account_type': AccountType.ASSET, 
+                'system_code': 'AR'
+            }
+        )
+        
+        ar_head, created = BudgetHead.objects.get_or_create(
+            global_head=gh,
+            fund=fund,
+            defaults={
                 'function': func,
                 'is_system_head': True,
                 'budget_control': False,
@@ -147,9 +164,9 @@ class Command(BaseCommand):
         )
         
         if created:
-            self.stdout.write(f'    ✓ Created: {ar_head.tma_sub_object} - {ar_head.tma_description}')
+            self.stdout.write(f'    ✓ Created: {ar_head.code} - {ar_head.name}')
         else:
-            self.stdout.write(f'    ✓ Exists: {ar_head.tma_sub_object} - {ar_head.tma_description}')
+            self.stdout.write(f'    ✓ Exists: {ar_head.code} - {ar_head.name}')
         
         return ar_head
     
@@ -170,34 +187,37 @@ class Command(BaseCommand):
         )
         
         revenue_heads_data = [
-            {
-                'tma_sub_object': 'C03801-000',
-                'pifra_object': 'C03801',
-                'pifra_description': 'Rent of Immovable Property',
-                'tma_description': 'Shop Rent',
-            },
-            {
-                'tma_sub_object': 'C02813-000',
-                'pifra_object': 'C02813',
-                'pifra_description': 'Education Fee',
-                'tma_description': 'Education Fee - Schools',
-            },
-            {
-                'tma_sub_object': 'C04001-000',
-                'pifra_object': 'C04001',
-                'pifra_description': 'Water Rates',
-                'tma_description': 'Water Connection Fee',
-            },
+            {'code': 'C03801', 'name': 'Rent of Immovable Property', 'minor_name': 'Rent from Building & Land'},
+            {'code': 'C02813', 'name': 'Education Fee', 'minor_name': 'Education'},
+            {'code': 'C04001', 'name': 'Water Rates', 'minor_name': 'Economic Services Receipts'},
         ]
         
         created_heads = []
-        for head_data in revenue_heads_data:
+        for data in revenue_heads_data:
+            code = data['code']
+            major_code = code[:3]
+            minor_code = code[:4]
+            
+            # Create Master Data
+            major, _ = MajorHead.objects.get_or_create(
+                code=major_code, 
+                defaults={'name': f"Major Head {major_code}", 'account_type': AccountType.REVENUE}
+            )
+            minor, _ = MinorHead.objects.get_or_create(
+                code=minor_code, 
+                major_head=major, 
+                defaults={'name': data.get('minor_name', f"Minor Head {minor_code}")}
+            )
+            gh, _ = GlobalHead.objects.get_or_create(
+                code=code, 
+                minor_head=minor, 
+                defaults={'name': data['name'], 'account_type': AccountType.REVENUE}
+            )
+            
             head, created = BudgetHead.objects.get_or_create(
-                tma_sub_object=head_data['tma_sub_object'],
+                global_head=gh,
+                fund=fund,
                 defaults={
-                    **head_data,
-                    'account_type': AccountType.REVENUE,
-                    'fund': fund,
                     'function': func,
                     'is_system_head': False,
                     'budget_control': False,
@@ -206,9 +226,9 @@ class Command(BaseCommand):
             )
             created_heads.append(head)
             if created:
-                self.stdout.write(f'    ✓ Created: {head.tma_sub_object} - {head.tma_description}')
+                self.stdout.write(f'    ✓ Created: {head.code} - {head.name}')
             else:
-                self.stdout.write(f'    ✓ Exists: {head.tma_sub_object} - {head.tma_description}')
+                self.stdout.write(f'    ✓ Exists: {head.code} - {head.name}')
         
         return created_heads
     

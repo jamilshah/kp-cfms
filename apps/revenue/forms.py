@@ -126,10 +126,10 @@ class DemandForm(forms.ModelForm):
         
         # Filter budget heads to Revenue accounts only
         self.fields['budget_head'].queryset = BudgetHead.objects.filter(
-            account_type=AccountType.REVENUE,
+            global_head__account_type=AccountType.REVENUE,
             posting_allowed=True,
             is_active=True
-        ).order_by('tma_sub_object')
+        ).order_by('global_head__code')
         
         # Set default dates
         if not self.instance.pk:

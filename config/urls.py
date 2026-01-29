@@ -27,12 +27,13 @@ urlpatterns = [
     # Override the default accounts login to use CNIC-normalizing form
     path('accounts/login/', auth_views.LoginView.as_view(authentication_form=CNICAuthenticationForm), name='login'),
     path('accounts/', include('django.contrib.auth.urls')),
+    path('dashboard/', include('apps.dashboard.urls')),
     path('budgeting/', include('apps.budgeting.urls')),
     path('expenditure/', include('apps.expenditure.urls')),
     path('revenue/', include('apps.revenue.urls')),
     path('finance/', include('apps.finance.urls')),
     path('reports/', include('apps.reporting.urls')),
     path('system-admin/', include('apps.system_admin.urls')),
-    path('', RedirectView.as_view(url='/budgeting/', permanent=False), name='home'),
+    path('', RedirectView.as_view(url='/dashboard/', permanent=False), name='home'),
 ]
 

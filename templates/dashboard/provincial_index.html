@@ -1,0 +1,409 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Provincial Dashboard - KP-CFMS{% endblock %}
+
+{% block extra_css %}
+<style>
+    .command-center-card {
+        border-left: 5px solid #1a5276;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .command-center-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    }
+    .provincial-kpi {
+        font-size: 2.5rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #1a5276 0%, #2e86ab 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    .kpi-subtitle {
+        font-size: 0.75rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .performance-badge {
+        font-size: 0.9rem;
+        padding: 0.35rem 0.75rem;
+    }
+    .red-zone-table {
+        font-size: 0.85rem;
+    }
+    .red-zone-table thead {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        color: white;
+    }
+    .filter-card {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header with Filters -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2 class="mb-1">
+                <i class="bi bi-globe-asia-australia"></i> Provincial Command Center
+            </h2>
+            <p class="text-muted">
+                Khyber Pakhtunkhwa - All TMAs
+                {% if selected_district %}
+                    <span class="badge bg-primary">{{ selected_district.name }} District</span>
+                {% elif selected_division %}
+                    <span class="badge bg-info">{{ selected_division.name }} Division</span>
+                {% endif %}
+                {% if from_cache %}
+                    <span class="badge bg-success ms-2"><i class="bi bi-lightning-fill"></i> Cached</span>
+                {% endif %}
+            </p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="?refresh=1{% if selected_division %}&division={{ selected_division.id }}{% endif %}{% if selected_district %}&district={{ selected_district.id }}{% endif %}" 
+               class="btn btn-outline-primary">
+                <i class="bi bi-arrow-clockwise"></i> Refresh Data
+            </a>
+        </div>
+    </div>
+
+    <!-- Geographic Filters -->
+    <div class="card filter-card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Filter by Division</label>
+                    <select name="division" class="form-select" onchange="this.form.submit()">
+                        <option value="">All Divisions</option>
+                        {% for div in divisions %}
+                            <option value="{{ div.id }}" {% if selected_division.id == div.id %}selected{% endif %}>
+                                {{ div.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Filter by District</label>
+                    <select name="district" class="form-select" onchange="this.form.submit()">
+                        <option value="">All Districts</option>
+                        {% for dist in districts %}
+                            <option value="{{ dist.id }}" {% if selected_district.id == dist.id %}selected{% endif %}>
+                                {{ dist.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="bi bi-funnel"></i> Apply Filters
+                    </button>
+                    <a href="{% url 'dashboard:provincial' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-x-circle"></i> Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if no_fiscal_year %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> No active fiscal year found.
+    </div>
+    {% else %}
+
+    <!-- Section 1: Province at a Glance -->
+    <div class="row g-3 mb-4">
+        <!-- Total Budget vs Utilization -->
+        <div class="col-lg-3 col-md-6">
+            <div class="card command-center-card h-100">
+                <div class="card-body">
+                    <div class="kpi-subtitle mb-2">Total Budget Utilization</div>
+                    <div class="provincial-kpi">{{ provincial_totals.utilization_percent|floatformat:1 }}%</div>
+                    <div class="progress mt-3" style="height: 10px;">
+                        <div class="progress-bar {% if provincial_totals.utilization_percent < 75 %}bg-success{% elif provincial_totals.utilization_percent < 90 %}bg-warning{% else %}bg-danger{% endif %}" 
+                             style="width: {{ provincial_totals.utilization_percent }}%"></div>
+                    </div>
+                    <small class="text-muted mt-2 d-block">
+                        PKR {{ provincial_totals.total_utilization|floatformat:0|intcomma }} / {{ provincial_totals.total_budget|floatformat:0|intcomma }}
+                    </small>
+                    <small class="text-muted">Across {{ provincial_totals.tma_count }} TMA{{ provincial_totals.tma_count|pluralize }}</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Revenue Recovery -->
+        <div class="col-lg-3 col-md-6">
+            <div class="card command-center-card h-100">
+                <div class="card-body">
+                    <div class="kpi-subtitle mb-2">Revenue Recovery</div>
+                    <div class="provincial-kpi">{{ provincial_totals.recovery_percent|floatformat:1 }}%</div>
+                    <div class="progress mt-3" style="height: 10px;">
+                        <div class="progress-bar {% if provincial_totals.recovery_percent > 80 %}bg-success{% elif provincial_totals.recovery_percent > 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                             style="width: {{ provincial_totals.recovery_percent }}%"></div>
+                    </div>
+                    <small class="text-muted mt-2 d-block">
+                        PKR {{ provincial_totals.total_collection|floatformat:0|intcomma }} / {{ provincial_totals.total_demand|floatformat:0|intcomma }}
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Cash Liquidity -->
+        <div class="col-lg-3 col-md-6">
+            <div class="card command-center-card h-100" style="border-left-color: #28a745;">
+                <div class="card-body">
+                    <div class="kpi-subtitle mb-2">Total Cash Liquidity</div>
+                    <div class="provincial-kpi" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                        PKR {{ provincial_totals.total_cash|floatformat:0|intcomma }}
+                    </div>
+                    <small class="text-muted mt-2 d-block">Province-wide Bank Balances</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Liabilities -->
+        <div class="col-lg-3 col-md-6">
+            <div class="card command-center-card h-100" style="border-left-color: #dc3545;">
+                <div class="card-body">
+                    <div class="kpi-subtitle mb-2">Pending Liabilities</div>
+                    <div class="provincial-kpi" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                        {{ provincial_totals.liabilities_count }}
+                    </div>
+                    <small class="text-muted mt-2 d-block">
+                        PKR {{ provincial_totals.total_liabilities|floatformat:0|intcomma }}
+                    </small>
+                    <small class="text-muted">Approved but Unpaid Bills</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 2: Comparative Charts -->
+    <div class="row g-3 mb-4">
+        <!-- Recovery Leaderboard -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-trophy-fill text-warning"></i> Revenue Recovery Leaderboard
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div style="height: 350px;">
+                        <canvas id="leaderboardChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Expense Composition -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-pie-chart-fill text-primary"></i> Provincial Expense Composition
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div style="height: 350px;">
+                        <canvas id="expenseChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 3: The Red Zone (Alerts) -->
+    <div class="row g-3">
+        <!-- TMAs in Deficit -->
+        <div class="col-lg-6">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-exclamation-triangle-fill"></i> TMAs in Deficit
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if deficit_tmas %}
+                    <div class="table-responsive">
+                        <table class="table table-sm red-zone-table">
+                            <thead>
+                                <tr>
+                                    <th>TMA</th>
+                                    <th class="text-end">Expenditure</th>
+                                    <th class="text-end">Revenue</th>
+                                    <th class="text-end">Deficit</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for tma in deficit_tmas %}
+                                <tr>
+                                    <td><strong>{{ tma.name }}</strong></td>
+                                    <td class="text-end">{{ tma.expenditure|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">{{ tma.revenue|floatformat:0|intcomma }}</td>
+                                    <td class="text-end text-danger fw-bold">
+                                        {{ tma.deficit|floatformat:0|intcomma }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">
+                        <i class="bi bi-check-circle text-success"></i> No TMAs in deficit.
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Low Budget Utilization -->
+        <div class="col-lg-6">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-hourglass-split"></i> TMAs with Low Budget Utilization (<10%)
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if low_utilization_tmas %}
+                    <div class="table-responsive">
+                        <table class="table table-sm red-zone-table">
+                            <thead class="bg-warning">
+                                <tr>
+                                    <th>TMA</th>
+                                    <th class="text-end">Budget</th>
+                                    <th class="text-end">Spent</th>
+                                    <th class="text-end">Utilization</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for tma in low_utilization_tmas %}
+                                <tr>
+                                    <td><strong>{{ tma.name }}</strong></td>
+                                    <td class="text-end">{{ tma.budget|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">{{ tma.spent|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">
+                                        <span class="badge bg-warning text-dark">
+                                            {{ tma.utilization_pct|floatformat:1 }}%
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">
+                        <i class="bi bi-check-circle text-success"></i> All TMAs have adequate utilization.
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Chart.js from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    {% if not no_fiscal_year %}
+    
+    // Recovery Leaderboard (Horizontal Bar Chart)
+    const leaderboardCtx = document.getElementById('leaderboardChart').getContext('2d');
+    const topPerformers = {{ top_performers|safe }};
+    
+    new Chart(leaderboardCtx, {
+        type: 'bar',
+        data: {
+            labels: topPerformers.map(item => item.name),
+            datasets: [{
+                label: 'Recovery %',
+                data: topPerformers.map(item => item.recovery_percent),
+                backgroundColor: 'rgba(40, 167, 69, 0.7)',
+                borderColor: 'rgba(40, 167, 69, 1)',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.parsed.x.toFixed(1) + '%';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Expense Composition (Pie Chart)
+    const expenseCtx = document.getElementById('expenseChart').getContext('2d');
+    const expenseData = {{ expense_composition|safe }};
+    
+    new Chart(expenseCtx, {
+        type: 'pie',
+        data: {
+            labels: expenseData.map(item => item.category),
+            datasets: [{
+                data: expenseData.map(item => item.amount),
+                backgroundColor: expenseData.map(item => item.color),
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.parsed / total) * 100).toFixed(1);
+                            return context.label + ': PKR ' + context.parsed.toLocaleString() + ' (' + percentage + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    {% endif %}
+});
+</script>
+{% endblock %}

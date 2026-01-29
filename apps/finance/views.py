@@ -91,7 +91,7 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
     model = BudgetHead
     template_name = 'finance/budget_head_list.html'
     context_object_name = 'budget_heads'
-    ordering = ['pifra_object', 'tma_sub_object']
+    ordering = ['global_head__code']
     paginate_by = None
 
     def get_queryset(self):
@@ -101,10 +101,8 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         query = self.request.GET.get('q')
         if query:
             qs = qs.filter(
-                models.Q(tma_description__icontains=query) |
-                models.Q(pifra_object__icontains=query) |
-                models.Q(tma_sub_object__icontains=query) |
-                models.Q(pifra_description__icontains=query)
+                models.Q(global_head__name__icontains=query) |
+                models.Q(global_head__code__icontains=query)
             )
         
         # Account type filter
@@ -135,12 +133,12 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         # Major head filter (first 3 characters)
         major_head = self.request.GET.get('major_head')
         if major_head:
-            qs = qs.filter(pifra_object__startswith=major_head)
+            qs = qs.filter(global_head__code__startswith=major_head)
         
         # Minor head filter (first 4 characters)
         minor_head = self.request.GET.get('minor_head')
         if minor_head:
-            qs = qs.filter(pifra_object__startswith=minor_head)
+            qs = qs.filter(global_head__code__startswith=minor_head)
         
         return qs
 
@@ -157,7 +155,7 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         context['fund_types'] = FundType.choices
         
         # Get unique major and minor heads for filtering
-        all_heads = BudgetHead.objects.values_list('pifra_object', flat=True).distinct().order_by('pifra_object')
+        all_heads = BudgetHead.objects.values_list('global_head__code', flat=True).distinct().order_by('global_head__code')
         major_heads = set()
         minor_heads = set()
         
@@ -178,7 +176,7 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         stack = []
         
         for head in heads:
-            code = head.pifra_object
+            code = head.code
             
             # Pop stack until we find the parent
             while stack and (not code.startswith(stack[-1][0]) or code == stack[-1][0]):

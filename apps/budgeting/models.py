@@ -255,7 +255,7 @@ class FiscalYear(AuditLogMixin, TenantAwareMixin):
     def get_contingency_amount(self) -> Decimal:
         """Get the contingency/reserve allocation amount."""
         result = self.allocations.filter(
-            budget_head__pifra_object__startswith='A09'
+            budget_head__global_head__code__startswith='A09'
         ).aggregate(total=Sum('original_allocation'))
         return result['total'] or Decimal('0.00')
 
@@ -337,7 +337,7 @@ class BudgetAllocation(AuditLogMixin, TenantAwareMixin):
     class Meta:
         verbose_name = _('Budget Allocation')
         verbose_name_plural = _('Budget Allocations')
-        ordering = ['fiscal_year', 'budget_head__pifra_object']
+        ordering = ['fiscal_year', 'budget_head__global_head__code']
         unique_together = ['organization', 'fiscal_year', 'budget_head']
         indexes = [
             models.Index(fields=['fiscal_year', 'budget_head']),
@@ -345,7 +345,7 @@ class BudgetAllocation(AuditLogMixin, TenantAwareMixin):
         ]
     
     def __str__(self) -> str:
-        return f"{self.fiscal_year} - {self.budget_head.tma_sub_object}"
+        return f"{self.fiscal_year} - {self.budget_head.code}"
     
     def save(self, *args, **kwargs) -> None:
         """Initialize revised_allocation from original if not set."""
@@ -767,7 +767,7 @@ class ScheduleOfEstablishment(AuditLogMixin, TenantAwareMixin):
                 raise ValidationError({
                     'budget_head': _(
                         'Schedule of Establishment must link to a salary head (A01*). '
-                        f'Selected head {self.budget_head.pifra_object} is not a salary head.'
+                        f'Selected head {self.budget_head.code} is not a salary head.'
                     )
                 })
         if self.occupied_posts > self.sanctioned_posts:

@@ -83,42 +83,218 @@ class FunctionCode(UUIDMixin):
         return f"{self.code} - {self.name}"
 
 
-class BudgetHead(AuditLogMixin, StatusMixin):
+# ============================================================================
+# MASTER DATA LAYER - PIFRA Chart of Accounts Hierarchy
+# ============================================================================
+
+class MajorHead(TimeStampedMixin):
     """
-    Budget Head representing a Chart of Accounts entry.
+    Major Object classification (Level 1 of PIFRA hierarchy).
     
-    Follows the PIFRA/NAM hierarchy:
-    Entity -> Fund -> Function -> Object (Major/Minor/Detailed)
+    Examples: A01 (Employee Related), A03 (Operating Expenses), C01 (Tax Revenue)
     
-    The PUGF classification is DERIVED from:
-    1. Object code (A01101 = Officers = PUGF, A01151 = Other Staff = Non-PUGF)
-    2. Designation keywords in description
+    This is Master Data - managed at provincial level, read-only for TMAs.
+    """
+    
+    code = models.CharField(
+        max_length=10,
+        unique=True,
+        verbose_name=_('Major Code'),
+        help_text=_('Major object code (e.g., A01, A03, C01).')
+    )
+    name = models.CharField(
+        max_length=255,
+        verbose_name=_('Major Name'),
+        help_text=_('Description of major object (e.g., Employee Related Expenses).')
+    )
+    
+    class Meta:
+        verbose_name = _('Major Head')
+        verbose_name_plural = _('Major Heads')
+        ordering = ['code']
+    
+    def __str__(self) -> str:
+        return f"{self.code} - {self.name}"
+
+
+class MinorHead(TimeStampedMixin):
+    """
+    Minor Object classification (Level 2 of PIFRA hierarchy).
+    
+    Examples: A011 (Pay), A012 (Allowances), A035 (Operating Leases)
+    
+    This is Master Data - managed at provincial level, read-only for TMAs.
+    """
+    
+    code = models.CharField(
+        max_length=10,
+        unique=True,
+        verbose_name=_('Minor Code'),
+        help_text=_('Minor object code (e.g., A011, A012).')
+    )
+    name = models.CharField(
+        max_length=255,
+        verbose_name=_('Minor Name')
+    )
+    major = models.ForeignKey(
+        MajorHead,
+        on_delete=models.PROTECT,
+        related_name='minor_heads',
+        verbose_name=_('Major Head')
+    )
+    
+    class Meta:
+        verbose_name = _('Minor Head')
+        verbose_name_plural = _('Minor Heads')
+        ordering = ['code']
+    
+    def __str__(self) -> str:
+        return f"{self.code} - {self.name}"
+
+
+class SystemCode(models.TextChoices):
+    """
+    System-controlled account codes for automated GL posting.
+    
+    These accounts are used by the system for specific workflows:
+    - Suspense: Temporary holding for unclassified transactions
+    - Clearing: Intermediate accounts for reconciliation
+    """
+    
+    SYS_SUSPENSE = 'SYS_SUSPENSE', _('Suspense Account')
+    CLEARING_CHQ = 'CLEARING_CHQ', _('Cheque Clearing')
+    CLEARING_IT = 'CLEARING_IT', _('Income Tax Withheld')
+    CLEARING_GST = 'CLEARING_GST', _('Sales Tax Withheld')
+    CLEARING_SEC = 'CLEARING_SEC', _('Security/Retention Money')
+    AR = 'AR', _('Accounts Receivable')
+
+
+class GlobalHead(TimeStampedMixin):
+    """
+    Detailed Object classification (Level 3 of PIFRA hierarchy).
+    
+    Examples: A01101 (Basic Pay - Officers), A01151 (Basic Pay - Other Staff)
+    
+    This is Master Data - the provincial standard Chart of Accounts.
+    TMAs cannot modify this, but link to it via BudgetHead.
     
     Attributes:
-        fund_id: Numeric fund identifier (1=Current, 2=Development, 5=Pension)
-        function: ForeignKey to FunctionCode
-        pifra_object: PIFRA object code (e.g., A01101)
-        tma_sub_object: TMA-specific sub-object code
-        description: Human-readable description
-        account_type: Expenditure, Revenue, etc.
-        fund_type: Derived PUGF/Non-PUGF classification
-        budget_control: Whether budget limits apply
-        project_required: Whether project code is required
-        posting_allowed: Whether transactions can be posted
+        code: Detailed object code (e.g., A01101)
+        name: Description
+        minor: Parent minor head
+        account_type: Expenditure, Revenue, Asset, Liability
+        system_code: Optional system code for automated workflows
     """
     
-    # NAM Code validator (alphanumeric with optional dash)
-    nam_code_validator = RegexValidator(
-        regex=r'^[A-Z0-9]+-?[A-Z0-9]*$',
-        message=_('NAM code must be alphanumeric (e.g., A01101 or A01101-000).')
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        verbose_name=_('Object Code'),
+        help_text=_('Detailed object code (e.g., A01101).')
     )
+    name = models.CharField(
+        max_length=255,
+        verbose_name=_('Object Name')
+    )
+    minor = models.ForeignKey(
+        MinorHead,
+        on_delete=models.PROTECT,
+        related_name='global_heads',
+        verbose_name=_('Minor Head')
+    )
+    account_type = models.CharField(
+        max_length=3,
+        choices=AccountType.choices,
+        default=AccountType.EXPENDITURE,
+        verbose_name=_('Account Type')
+    )
+    system_code = models.CharField(
+        max_length=20,
+        choices=SystemCode.choices,
+        null=True,
+        blank=True,
+        unique=True,
+        verbose_name=_('System Code'),
+        help_text=_('System code for automated workflows (Suspense, Clearing, etc.).')
+    )
+    
+    class Meta:
+        verbose_name = _('Global Head')
+        verbose_name_plural = _('Global Heads')
+        ordering = ['code']
+        indexes = [
+            models.Index(fields=['code']),
+            models.Index(fields=['account_type']),
+        ]
+    
+    def __str__(self) -> str:
+        return f"{self.code} - {self.name}"
+    
+    @property
+    def is_officer_related(self) -> bool:
+        """
+        Determine if this is an officer-related salary head.
+        
+        Logic:
+        - Must start with A011 (Salary heads)
+        - Last two digits must be between 01 and 50 (Officers range)
+        
+        Examples:
+        - A01101 -> True (Basic Pay - Officers)
+        - A01110 -> True (Current/Additional Charge Pay - Officers)
+        - A01151 -> False (Basic Pay - Other Staff)
+        """
+        if not self.code.startswith('A011'):
+            return False
+        
+        try:
+            # Extract last two digits
+            last_two = int(self.code[-2:])
+            return 1 <= last_two <= 50
+        except (ValueError, IndexError):
+            return False
+    
+    @property
+    def major_code(self) -> str:
+        """Get the major code via the hierarchy."""
+        return self.minor.major.code
+    
+    @property
+    def major_name(self) -> str:
+        """Get the major name via the hierarchy."""
+        return self.minor.major.name
+
+
+# ============================================================================
+# TRANSACTIONAL LAYER - Fund-Specific Budget Heads
+# ============================================================================
+
+class BudgetHead(AuditLogMixin, StatusMixin):
+    """
+    Transactional Budget Head - Links a Fund to a GlobalHead.
+    
+    This represents the active Chart of Accounts for a specific Fund.
+    Each Fund (General, Development, Pension) has its own set of BudgetHeads.
+    
+    Attributes:
+        fund: The fund this budget head belongs to
+        global_head: Link to the master GlobalHead
+        function: Optional functional classification
+        current_budget: Current budget allocation
+        is_active: Whether this head is active for transactions
+    """
     
     fund = models.ForeignKey(
         'finance.Fund',
         on_delete=models.PROTECT,
         related_name='budget_heads',
-        verbose_name=_('Fund'),
-        default=2
+        verbose_name=_('Fund')
+    )
+    global_head = models.ForeignKey(
+        GlobalHead,
+        on_delete=models.PROTECT,
+        related_name='budget_heads',
+        verbose_name=_('Global Head')
     )
     function = models.ForeignKey(
         FunctionCode,
@@ -128,41 +304,12 @@ class BudgetHead(AuditLogMixin, StatusMixin):
         null=True,
         blank=True
     )
-    pifra_object = models.CharField(
-        max_length=20,
-        validators=[nam_code_validator],
-        verbose_name=_('PIFRA Object Code'),
-        help_text=_('Standard PIFRA object code (e.g., A01101).')
-    )
-    pifra_description = models.CharField(
-        max_length=255,
-        verbose_name=_('PIFRA Description'),
-        help_text=_('Standard PIFRA description.')
-    )
-    tma_sub_object = models.CharField(
-        max_length=30,
-        unique=True,
-        validators=[nam_code_validator],
-        verbose_name=_('TMA Sub-Object Code'),
-        help_text=_('TMA-specific sub-object code (e.g., A01101-000).')
-    )
-    tma_description = models.CharField(
-        max_length=255,
-        verbose_name=_('TMA Description'),
-        help_text=_('TMA-specific description.')
-    )
-    account_type = models.CharField(
-        max_length=3,
-        choices=AccountType.choices,
-        default=AccountType.EXPENDITURE,
-        verbose_name=_('Account Type')
-    )
-    fund_type = models.CharField(
-        max_length=5,
-        choices=FundType.choices,
-        default=FundType.NON_PUGF,
-        verbose_name=_('Fund Type'),
-        help_text=_('PUGF/Non-PUGF classification (derived from object code).')
+    current_budget = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name=_('Current Budget'),
+        help_text=_('Current budget allocation for this head.')
     )
     budget_control = models.BooleanField(
         default=True,
@@ -179,109 +326,65 @@ class BudgetHead(AuditLogMixin, StatusMixin):
         verbose_name=_('Posting Allowed'),
         help_text=_('Whether transactions can be posted to this head.')
     )
-    is_charged = models.BooleanField(
-        default=False,
-        verbose_name=_('Is Charged (Non-Votable)'),
-        help_text=_('Charged expenditure that Council cannot reduce.')
-    )
-    is_system_head = models.BooleanField(
-        default=False,
-        verbose_name=_('Is System Head'),
-        help_text=_('Whether this is a system-controlled head for automated GL posting.')
-    )
-    
-    SYSTEM_CODE_CHOICES = [
-        ('AP', 'Accounts Payable'),
-        ('TAX_IT', 'Income Tax'),
-        ('TAX_GST', 'GST/Sales Tax'),
-        ('AR', 'Accounts Receivable'),
-    ]
-    
-    system_code = models.CharField(
-        max_length=10,
-        choices=SYSTEM_CODE_CHOICES,
-        null=True,
-        blank=True,
-        unique=True,
-        verbose_name=_('System Code'),
-        help_text=_('Unique code for system-controlled heads (AP, TAX_IT, TAX_GST, AR).')
-    )
     
     class Meta:
         verbose_name = _('Budget Head')
         verbose_name_plural = _('Budget Heads')
-        ordering = ['fund', 'pifra_object', 'tma_sub_object']
+        # Allow same global head for different functions (e.g. Electricity for Admin vs Water)
+        unique_together = [['fund', 'global_head', 'function']]
+        ordering = ['fund', 'global_head__code']
         indexes = [
-            models.Index(fields=['pifra_object']),
-            models.Index(fields=['tma_sub_object']),
-            models.Index(fields=['fund_type']),
-            models.Index(fields=['account_type']),
+            models.Index(fields=['fund', 'global_head']),
+            models.Index(fields=['is_active']),
         ]
     
     def __str__(self) -> str:
-        return f"{self.tma_sub_object} - {self.tma_description}"
+        func_code = self.function.code if self.function else 'XX'
+        return f"{self.fund.code} - {func_code} - {self.global_head.code} - {self.global_head.name}"
     
-    def save(self, *args, **kwargs) -> None:
-        """
-        Override save to auto-derive fund_type based on object code.
-        """
-        self.fund_type = self.derive_fund_type()
-        super().save(*args, **kwargs)
+    # Proxy properties for template compatibility
+    @property
+    def code(self) -> str:
+        """Proxy to global_head.code"""
+        return self.global_head.code
     
-    def derive_fund_type(self) -> str:
-        """
-        Derive PUGF/Non-PUGF classification based on rules.
-        
-        Logic (as per KP LG Act 2013 clarification):
-        1. Fund 5 -> PENSION
-        2. Fund 2 -> DEVELOPMENT
-        3. Fund 1 with A01101 (Officers) -> PUGF
-        4. Fund 1 with A01151 (Other Staff) -> NON_PUGF
-        5. Fund 1 + Officer keywords in desc -> PUGF
-        6. Otherwise -> NON_PUGF
-        
-        Returns:
-            FundType value string.
-        """
-        # Pension is always separate
-        if self.fund_id == 5:
-            return FundType.PENSION
-        
-        # Development is always separate
-        if self.fund_id == 2:
-            return FundType.DEVELOPMENT
-        
-        # For Fund 1 (Current), derive from object code
-        if self.fund_id == 1:
-            # A01101 = Basic Pay of Officers = PUGF
-            if self.pifra_object == 'A01101':
-                return FundType.PUGF
-            
-            # A01151 = Basic Pay of Other Staff = Non-PUGF
-            if self.pifra_object == 'A01151':
-                return FundType.NON_PUGF
-            
-            # Check for officer keywords in description
-            pugf_keywords = ['tmo', 'tehsil officer', 'engineer', 'superintendent']
-            desc_lower = self.tma_description.lower()
-            if any(keyword in desc_lower for keyword in pugf_keywords):
-                return FundType.PUGF
-        
-        # Default to Non-PUGF
-        return FundType.NON_PUGF
+    @property
+    def name(self) -> str:
+        """Proxy to global_head.name"""
+        return self.global_head.name
+    
+    @property
+    def is_officer(self) -> bool:
+        """Proxy to global_head.is_officer_related"""
+        return self.global_head.is_officer_related
+    
+    @property
+    def account_type(self) -> str:
+        """Proxy to global_head.account_type"""
+        return self.global_head.account_type
+    
+    @property
+    def major_code(self) -> str:
+        """Proxy to global_head.major_code"""
+        return self.global_head.major_code
+    
+    @property
+    def minor_code(self) -> str:
+        """Proxy to global_head.minor.code"""
+        return self.global_head.minor.code
     
     def get_full_code(self) -> str:
         """Return the complete NAM code path."""
         func_code = self.function.code if self.function else 'XX'
-        return f"F{self.fund_id}-{func_code}-{self.tma_sub_object}"
+        return f"F{self.fund.code}-{func_code}-{self.global_head.code}"
     
     def is_salary_head(self) -> bool:
         """Check if this is a salary-related budget head (A01*)."""
-        return self.pifra_object.startswith('A01')
+        return self.global_head.code.startswith('A01')
     
     def is_development_head(self) -> bool:
         """Check if this is a development budget head."""
-        return self.fund_id == 2 or self.fund_type == FundType.DEVELOPMENT
+        return self.fund.code == Fund.CODE_DEVELOPMENT
 
 
 class Fund(TimeStampedMixin):
@@ -300,6 +403,11 @@ class Fund(TimeStampedMixin):
         is_active: Whether fund is currently active
     """
     
+    # Standard System Fund Codes
+    CODE_GENERAL = 'GEN'
+    CODE_DEVELOPMENT = 'DEV'
+    CODE_PENSION = 'PEN'
+
     name = models.CharField(
         max_length=100,
         unique=True,

@@ -120,18 +120,17 @@ class BudgetAllocationAdmin(admin.ModelAdmin):
         'released_display', 'spent_display', 'available_display'
     ]
     list_filter = [
-        'fiscal_year', 'budget_head__account_type', 
-        'budget_head__fund_type'
+        'fiscal_year', 'budget_head__global_head__account_type', 'budget_head__fund'
     ]
     search_fields = [
-        'budget_head__tma_sub_object', 'budget_head__tma_description'
+        'budget_head__global_head__code', 'budget_head__global_head__name'
     ]
     readonly_fields = [
         'spent_amount', 'created_at', 'updated_at', 
         'created_by', 'updated_by'
     ]
     autocomplete_fields = ['budget_head']
-    ordering = ['fiscal_year', 'budget_head__pifra_object']
+    ordering = ['fiscal_year', 'budget_head__global_head__code']
     
     fieldsets = (
         (None, {
@@ -520,7 +519,7 @@ class SupplementaryGrantAdmin(admin.ModelAdmin):
         'amount_display', 'date', 'status_badge'
     ]
     list_filter = ['fiscal_year', 'status', 'date']
-    search_fields = ['reference_no', 'budget_head__tma_sub_object', 'budget_head__tma_description']
+    search_fields = ['reference_no', 'budget_head__global_head__code', 'budget_head__global_head__name']
     autocomplete_fields = ['budget_head']
     readonly_fields = [
         'approved_by', 'approved_at',
@@ -612,8 +611,8 @@ class ReappropriationAdmin(admin.ModelAdmin):
     list_filter = ['fiscal_year', 'status', 'date']
     search_fields = [
         'reference_no', 
-        'from_head__tma_sub_object', 'from_head__tma_description',
-        'to_head__tma_sub_object', 'to_head__tma_description'
+        'from_head__global_head__code', 'from_head__global_head__name',
+        'to_head__global_head__code', 'to_head__global_head__name'
     ]
     autocomplete_fields = ['from_head', 'to_head']
     readonly_fields = [
@@ -663,7 +662,7 @@ class ReappropriationAdmin(admin.ModelAdmin):
                 self.message_user(
                     request,
                     f'Approved: {reappropriation.reference_no} - Rs {reappropriation.amount:,.2f} '
-                    f'transferred from {reappropriation.from_head.tma_sub_object} to {reappropriation.to_head.tma_sub_object}',
+                    f'transferred from {reappropriation.from_head.code} to {reappropriation.to_head.code}',
                     messages.SUCCESS
                 )
             except Exception as e:

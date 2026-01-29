@@ -18,7 +18,10 @@ class BankAccountListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
     ordering = ['organization__name', 'bank_name']
     
     def get_queryset(self):
-        return super().get_queryset().select_related('organization', 'gl_code')
+        queryset = super().get_queryset().select_related('organization', 'gl_code')
+        if self.request.user.organization:
+            queryset = queryset.filter(organization=self.request.user.organization)
+        return queryset
 
 
 class BankAccountCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
@@ -30,7 +33,15 @@ class BankAccountCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
     
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
-        form.fields['organization'].widget.attrs.update({'class': 'form-select'})
+        
+        # Restrict Organization for TMA users
+        if self.request.user.organization:
+            if 'organization' in form.fields:
+                del form.fields['organization']
+            form.instance.organization = self.request.user.organization
+        else:
+            form.fields['organization'].widget.attrs.update({'class': 'form-select'})
+            
         form.fields['bank_name'].widget.attrs.update({'class': 'form-control'})
         form.fields['branch_code'].widget.attrs.update({'class': 'form-control'})
         form.fields['account_number'].widget.attrs.update({'class': 'form-control'})
@@ -55,7 +66,15 @@ class BankAccountUpdateView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
     
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
-        form.fields['organization'].widget.attrs.update({'class': 'form-select'})
+        
+        # Restrict Organization for TMA users
+        if self.request.user.organization:
+            if 'organization' in form.fields:
+                del form.fields['organization']
+            form.instance.organization = self.request.user.organization
+        else:
+            form.fields['organization'].widget.attrs.update({'class': 'form-select'})
+
         form.fields['bank_name'].widget.attrs.update({'class': 'form-control'})
         form.fields['branch_code'].widget.attrs.update({'class': 'form-control'})
         form.fields['account_number'].widget.attrs.update({'class': 'form-control'})

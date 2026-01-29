@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Access Denied" %}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card border-0 shadow-lg text-center">
+                <div class="card-body p-5">
+                    <div class="mb-4 text-danger">
+                        <i class="bi bi-shield-lock-fill" style="font-size: 5rem;"></i>
+                    </div>
+                    
+                    <h1 class="display-5 fw-bold mb-3 text-danger">{% trans "Access Denied" %}</h1>
+                    
+                    <p class="lead text-muted mb-4">
+                        {% if exception %}
+                            {{ exception }}
+                        {% else %}
+                            {% trans "You do not have permission to access this resource." %}
+                        {% endif %}
+                    </p>
+                    
+                    <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+                        <a href="{% url 'budgeting:dashboard' %}" class="btn btn-primary btn-lg px-4 gap-3">
+                            <i class="bi bi-speedometer2 me-2"></i>{% trans "Go to Dashboard" %}
+                        </a>
+                        <button onclick="history.back()" class="btn btn-outline-secondary btn-lg px-4">
+                            <i class="bi bi-arrow-left me-2"></i>{% trans "Go Back" %}
+                        </button>
+                    </div>
+                </div>
+                <div class="card-footer bg-light py-3 text-muted small">
+                    <i class="bi bi-info-circle me-1"></i>
+                    {% trans "If you believe this is an error, please contact your System Administrator." %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -94,7 +94,7 @@ class BillAdmin(admin.ModelAdmin):
     )
     
     def budget_head_code(self, obj):
-        return obj.budget_head.tma_sub_object
+        return obj.budget_head.code
     budget_head_code.short_description = 'Budget Head'
     
     def status_badge(self, obj):

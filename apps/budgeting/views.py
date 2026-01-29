@@ -189,12 +189,12 @@ class FiscalYearDetailView(LoginRequiredMixin, DetailView):
         
         context['receipt_allocations'] = BudgetAllocation.objects.filter(
             fiscal_year=fy,
-            budget_head__account_type=AccountType.REVENUE
+            budget_head__global_head__account_type=AccountType.REVENUE
         ).select_related('budget_head')[:20]
         
         context['expenditure_allocations'] = BudgetAllocation.objects.filter(
             fiscal_year=fy,
-            budget_head__account_type=AccountType.EXPENDITURE
+            budget_head__global_head__account_type=AccountType.EXPENDITURE
         ).select_related('budget_head')[:20]
         
         context['establishment'] = ScheduleOfEstablishment.objects.filter(
@@ -241,17 +241,17 @@ class BudgetAllocationListView(LoginRequiredMixin, ListView):
         # Filter by account type
         account_type = self.request.GET.get('account_type')
         if account_type:
-            queryset = queryset.filter(budget_head__account_type=account_type)
+            queryset = queryset.filter(budget_head__global_head__account_type=account_type)
         
         # Search
         search = self.request.GET.get('search')
         if search:
             queryset = queryset.filter(
-                Q(budget_head__tma_sub_object__icontains=search) |
-                Q(budget_head__tma_description__icontains=search)
+                Q(budget_head__global_head__code__icontains=search) |
+                Q(budget_head__global_head__name__icontains=search)
             )
         
-        return queryset.order_by('budget_head__pifra_object')
+        return queryset.order_by('budget_head__global_head__code')
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -653,12 +653,12 @@ class SAEDetailView(LoginRequiredMixin, DetailView):
         context['receipt_allocations'] = BudgetAllocation.objects.filter(
             fiscal_year=fy,
             budget_head__account_type=AccountType.REVENUE
-        ).select_related('budget_head').order_by('budget_head__pifra_object')
+        ).select_related('budget_head').order_by('budget_head__global_head__code')
         
         context['expenditure_allocations'] = BudgetAllocation.objects.filter(
             fiscal_year=fy,
             budget_head__account_type=AccountType.EXPENDITURE
-        ).select_related('budget_head').order_by('budget_head__pifra_object')
+        ).select_related('budget_head').order_by('budget_head__global_head__code')
         
         context['establishment'] = ScheduleOfEstablishment.objects.filter(
             fiscal_year=fy

@@ -77,10 +77,10 @@ Description: Budget Allocation List template.
                 {% for alloc in allocations %}
                 <tr>
                     <td>
-                        <code>{{ alloc.budget_head.tma_sub_object }}</code>
+                        <code>{{ alloc.budget_head.code }}</code>
                     </td>
                     <td>
-                        {{ alloc.budget_head.tma_description|truncatewords:8 }}
+                        {{ alloc.budget_head.name|truncatewords:8 }}
                         <br>
                         <small class="text-muted">{{ alloc.fiscal_year }}</small>
                     </td>

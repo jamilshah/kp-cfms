@@ -34,53 +34,6 @@
                             {% endif %}
                         </div>
                         <div class="col-md-6">
-                            <label for="{{ form.account_type.id_for_label }}" class="form-label">Account Type</label>
-                            {{ form.account_type }}
-                            {% if form.account_type.errors %}
-                                <div class="text-danger small">{{ form.account_type.errors.0 }}</div>
-                            {% endif %}
-                        </div>
-                    </div>
-                    
-                    <h5 class="mb-3 text-muted">Codes & Description</h5>
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label for="{{ form.pifra_object.id_for_label }}" class="form-label">PIFRA Code (Major)</label>
-                            {{ form.pifra_object }}
-                            <div class="form-text">e.g. A01101</div>
-                            {% if form.pifra_object.errors %}
-                                <div class="text-danger small">{{ form.pifra_object.errors.0 }}</div>
-                            {% endif %}
-                        </div>
-                        <div class="col-md-6">
-                            <label for="{{ form.tma_sub_object.id_for_label }}" class="form-label">TMA Sub-Object</label>
-                            {{ form.tma_sub_object }}
-                            <div class="form-text">e.g. A01101-001</div>
-                            {% if form.tma_sub_object.errors %}
-                                <div class="text-danger small">{{ form.tma_sub_object.errors.0 }}</div>
-                            {% endif %}
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="{{ form.tma_description.id_for_label }}" class="form-label">Description (TMA)</label>
-                        {{ form.tma_description }}
-                        {% if form.tma_description.errors %}
-                            <div class="text-danger small">{{ form.tma_description.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="mb-4">
-                        <label for="{{ form.pifra_description.id_for_label }}" class="form-label">Description (PIFRA)</label>
-                        {{ form.pifra_description }}
-                        {% if form.pifra_description.errors %}
-                            <div class="text-danger small">{{ form.pifra_description.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-                    
-                    <h5 class="mb-3 text-muted">Settings</h5>
-                    <div class="row g-3 mb-4">
-                         <div class="col-12">
                             <label for="{{ form.fund.id_for_label }}" class="form-label">Fund</label>
                             {{ form.fund }}
                             <div class="form-text">Select the fund this budget head belongs to.</div>
@@ -88,7 +41,30 @@
                                 <div class="text-danger small">{{ form.fund.errors.0 }}</div>
                             {% endif %}
                         </div>
-                        
+                    </div>
+                    
+                    <h5 class="mb-3 text-muted">Object Code</h5>
+                    <div class="mb-4">
+                        <label for="{{ form.global_head.id_for_label }}" class="form-label">Global Head (Object Code)</label>
+                        {{ form.global_head }}
+                        <div class="form-text">Select the standardized PIFRA object code.</div>
+                        {% if form.global_head.errors %}
+                            <div class="text-danger small">{{ form.global_head.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    <h5 class="mb-3 text-muted">Budget & Settings</h5>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label for="{{ form.current_budget.id_for_label }}" class="form-label">Current Budget</label>
+                            {{ form.current_budget }}
+                            {% if form.current_budget.errors %}
+                                <div class="text-danger small">{{ form.current_budget.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
                         <div class="col-md-3 pt-2">
                             <div class="form-check">
                                 {{ form.is_active }}
@@ -100,9 +76,9 @@
                         
                         <div class="col-md-3 pt-2">
                             <div class="form-check">
-                                {{ form.is_charged }}
-                                <label class="form-check-label" for="{{ form.is_charged.id_for_label }}">
-                                    Charged (Non-Votable)
+                                {{ form.project_required }}
+                                <label class="form-check-label" for="{{ form.project_required.id_for_label }}">
+                                    Project Required
                                 </label>
                             </div>
                         </div>

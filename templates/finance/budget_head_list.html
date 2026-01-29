@@ -170,11 +170,11 @@
             <tbody>
                 {% for node in tree_nodes %}
                 {% with head=node.obj %}
-                <tr class="tree-row" data-level="{{ node.level }}" data-code="{{ head.pifra_object }}" data-parent="{{ node.parent_code|default:'' }}">
+                <tr class="tree-row" data-level="{{ node.level }}" data-code="{{ head.code }}" data-parent="{{ node.parent_code|default:'' }}">
                     <td>
                         <div style="padding-left: calc({{ node.level }} * 1.5rem); display: flex; align-items: center;">
                             {% if node.has_children %}
-                                <span class="tree-toggle expanded" data-code="{{ head.pifra_object }}"></span>
+                                <span class="tree-toggle expanded" data-code="{{ head.code }}"></span>
                             {% else %}
                                 <span style="width: 20px; display: inline-block;"></span>
                             {% endif %}
@@ -186,12 +186,12 @@
                             {% endif %}
                             
                             <div>
-                                <code class="text-primary fw-semibold">{{ head.pifra_object }}</code>
-                                <div class="small text-muted mt-1">{{ head.tma_description|truncatewords:15 }}</div>
+                                <code class="text-primary fw-semibold">{{ head.code }}</code>
+                                <div class="small text-muted mt-1">{{ head.name|truncatewords:15 }}</div>
                             </div>
                         </div>
                     </td>
-                    <td><span class="badge bg-light text-dark border">{{ head.tma_sub_object }}</span></td>
+                    <td><span class="badge bg-light text-dark border">{{ head.code }}</span></td>
                     <td><small class="text-muted">{{ head.fund.code }}</small></td>
                     <td><small class="text-muted">{{ head.function.code|default:"—" }}</small></td>
                     <td>

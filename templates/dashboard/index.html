@@ -1,0 +1,383 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Executive Dashboard - KP-CFMS{% endblock %}
+
+{% block extra_css %}
+<style>
+    .kpi-card {
+        border-left: 4px solid #0d6efd;
+        transition: transform 0.2s;
+    }
+    .kpi-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .kpi-card.success {
+        border-left-color: #198754;
+    }
+    .kpi-card.warning {
+        border-left-color: #ffc107;
+    }
+    .kpi-card.danger {
+        border-left-color: #dc3545;
+    }
+    .kpi-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #212529;
+    }
+    .kpi-label {
+        font-size: 0.875rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+    }
+    .alert-table {
+        font-size: 0.875rem;
+    }
+    .badge-utilization {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-1">
+                <i class="bi bi-speedometer2"></i> Executive Dashboard
+            </h2>
+            <p class="text-muted">
+                {% if is_provincial_view %}
+                    Provincial Summary - All TMAs
+                {% else %}
+                    {{ organization.name }} - {{ fiscal_year.year_name }}
+                {% endif %}
+                {% if from_cache %}
+                    <span class="badge bg-success ms-2"><i class="bi bi-lightning-fill"></i> Cached</span>
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    {% if no_fiscal_year %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> No active fiscal year found. Please create a fiscal year to view dashboard data.
+    </div>
+    {% else %}
+
+    <!-- KPI Cards Row -->
+    <div class="row g-3 mb-4">
+        <!-- Budget Utilization -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card kpi-card {% if budget_summary.utilization_percent < 75 %}success{% elif budget_summary.utilization_percent < 90 %}warning{% else %}danger{% endif %}">
+                <div class="card-body">
+                    <div class="kpi-label mb-2">Budget Utilized</div>
+                    <div class="kpi-value">{{ budget_summary.utilization_percent|floatformat:1 }}%</div>
+                    <div class="progress mt-2" style="height: 8px;">
+                        <div class="progress-bar {% if budget_summary.utilization_percent < 75 %}bg-success{% elif budget_summary.utilization_percent < 90 %}bg-warning{% else %}bg-danger{% endif %}" 
+                             role="progressbar" 
+                             style="width: {{ budget_summary.utilization_percent }}%"
+                             aria-valuenow="{{ budget_summary.utilization_percent }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                        </div>
+                    </div>
+                    <small class="text-muted mt-2 d-block">
+                        PKR {{ budget_summary.total_utilization|floatformat:0|intcomma }} / {{ budget_summary.total_budget|floatformat:0|intcomma }}
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Revenue Recovery -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card kpi-card {% if revenue_summary.recovery_percent > 80 %}success{% elif revenue_summary.recovery_percent > 50 %}warning{% else %}danger{% endif %}">
+                <div class="card-body">
+                    <div class="kpi-label mb-2">Revenue Recovery</div>
+                    <div class="kpi-value">{{ revenue_summary.recovery_percent|floatformat:1 }}%</div>
+                    <div class="progress mt-2" style="height: 8px;">
+                        <div class="progress-bar {% if revenue_summary.recovery_percent > 80 %}bg-success{% elif revenue_summary.recovery_percent > 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                             role="progressbar" 
+                             style="width: {{ revenue_summary.recovery_percent }}%"
+                             aria-valuenow="{{ revenue_summary.recovery_percent }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                        </div>
+                    </div>
+                    <small class="text-muted mt-2 d-block">
+                        PKR {{ revenue_summary.total_collection|floatformat:0|intcomma }} / {{ revenue_summary.total_demand|floatformat:0|intcomma }}
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cash at Bank -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card kpi-card success">
+                <div class="card-body">
+                    <div class="kpi-label mb-2">Cash at Bank</div>
+                    <div class="kpi-value">PKR {{ cash_position.total_cash|floatformat:0|intcomma }}</div>
+                    <small class="text-muted mt-2 d-block">
+                        {{ cash_position.accounts|length }} Active Account{{ cash_position.accounts|length|pluralize }}
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Liabilities -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card kpi-card {% if pending_liabilities.count > 10 %}danger{% elif pending_liabilities.count > 5 %}warning{% else %}success{% endif %}">
+                <div class="card-body">
+                    <div class="kpi-label mb-2">Pending Liabilities</div>
+                    <div class="kpi-value">{{ pending_liabilities.count }}</div>
+                    <small class="text-muted mt-2 d-block">
+                        PKR {{ pending_liabilities.total_amount|floatformat:0|intcomma }}
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row g-3 mb-4">
+        <!-- Top 5 Expenditure Heads -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-bar-chart-fill text-primary"></i> Top 5 Expenditure Heads
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="expenditureChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monthly Revenue Trend -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-graph-up text-success"></i> Monthly Revenue Trend
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="revenueChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Zone -->
+    <div class="row g-3">
+        <!-- Budget Heads Near Exhaustion -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-exclamation-triangle-fill text-warning"></i> Budget Heads Near Exhaustion
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if budget_alerts %}
+                    <div class="table-responsive">
+                        <table class="table table-sm alert-table">
+                            <thead>
+                                <tr>
+                                    <th>Budget Head</th>
+                                    <th class="text-end">Budget</th>
+                                    <th class="text-end">Spent</th>
+                                    <th class="text-end">Utilization</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in budget_alerts %}
+                                <tr>
+                                    <td>
+                                        <small class="text-muted">{{ alert.code }}</small><br>
+                                        {{ alert.head|truncatewords:5 }}
+                                    </td>
+                                    <td class="text-end">{{ alert.budget|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">{{ alert.spent|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">
+                                        <span class="badge badge-utilization {% if alert.utilization_pct >= 95 %}bg-danger{% else %}bg-warning{% endif %}">
+                                            {{ alert.utilization_pct|floatformat:1 }}%
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">
+                        <i class="bi bi-check-circle text-success"></i> All budget heads are within safe limits.
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Bank Accounts Summary -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-bank text-info"></i> Bank Accounts Summary
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if cash_position.accounts %}
+                    <div class="table-responsive">
+                        <table class="table table-sm alert-table">
+                            <thead>
+                                <tr>
+                                    <th>Account</th>
+                                    <th>Bank</th>
+                                    <th class="text-end">Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for account in cash_position.accounts %}
+                                <tr>
+                                    <td>
+                                        {{ account.title }}<br>
+                                        <small class="text-muted">{{ account.account_number }}</small>
+                                    </td>
+                                    <td>{{ account.bank_name }}</td>
+                                    <td class="text-end">
+                                        <strong>{{ account.balance|floatformat:0|intcomma }}</strong>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No active bank accounts found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Chart.js from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    {% if not no_fiscal_year %}
+    
+    // Top 5 Expenditure Heads Bar Chart
+    const expenditureCtx = document.getElementById('expenditureChart').getContext('2d');
+    const expenditureData = {{ top_expenditure|safe }};
+    
+    new Chart(expenditureCtx, {
+        type: 'bar',
+        data: {
+            labels: expenditureData.map(item => item.head.substring(0, 30) + '...'),
+            datasets: [{
+                label: 'Amount Spent (PKR)',
+                data: expenditureData.map(item => item.amount),
+                backgroundColor: 'rgba(13, 110, 253, 0.7)',
+                borderColor: 'rgba(13, 110, 253, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'PKR ' + context.parsed.y.toLocaleString();
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return 'PKR ' + (value / 1000000).toFixed(1) + 'M';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Monthly Revenue Trend Line Chart
+    const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+    const revenueData = {{ revenue_summary.monthly_trend|safe }};
+    
+    new Chart(revenueCtx, {
+        type: 'line',
+        data: {
+            labels: revenueData.map(item => item.month),
+            datasets: [{
+                label: 'Revenue Collected (PKR)',
+                data: revenueData.map(item => item.amount),
+                backgroundColor: 'rgba(25, 135, 84, 0.2)',
+                borderColor: 'rgba(25, 135, 84, 1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'PKR ' + context.parsed.y.toLocaleString();
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return 'PKR ' + (value / 1000000).toFixed(1) + 'M';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    {% endif %}
+});
+</script>
+{% endblock %}

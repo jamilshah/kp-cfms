@@ -12,7 +12,8 @@ from django.utils.translation import gettext_lazy as _
 
 from .models import (
     FunctionCode, BudgetHead, Fund, Voucher, JournalEntry, 
-    ChequeBook, ChequeLeaf, BankStatement, BankStatementLine
+    ChequeBook, ChequeLeaf, BankStatement, BankStatementLine,
+    MajorHead, MinorHead, GlobalHead
 )
 
 
@@ -26,41 +27,98 @@ class FunctionCodeAdmin(admin.ModelAdmin):
     ordering = ('code',)
 
 
+@admin.register(MajorHead)
+class MajorHeadAdmin(admin.ModelAdmin):
+    """Admin configuration for MajorHead model (Master Data)."""
+    
+    list_display = ('code', 'name')
+    search_fields = ('code', 'name')
+    ordering = ('code',)
+
+
+@admin.register(MinorHead)
+class MinorHeadAdmin(admin.ModelAdmin):
+    """Admin configuration for MinorHead model (Master Data)."""
+    
+    list_display = ('code', 'name', 'major')
+    list_filter = ('major',)
+    search_fields = ('code', 'name')
+    ordering = ('code',)
+
+
+@admin.register(GlobalHead)
+class GlobalHeadAdmin(admin.ModelAdmin):
+    """Admin configuration for GlobalHead model (Master Data)."""
+    
+    list_display = ('code', 'name', 'minor', 'account_type', 'system_code')
+    list_filter = ('account_type', 'system_code', 'minor__major')
+    search_fields = ('code', 'name')
+    ordering = ('code',)
+    readonly_fields = ('is_officer_related', 'major_code', 'major_name')
+    
+    fieldsets = (
+        (_('Identification'), {
+            'fields': ('code', 'name', 'minor')
+        }),
+        (_('Classification'), {
+            'fields': ('account_type', 'system_code')
+        }),
+        (_('Hierarchy (Read-Only)'), {
+            'fields': ('major_code', 'major_name', 'is_officer_related'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
 @admin.register(BudgetHead)
 class BudgetHeadAdmin(admin.ModelAdmin):
     """Admin configuration for BudgetHead model."""
     
     list_display = (
-        'tma_sub_object', 'tma_description', 'pifra_object',
-        'fund_id', 'fund_type', 'account_type', 'budget_control', 'is_active'
+        'fund', 'get_code', 'get_name',
+        'get_account_type', 'budget_control', 'is_active'
     )
     list_filter = (
-        'fund_id', 'fund_type', 'account_type',
+        'fund', 'global_head__account_type',
         'budget_control', 'project_required', 'is_active'
     )
     search_fields = (
-        'pifra_object', 'pifra_description',
-        'tma_sub_object', 'tma_description'
+        'global_head__code', 'global_head__name'
     )
-    ordering = ('fund_id', 'pifra_object', 'tma_sub_object')
+    ordering = ('fund', 'global_head__code')
     
-    readonly_fields = ('fund_type', 'created_at', 'updated_at', 'created_by', 'updated_by')
+    readonly_fields = ('created_at', 'updated_at', 'created_by', 'updated_by')
     
     fieldsets = (
-        (_('Identification'), {
-            'fields': ('pifra_object', 'pifra_description', 'tma_sub_object', 'tma_description')
+        (_('Link'), {
+            'fields': ('fund', 'global_head', 'function')
         }),
-        (_('Classification'), {
-            'fields': ('fund_id', 'function', 'account_type', 'fund_type')
+        (_('Budget'), {
+            'fields': ('current_budget',)
         }),
         (_('Control Flags'), {
-            'fields': ('budget_control', 'project_required', 'posting_allowed', 'is_charged', 'is_active')
+            'fields': ('budget_control', 'project_required', 'posting_allowed', 'is_active')
         }),
         (_('Audit Trail'), {
             'fields': ('created_at', 'updated_at', 'created_by', 'updated_by'),
             'classes': ('collapse',)
         }),
     )
+    
+    def get_code(self, obj):
+        return obj.global_head.code
+    get_code.short_description = 'Code'
+    get_code.admin_order_field = 'global_head__code'
+    
+    def get_name(self, obj):
+        return obj.global_head.name
+    get_name.short_description = 'Name'
+    
+    def get_account_type(self, obj):
+        return obj.global_head.get_account_type_display()
+    get_account_type.short_description = 'Account Type'
+    get_account_type.admin_order_field = 'global_head__account_type'
+
 
 
 @admin.register(Fund)
@@ -205,7 +263,7 @@ class JournalEntryAdmin(admin.ModelAdmin):
     
     list_display = ('voucher', 'budget_head', 'description', 'debit', 'credit', 'entry_type')
     list_filter = ('voucher__voucher_type', 'voucher__is_posted', 'voucher__fiscal_year')
-    search_fields = ('description', 'voucher__voucher_no', 'budget_head__tma_sub_object')
+    search_fields = ('description', 'voucher__voucher_no', 'budget_head__global_head__code')
     ordering = ('-voucher__date', 'voucher', 'id')
     readonly_fields = ('public_id', 'created_at', 'updated_at')
     
