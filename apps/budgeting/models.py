@@ -240,7 +240,7 @@ class FiscalYear(AuditLogMixin, TenantAwareMixin):
         """Calculate total budgeted receipts for this fiscal year."""
         from apps.finance.models import AccountType
         result = self.allocations.filter(
-            budget_head__account_type=AccountType.REVENUE
+            budget_head__global_head__account_type=AccountType.REVENUE
         ).aggregate(total=Sum('original_allocation'))
         return result['total'] or Decimal('0.00')
     
@@ -248,7 +248,7 @@ class FiscalYear(AuditLogMixin, TenantAwareMixin):
         """Calculate total budgeted expenditure for this fiscal year."""
         from apps.finance.models import AccountType
         result = self.allocations.filter(
-            budget_head__account_type=AccountType.EXPENDITURE
+            budget_head__global_head__account_type=AccountType.EXPENDITURE
         ).aggregate(total=Sum('original_allocation'))
         return result['total'] or Decimal('0.00')
     

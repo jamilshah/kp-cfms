@@ -652,12 +652,12 @@ class SAEDetailView(LoginRequiredMixin, DetailView):
         
         context['receipt_allocations'] = BudgetAllocation.objects.filter(
             fiscal_year=fy,
-            budget_head__account_type=AccountType.REVENUE
+            budget_head__global_head__account_type=AccountType.REVENUE
         ).select_related('budget_head').order_by('budget_head__global_head__code')
         
         context['expenditure_allocations'] = BudgetAllocation.objects.filter(
             fiscal_year=fy,
-            budget_head__account_type=AccountType.EXPENDITURE
+            budget_head__global_head__account_type=AccountType.EXPENDITURE
         ).select_related('budget_head').order_by('budget_head__global_head__code')
         
         context['establishment'] = ScheduleOfEstablishment.objects.filter(
