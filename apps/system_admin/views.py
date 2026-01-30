@@ -139,6 +139,13 @@ class MasterDataSeedView(LoginRequiredMixin, SuperAdminRequiredMixin, TemplateVi
             },
         ]
         
+        # Add funds, functions, and departments for CoA import modal
+        from apps.finance.models import Fund, FunctionCode
+        from apps.budgeting.models import Department
+        context['funds'] = Fund.objects.filter(is_active=True).order_by('code')
+        context['functions'] = FunctionCode.objects.filter(is_active=True).order_by('code')
+        context['departments'] = Department.objects.filter(is_active=True).order_by('name')
+        
         return context
     
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
@@ -162,8 +169,36 @@ class MasterDataSeedView(LoginRequiredMixin, SuperAdminRequiredMixin, TemplateVi
             return redirect('system_admin:master_data_seed')
         
         try:
-            call_command(allowed_commands[command_name])
-            messages.success(request, f'Successfully executed: {command_name}')
+            # Handle import_coa with extra parameters
+            if command_name == 'import_coa':
+                fund_code = request.POST.get('fund', 'GEN')
+                function_code = request.POST.get('function')
+                department_id = request.POST.get('department')
+                skip_budget_heads = request.POST.get('skip_budget_heads') == 'on'
+                
+                # Prepare arguments
+                kwargs = {
+                    'fund': fund_code,
+                    'skip_budget_heads': skip_budget_heads
+                }
+                
+                if function_code:
+                    kwargs['function'] = function_code
+                
+                if department_id:
+                    kwargs['department_id'] = department_id
+                
+                call_command(allowed_commands[command_name], **kwargs)
+                
+                if skip_budget_heads:
+                    messages.success(request, f'Successfully imported Master Data (GlobalHeads only).')
+                elif department_id:
+                    messages.success(request, f'Successfully imported CoA for Fund={fund_code} and selected Department.')
+                else:
+                    messages.success(request, f'Successfully imported CoA for Fund={fund_code}, Function={function_code}.')
+            else:
+                call_command(allowed_commands[command_name])
+                messages.success(request, f'Successfully executed: {command_name}')
         except Exception as e:
             messages.error(request, f'Error executing {command_name}: {str(e)}')
         

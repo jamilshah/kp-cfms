@@ -112,15 +112,43 @@ class BPSScalesTemplateView(CSVTemplateDownloadView):
 
 
 class BudgetHeadsTemplateView(CSVTemplateDownloadView):
-    """Download CSV template for Chart of Accounts."""
-    filename = 'chart_of_accounts_template.csv'
-    headers = ['pifra_object', 'tma_sub_object', 'name', 'account_type', 'fund_type', 'is_active']
+    """
+    Download CSV template for Chart of Accounts (PIFRA Format).
+    
+    This template matches the format expected by the `import_coa` command.
+    Structure: Major Object -> Minor Object -> Detailed Object
+    """
+    filename = 'pifra_chart_of_accounts_template.csv'
+    # Row 2 headers (Code/Description alternating)
+    headers = ['Code', 'Description', 'Code', 'Description', 'Code', 'Description']
     sample_rows = [
-        ['A01', 'A01101', 'Pay of Officers', 'EXPENDITURE', 'PUGF', 'TRUE'],
-        ['A01', 'A01102', 'Pay of Other Staff', 'EXPENDITURE', 'PUGF', 'TRUE'],
-        ['A03', 'A03101', 'Office Stationery', 'EXPENDITURE', 'NON_PUGF', 'TRUE'],
-        ['B02', 'B02101', 'Property Tax', 'REVENUE', 'NON_PUGF', 'TRUE'],
+        ['A01', 'Employee Related Expenses', 'A011', 'Pay', 'A01101', 'Basic Pay (Officers)'],
+        ['A01', 'Employee Related Expenses', 'A011', 'Pay', 'A01102', 'Personal Pay (Officers)'],
+        ['A01', 'Employee Related Expenses', 'A011', 'Pay', 'A01151', 'Basic Pay (Other Staff)'],
+        ['A03', 'Operating Expenses', 'A031', 'Utilities', 'A03101', 'Electricity'],
+        ['A03', 'Operating Expenses', 'A031', 'Utilities', 'A03102', 'Gas'],
+        ['C01', 'Tax Revenue', 'C011', 'Property Tax', 'C01101', 'Urban Property Tax'],
+        ['C03', 'Non-Tax Revenue', 'C038', 'Other Revenue', 'C03880', 'Miscellaneous Revenue'],
     ]
+    
+    def get(self, request, *args, **kwargs):
+        """Override to include 2-row header format."""
+        from django.http import HttpResponse
+        import csv
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="{self.filename}"'
+        
+        writer = csv.writer(response)
+        # Row 1: Category headers (Major Object, Minor Object, Detailed Object)
+        writer.writerow(['Major Object', '', 'Minor Object', '', 'Detailed Object', ''])
+        # Row 2: Column headers (Code, Description alternating)
+        writer.writerow(self.headers)
+        # Data rows
+        for row in self.sample_rows:
+            writer.writerow(row)
+        
+        return response
 
 
 class RolesTemplateView(CSVTemplateDownloadView):

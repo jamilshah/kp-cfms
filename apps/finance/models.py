@@ -269,19 +269,38 @@ class GlobalHead(TimeStampedMixin):
 # TRANSACTIONAL LAYER - Fund-Specific Budget Heads
 # ============================================================================
 
+class HeadType(models.TextChoices):
+    """
+    Type classification for BudgetHead entries.
+    
+    REGULAR: Standard PIFRA object code (sub_code='00').
+    SUB_HEAD: Local sub-division of a generic object (sub_code='01'-'99').
+    """
+    
+    REGULAR = 'REGULAR', _('Regular Head')
+    SUB_HEAD = 'SUB_HEAD', _('Local Sub-Head')
+
+
 class BudgetHead(AuditLogMixin, StatusMixin):
     """
-    Transactional Budget Head - Links a Fund to a GlobalHead.
+    Transactional Budget Head - Multi-dimensional matrix.
     
-    This represents the active Chart of Accounts for a specific Fund.
-    Each Fund (General, Development, Pension) has its own set of BudgetHeads.
+    Structure: Fund + Function + Object (GlobalHead) + Sub-Code
+    
+    This represents the active Chart of Accounts for a specific Fund
+    with functional context. Supports local sub-heads for granularity.
+    
+    Examples:
+        - Standard: GEN + AD + A03303 + 00 -> Electricity (Admin)
+        - Sub-Head: GEN + AD + C03880 + 01 -> Rent of Shops (sub of Other Revenue)
     
     Attributes:
         fund: The fund this budget head belongs to
-        global_head: Link to the master GlobalHead
-        function: Optional functional classification
-        current_budget: Current budget allocation
-        is_active: Whether this head is active for transactions
+        function: Functional classification (mandatory)
+        global_head: Link to the master GlobalHead (PIFRA Object)
+        sub_code: Local sub-division code ('00' for regular, '01'-'99' for sub-heads)
+        head_type: REGULAR or SUB_HEAD
+        local_description: Custom name for sub-heads
     """
     
     fund = models.ForeignKey(
@@ -290,19 +309,39 @@ class BudgetHead(AuditLogMixin, StatusMixin):
         related_name='budget_heads',
         verbose_name=_('Fund')
     )
-    global_head = models.ForeignKey(
-        GlobalHead,
-        on_delete=models.PROTECT,
-        related_name='budget_heads',
-        verbose_name=_('Global Head')
-    )
     function = models.ForeignKey(
         FunctionCode,
         on_delete=models.PROTECT,
         related_name='budget_heads',
         verbose_name=_('Function'),
-        null=True,
-        blank=True
+        help_text=_('Functional classification (e.g., AD for Admin, WS for Water Supply).')
+    )
+    global_head = models.ForeignKey(
+        GlobalHead,
+        on_delete=models.PROTECT,
+        related_name='budget_heads',
+        verbose_name=_('Global Head'),
+        help_text=_('PIFRA Object code from master chart.')
+    )
+    sub_code = models.CharField(
+        max_length=5,
+        default='00',
+        verbose_name=_('Sub-Code'),
+        help_text=_("'00' for regular heads, '01'-'99' for local sub-divisions.")
+    )
+    head_type = models.CharField(
+        max_length=10,
+        choices=HeadType.choices,
+        default=HeadType.REGULAR,
+        verbose_name=_('Head Type'),
+        help_text=_('REGULAR for standard objects, SUB_HEAD for local breakdowns.')
+    )
+    local_description = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name=_('Local Description'),
+        help_text=_('Custom name for sub-heads (e.g., "Rent of Shops", "Annual Sports Festival").')
     )
     current_budget = models.DecimalField(
         max_digits=15,
@@ -330,27 +369,48 @@ class BudgetHead(AuditLogMixin, StatusMixin):
     class Meta:
         verbose_name = _('Budget Head')
         verbose_name_plural = _('Budget Heads')
-        # Allow same global head for different functions (e.g. Electricity for Admin vs Water)
-        unique_together = [['fund', 'global_head', 'function']]
-        ordering = ['fund', 'global_head__code']
+        # Multi-dimensional uniqueness: Fund + Function + Object + Sub-Code
+        unique_together = [['fund', 'function', 'global_head', 'sub_code']]
+        ordering = ['fund', 'function__code', 'global_head__code', 'sub_code']
         indexes = [
             models.Index(fields=['fund', 'global_head']),
+            models.Index(fields=['function']),
             models.Index(fields=['is_active']),
         ]
     
     def __str__(self) -> str:
-        func_code = self.function.code if self.function else 'XX'
-        return f"{self.fund.code} - {func_code} - {self.global_head.code} - {self.global_head.name}"
+        """
+        Dynamic string representation based on head type.
+        
+        Case A (Regular - sub_code='00'):
+            Format: "[Function Code] - [Object Code] : [Object Name]"
+            Example: "AD - A03303 : Electricity"
+        
+        Case B (Sub-Head - sub_code!='00'):
+            Format: "[Object Code]-[Sub Code] : [Local Description]"
+            Example: "C03880-01 : Rent of Shops"
+        """
+        if self.sub_code != '00' and self.local_description:
+            # Sub-Head format
+            return f"{self.local_description} ({self.global_head.code}-{self.sub_code})"
+        else:
+            # Regular format
+            func_code = self.function.code if self.function else 'XX'
+            return f"{self.global_head.name} ({func_code} - {self.global_head.code})"
     
     # Proxy properties for template compatibility
     @property
     def code(self) -> str:
-        """Proxy to global_head.code"""
+        """Proxy to global_head.code, with sub_code suffix if applicable."""
+        if self.sub_code != '00':
+            return f"{self.global_head.code}-{self.sub_code}"
         return self.global_head.code
     
     @property
     def name(self) -> str:
-        """Proxy to global_head.name"""
+        """Proxy to local_description or global_head.name."""
+        if self.local_description:
+            return self.local_description
         return self.global_head.name
     
     @property
@@ -374,9 +434,12 @@ class BudgetHead(AuditLogMixin, StatusMixin):
         return self.global_head.minor.code
     
     def get_full_code(self) -> str:
-        """Return the complete NAM code path."""
+        """Return the complete NAM code path including sub-code."""
         func_code = self.function.code if self.function else 'XX'
-        return f"F{self.fund.code}-{func_code}-{self.global_head.code}"
+        base = f"F{self.fund.code}-{func_code}-{self.global_head.code}"
+        if self.sub_code != '00':
+            return f"{base}-{self.sub_code}"
+        return base
     
     def is_salary_head(self) -> bool:
         """Check if this is a salary-related budget head (A01*)."""
@@ -385,6 +448,10 @@ class BudgetHead(AuditLogMixin, StatusMixin):
     def is_development_head(self) -> bool:
         """Check if this is a development budget head."""
         return self.fund.code == Fund.CODE_DEVELOPMENT
+    
+    def is_sub_head(self) -> bool:
+        """Check if this is a local sub-head."""
+        return self.head_type == HeadType.SUB_HEAD or self.sub_code != '00'
 
 
 class Fund(TimeStampedMixin):

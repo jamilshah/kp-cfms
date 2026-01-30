@@ -91,7 +91,7 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
     model = BudgetHead
     template_name = 'finance/budget_head_list.html'
     context_object_name = 'budget_heads'
-    ordering = ['global_head__code']
+    ordering = ['function__code', 'global_head__code']
     paginate_by = None
 
     def get_queryset(self):
@@ -108,7 +108,7 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         # Account type filter
         account_type = self.request.GET.get('account_type')
         if account_type:
-            qs = qs.filter(account_type=account_type)
+            qs = qs.filter(global_head__account_type=account_type)
         
         # Fund filter
         fund_id = self.request.GET.get('fund')
@@ -119,6 +119,16 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         function_id = self.request.GET.get('function')
         if function_id:
             qs = qs.filter(function_id=function_id)
+
+        # Department filter
+        department_id = self.request.GET.get('department')
+        if department_id:
+            from apps.budgeting.models import Department
+            try:
+                dept = Department.objects.get(id=department_id)
+                qs = qs.filter(function__in=dept.related_functions.all())
+            except Department.DoesNotExist:
+                pass # Or handle error
         
         # Active status filter
         is_active = self.request.GET.get('is_active')
@@ -144,13 +154,25 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         from apps.finance.models import Fund, FunctionCode, AccountType, FundType
+        from apps.budgeting.models import Department
         
         context = super().get_context_data(**kwargs)
         context['page_title'] = _('Chart of Accounts Management')
         
-        # Filter options for dropdowns
+        context['departments'] = Department.objects.filter(is_active=True).order_by('name')
         context['funds'] = Fund.objects.filter(is_active=True).order_by('code')
-        context['functions'] = FunctionCode.objects.filter(is_active=True).order_by('code')
+        
+        # Filter functions based on selected department if applicable
+        functions_qs = FunctionCode.objects.filter(is_active=True)
+        department_id = self.request.GET.get('department')
+        if department_id:
+            try:
+                dept = Department.objects.get(id=department_id)
+                functions_qs = functions_qs.filter(id__in=dept.related_functions.all())
+            except Department.DoesNotExist:
+                pass
+            
+        context['functions'] = functions_qs.order_by('code')
         context['account_types'] = AccountType.choices
         context['fund_types'] = FundType.choices
         
@@ -170,37 +192,38 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         context['major_heads'] = sorted(major_heads)
         context['minor_heads'] = sorted(minor_heads)
         
-        # Build Tree Structure
+        # Build Grouped Structure (Function -> BudgetHeads)
         heads = list(context['budget_heads'])
         tree_list = []
-        stack = []
+        
+        current_function_code = None
         
         for head in heads:
-            code = head.code
+            func_code = head.function.code if head.function else 'None'
             
-            # Pop stack until we find the parent
-            while stack and (not code.startswith(stack[-1][0]) or code == stack[-1][0]):
-                stack.pop()
+            # Start a new group if function changes
+            if func_code != current_function_code:
+                current_function_code = func_code
+                tree_list.append({
+                    'obj': head.function,
+                    'level': 0,
+                    'is_leaf': False,
+                    'is_group_header': True,
+                    'parent_code': None,
+                    'has_children': True,
+                    'group_name': f"{head.function.code} - {head.function.name}"
+                })
             
-            level = len(stack)
-            parent_code = stack[-1][0] if stack else None
-            
+            # Add the BudgetHead
             tree_list.append({
                 'obj': head,
-                'level': level,
+                'level': 1,
                 'is_leaf': True,
-                'parent_code': parent_code,
+                'is_group_header': False,
+                'parent_code': func_code,
                 'has_children': False
             })
             
-            stack.append((code, level))
-        
-        # Identify nodes with children
-        for i in range(len(tree_list) - 1):
-            if tree_list[i+1]['level'] > tree_list[i]['level']:
-                tree_list[i]['is_leaf'] = False
-                tree_list[i]['has_children'] = True
-                
         context['tree_nodes'] = tree_list
         return context
 
@@ -1081,3 +1104,56 @@ class PostVoucherView(LoginRequiredMixin, View):
             messages.error(request, _('Error posting voucher: ') + str(e))
         
         return redirect('finance:voucher_detail', pk=pk)
+
+
+# ============================================================================
+# AJAX Views for Dynamic Filtering
+# ============================================================================
+
+from django.shortcuts import render
+from apps.finance.models import FunctionCode, AccountType
+from apps.budgeting.models import Department
+
+
+def load_functions(request):
+    """
+    AJAX view to load functions filtered by department.
+    Used by VoucherForm header filters.
+    """
+    department_id = request.GET.get('department')
+    functions = FunctionCode.objects.none()
+    
+    if department_id:
+        try:
+            dept = Department.objects.get(id=department_id)
+            functions = dept.related_functions.all().order_by('code')
+        except (ValueError, TypeError, Department.DoesNotExist):
+            pass
+            
+    return render(request, 'expenditure/partials/function_options.html', {'functions': functions})
+
+
+def load_budget_heads_options(request):
+    """
+    AJAX view to load budget head options filtered by department and/or function.
+    Returns options as a script that updates all budget_head selects in the formset.
+    """
+    department_id = request.GET.get('department')
+    function_id = request.GET.get('function')
+    
+    # Base queryset - all posting-allowed heads
+    budget_heads = BudgetHead.objects.filter(
+        posting_allowed=True,
+        is_active=True
+    ).select_related('global_head', 'function').order_by('global_head__name', 'global_head__code')
+    
+    if function_id:
+        budget_heads = budget_heads.filter(function_id=function_id)
+    elif department_id:
+        try:
+            dept = Department.objects.get(id=department_id)
+            budget_heads = budget_heads.filter(function__in=dept.related_functions.all())
+        except (ValueError, TypeError, Department.DoesNotExist):
+            pass
+            
+    return render(request, 'finance/partials/budget_head_formset_options.html', {'budget_heads': budget_heads})

@@ -23,7 +23,9 @@
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
+                    <th style="width: 100px;">Code</th>
                     <th>Department Name</th>
+                    <th>Related Functions</th>
                     <th class="text-center">Active</th>
                     <th class="text-end">Created At</th>
                     <th class="text-end">Actions</th>
@@ -32,7 +34,15 @@
             <tbody>
                 {% for dept in departments %}
                 <tr>
+                    <td><span class="badge bg-light text-dark border">{{ dept.code|default:"-" }}</span></td>
                     <td class="fw-bold">{{ dept.name }}</td>
+                    <td>
+                        {% for func in dept.related_functions.all %}
+                            <span class="badge bg-info text-dark" title="{{ func.name }}">{{ func.code }}</span>
+                        {% empty %}
+                            <span class="text-muted small">No functions linked</span>
+                        {% endfor %}
+                    </td>
                     <td class="text-center">
                         {% if dept.is_active %}
                             <span class="badge bg-success">Active</span>

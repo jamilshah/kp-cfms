@@ -128,6 +128,31 @@
                     </div>
                 </div>
                 
+                <!-- Account Filters -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="{{ form.department.id_for_label }}" class="form-label">
+                                <i class="bi bi-funnel me-1"></i>Department (Filter)
+                            </label>
+                            {{ form.department }}
+                            <small class="text-muted">Filter budget heads by department</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="{{ form.function.id_for_label }}" class="form-label">
+                                <i class="bi bi-funnel me-1"></i>Function (Filter)
+                            </label>
+                            {{ form.function }}
+                            <small class="text-muted">Further filter by function</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Hidden div for HTMX OOB swap target -->
+                <div id="budget-head-options" style="display: none;"></div>
+                
                 <div class="row">
                     <div class="col-12">
                         <div class="mb-3">

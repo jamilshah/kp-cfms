@@ -11,12 +11,13 @@ Description: Forms for the Revenue module including Payer, Demand,
 from decimal import Decimal
 from typing import Any, Dict
 from django import forms
+from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 
 from apps.revenue.models import Payer, RevenueDemand, RevenueCollection, DemandStatus
-from apps.finance.models import BudgetHead, AccountType
-from apps.budgeting.models import FiscalYear
+from apps.finance.models import BudgetHead, AccountType, FunctionCode
+from apps.budgeting.models import FiscalYear, Department
 from apps.core.models import BankAccount
 
 
@@ -99,6 +100,33 @@ class DemandForm(forms.ModelForm):
             }),
         }
     
+    department = forms.ModelChoiceField(
+        queryset=Department.objects.none(),
+        required=False,
+        label=_('Department'),
+        help_text=_('Filter functions and revenue heads'),
+        widget=forms.Select(attrs={
+            'class': 'form-select',
+            'hx-get': reverse_lazy('revenue:load_functions'),
+            'hx-target': '#id_function',
+            'hx-trigger': 'change'
+        })
+    )
+    
+    function = forms.ModelChoiceField(
+        queryset=FunctionCode.objects.none(),
+        required=False,
+        label=_('Function'),
+        help_text=_('Filter revenue heads by function'),
+        widget=forms.Select(attrs={
+            'class': 'form-select',
+            'hx-get': reverse_lazy('revenue:load_revenue_heads'),
+            'hx-target': '#id_budget_head',
+            'hx-trigger': 'change',
+            'hx-include': '#id_department'
+        })
+    )
+
     def __init__(self, *args, organization=None, **kwargs) -> None:
         """
         Initialize form with organization-scoped querysets.
@@ -109,6 +137,13 @@ class DemandForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self._current_fiscal_year = None
         
+        # Base Queryset: Revenue accounts
+        self.fields['budget_head'].queryset = BudgetHead.objects.filter(
+            global_head__account_type=AccountType.REVENUE,
+            posting_allowed=True,
+            is_active=True
+        ).order_by('global_head__name', 'global_head__code')
+
         if organization:
             # Get current operating fiscal year
             today = timezone.now().date()
@@ -124,12 +159,44 @@ class DemandForm(forms.ModelForm):
                 is_active=True
             ).order_by('name')
         
-        # Filter budget heads to Revenue accounts only
-        self.fields['budget_head'].queryset = BudgetHead.objects.filter(
-            global_head__account_type=AccountType.REVENUE,
-            posting_allowed=True,
-            is_active=True
-        ).order_by('global_head__code')
+        # Load departments
+        self.fields['department'].queryset = Department.objects.filter(is_active=True).order_by('name')
+
+        # === Dynamic Filtering Logic ===
+        
+        # 1. Department
+        department_id = None
+        if 'department' in self.data:
+            department_id = self.data.get('department')
+        elif self.initial.get('department'):
+            department_id = self.initial.get('department')
+
+        # 2. Function
+        self.fields['function'].queryset = FunctionCode.objects.none()
+        if department_id:
+            try:
+                dept = Department.objects.get(id=department_id)
+                self.fields['function'].queryset = dept.related_functions.all().order_by('code')
+            except (ValueError, TypeError, Department.DoesNotExist):
+                pass
+        
+        function_id = None
+        if 'function' in self.data:
+            function_id = self.data.get('function')
+        elif self.initial.get('function'):
+            function_id = self.initial.get('function')
+
+        # 3. Budget Head
+        if function_id:
+             self.fields['budget_head'].queryset = self.fields['budget_head'].queryset.filter(function_id=function_id)
+        elif department_id:
+             try:
+                 dept = Department.objects.get(id=department_id)
+                 self.fields['budget_head'].queryset = self.fields['budget_head'].queryset.filter(
+                    function__in=dept.related_functions.all()
+                 )
+             except (ValueError, TypeError, Department.DoesNotExist):
+                 pass
         
         # Set default dates
         if not self.instance.pk:

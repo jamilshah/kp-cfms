@@ -10,7 +10,8 @@ from apps.finance.models import (
     Voucher, JournalEntry
 )
 from apps.core.models import BankAccount
-from apps.budgeting.models import FiscalYear
+from apps.budgeting.models import FiscalYear, Department
+from django.urls import reverse_lazy
 
 
 class BudgetHeadForm(forms.ModelForm):
@@ -343,6 +344,31 @@ class VoucherForm(forms.ModelForm):
     opening balances, and corrections. Allows JV and CV voucher types only.
     """
     
+    # Filter fields (not saved to model)
+    department = forms.ModelChoiceField(
+        queryset=Department.objects.none(),
+        required=False,
+        label='Department (Filter)',
+        widget=forms.Select(attrs={
+            'class': 'form-select',
+            'hx-get': reverse_lazy('finance:load_functions'),
+            'hx-target': '#id_function',
+            'hx-trigger': 'change',
+        })
+    )
+    function = forms.ModelChoiceField(
+        queryset=FunctionCode.objects.none(),
+        required=False,
+        label='Function (Filter)',
+        widget=forms.Select(attrs={
+            'class': 'form-select',
+            'hx-get': reverse_lazy('finance:load_budget_heads_options'),
+            'hx-target': '#budget-head-options',
+            'hx-trigger': 'change',
+            'hx-include': '[name=department]',
+        })
+    )
+    
     class Meta:
         model = Voucher
         fields = ['voucher_type', 'date', 'fund', 'payee', 'reference_no', 'description']
@@ -376,6 +402,9 @@ class VoucherForm(forms.ModelForm):
         self.organization = kwargs.pop('organization', None)
         super().__init__(*args, **kwargs)
         
+        # Load departments
+        self.fields['department'].queryset = Department.objects.filter(is_active=True).order_by('name')
+        
         # RESTRICT voucher_type choices to only Manual types (exclude automated BP/BR)
         MANUAL_TYPES = [
             ('JV', 'Journal Voucher'),
@@ -383,6 +412,20 @@ class VoucherForm(forms.ModelForm):
         ]
         self.fields['voucher_type'].choices = MANUAL_TYPES
         self.fields['voucher_type'].initial = 'JV'
+        
+        # Dynamic filtering logic for function based on department
+        department_id = None
+        if 'department' in self.data:
+            department_id = self.data.get('department')
+        elif self.initial.get('department'):
+            department_id = self.initial.get('department')
+        
+        if department_id:
+            try:
+                dept = Department.objects.get(id=department_id)
+                self.fields['function'].queryset = dept.related_functions.all().order_by('code')
+            except (ValueError, TypeError, Department.DoesNotExist):
+                pass
         
         # Filter funds by organization if available
         if self.organization:
@@ -453,7 +496,7 @@ class JournalEntryForm(forms.ModelForm):
         self.fields['budget_head'].queryset = BudgetHead.objects.filter(
             posting_allowed=True,
             is_active=True
-        ).select_related('function')
+        ).select_related('function').order_by('global_head__name', 'global_head__code')
         
         # If organization-specific filtering is needed
         if self.organization:

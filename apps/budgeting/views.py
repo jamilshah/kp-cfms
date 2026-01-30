@@ -996,13 +996,15 @@ class DepartmentListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
 class DepartmentCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
     """Create new department."""
     model = Department
-    fields = ['name', 'is_active']
+    fields = ['name', 'code', 'related_functions', 'is_active']
     template_name = 'budgeting/setup_form.html'
     success_url = reverse_lazy('budgeting:setup_departments')
     
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
         form.fields['name'].widget.attrs.update({'class': 'form-control'})
+        form.fields['code'].widget.attrs.update({'class': 'form-control', 'placeholder': 'e.g., AD, WS'})
+        form.fields['related_functions'].widget.attrs.update({'class': 'form-select', 'size': '10'})
         form.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
         return form
     
@@ -1014,15 +1016,17 @@ class DepartmentCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
 
 
 class DepartmentUpdateView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
-    """Update department."""
+    """Edit existing department."""
     model = Department
-    fields = ['name', 'is_active']
+    fields = ['name', 'code', 'related_functions', 'is_active']
     template_name = 'budgeting/setup_form.html'
     success_url = reverse_lazy('budgeting:setup_departments')
     
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
         form.fields['name'].widget.attrs.update({'class': 'form-control'})
+        form.fields['code'].widget.attrs.update({'class': 'form-control'})
+        form.fields['related_functions'].widget.attrs.update({'class': 'form-select', 'size': '10'})
         form.fields['is_active'].widget.attrs.update({'class': 'form-check-input'})
         return form
     

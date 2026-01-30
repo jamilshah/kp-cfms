@@ -68,6 +68,29 @@ Description: Revenue Demand Create/Edit Form Template
                         </div>
                     </div>
                     
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label for="{{ form.department.id_for_label }}" class="form-label">
+                                Department (Optional Filter)
+                            </label>
+                            {{ form.department }}
+                            {% if form.department.errors %}
+                            <div class="invalid-feedback d-block">{{ form.department.errors.0 }}</div>
+                            {% endif %}
+                            <small class="text-muted">Filter by department</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.function.id_for_label }}" class="form-label">
+                                Function (Optional)
+                            </label>
+                            {{ form.function }}
+                            {% if form.function.errors %}
+                            <div class="invalid-feedback d-block">{{ form.function.errors.0 }}</div>
+                            {% endif %}
+                            <small class="text-muted">Filter by function</small>
+                        </div>
+                    </div>
+
                     <div class="mb-4">
                         <label for="{{ form.budget_head.id_for_label }}" class="form-label">
                             Revenue Head <span class="text-danger">*</span>
@@ -145,4 +168,19 @@ Description: Revenue Demand Create/Edit Form Template
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        if (evt.target.id === 'id_budget_head') {
+            $('#id_budget_head').select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                placeholder: "Type to search...",
+                allowClear: true
+            });
+        }
+    });
+</script>
 {% endblock %}

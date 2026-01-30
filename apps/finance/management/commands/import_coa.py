@@ -49,6 +49,23 @@ class Command(BaseCommand):
             help='Path to the CSV file (default: docs/CoA.csv)'
         )
         parser.add_argument(
+            '--function',
+            type=str,
+            default='AD',
+            help='Function code for BudgetHead creation (default: AD for Administration)'
+        )
+        parser.add_argument(
+            '--department_id',
+            type=str,
+            help='ID of Department to import all related functions for (overrides --function)'
+        )
+        parser.add_argument(
+            '--fund',
+            type=str,
+            default='GEN',
+            help='Fund code for BudgetHead creation (default: GEN for General)'
+        )
+        parser.add_argument(
             '--dry-run',
             action='store_true',
             help='Validate without saving to database'
@@ -57,6 +74,11 @@ class Command(BaseCommand):
             '--clear',
             action='store_true',
             help='Clear existing BudgetHead records before import'
+        )
+        parser.add_argument(
+            '--skip-budget-heads',
+            action='store_true',
+            help='Only import Master Data (Major/Minor/Global Heads), skip BudgetHead creation'
         )
     
     def handle(self, *args, **options) -> None:
@@ -88,7 +110,35 @@ class Command(BaseCommand):
                         self.style.WARNING(f"Deleted {deleted_count} existing records.")
                     )
                 
-                created_count, updated_count, error_count = self._import_csv_new(file_path, dry_run)
+                # Determine target functions
+                target_functions = []
+                dept_id = options.get('department_id')
+                
+                if dept_id:
+                    from apps.budgeting.models import Department
+                    try:
+                        dept = Department.objects.get(pk=dept_id)
+                        target_functions = list(dept.related_functions.all())
+                        self.stdout.write(f"Importing for Department: {dept.name} ({len(target_functions)} functions)")
+                        if not target_functions:
+                            self.stdout.write(self.style.WARNING(f"Department '{dept.name}' has no related functions."))
+                    except Department.DoesNotExist:
+                        self.stdout.write(self.style.ERROR(f"Department ID {dept_id} not found."))
+                        return
+                else:
+                    function_code = options.get('function', 'AD')
+                    func, _ = FunctionCode.objects.get_or_create(
+                        code=function_code, defaults={'name': f'Function {function_code}'}
+                    )
+                    target_functions = [func]
+
+                created_count, updated_count, error_count = self._import_csv_new(
+                    file_path, 
+                    dry_run,
+                    target_functions=target_functions,
+                    fund_code=options.get('fund', 'GEN'),
+                    skip_budget_heads=options.get('skip_budget_heads', False)
+                )
                 
                 if dry_run:
                     raise transaction.TransactionManagementError("Dry run - rolling back.")
@@ -104,8 +154,11 @@ class Command(BaseCommand):
             f"  Errors: {error_count}"
         ))
 
-    def _import_csv_new(self, file_path: Path, dry_run: bool) -> tuple:
-        """Import from New COA.csv format (6 columns, 2 header rows)."""
+    def _import_csv_new(self, file_path: Path, dry_run: bool, target_functions: list, 
+                         fund_code: str = 'GEN', skip_budget_heads: bool = False) -> tuple:
+        """
+        Import from New COA.csv format (6 columns, 2 header rows).
+        """
         created_count = 0
         updated_count = 0
         error_count = 0
@@ -115,21 +168,21 @@ class Command(BaseCommand):
         minor_cache = {}
         global_cache = {}
         
-        # Defaults for BudgetHead (since CSV lacks them)
-        default_function, _ = FunctionCode.objects.get_or_create(
-            code='AD', defaults={'name': 'Administration'}
-        )
-        
-        default_fund = Fund.objects.filter(code='GEN').first()
-        if not default_fund:
-            default_fund = Fund.objects.filter(is_active=True).first()
+        # Get Fund
+        target_fund = Fund.objects.filter(code=fund_code).first()
+        if not target_fund:
+            target_fund = Fund.objects.filter(is_active=True).first()
             
-        if not default_fund:
-             self.stdout.write(self.style.ERROR("No active Fund found. Cannot create BudgetHeads."))
+        if not target_fund and not skip_budget_heads:
+             self.stdout.write(self.style.ERROR(f"No Fund found with code '{fund_code}'. Cannot create BudgetHeads."))
              return 0, 0, 1
 
-        self.stdout.write(f"Using Default Fund: {default_fund.code}")
-        self.stdout.write(f"Using Default Function: {default_function.code}")
+        if skip_budget_heads:
+            self.stdout.write(self.style.WARNING("Skipping BudgetHead creation (--skip-budget-heads flag)."))
+        else:
+            self.stdout.write(f"Using Fund: {target_fund.code}")
+            func_codes = ", ".join([f.code for f in target_functions])
+            self.stdout.write(f"Target Functions: {func_codes}")
 
         with open(file_path, 'r', encoding='latin-1') as csvfile:
             reader = csv.reader(csvfile)
@@ -179,14 +232,14 @@ class Command(BaseCommand):
                     pifra_code = row[4].strip()
                     pifra_desc = row[5].strip()
                     
-                    # Infer account type from first letter
+                    # Infer account type
                     account_type = AccountType.EXPENDITURE
                     if pifra_code:
                         first_char = pifra_code[0].upper()
                         if first_char == 'C': account_type = AccountType.REVENUE
                         elif first_char == 'G': account_type = AccountType.LIABILITY
                         elif first_char == 'F': account_type = AccountType.ASSET
-                        elif first_char == '3': account_type = AccountType.EQUITY # Equity usually starts with 3
+                        elif first_char == '3': account_type = AccountType.EQUITY
                     
                     if pifra_code and pifra_code not in global_cache and minor_obj:
                         global_obj, _ = GlobalHead.objects.get_or_create(
@@ -203,27 +256,36 @@ class Command(BaseCommand):
                     if not global_obj:
                          continue
 
-                    # 4. Create/Update BudgetHead (Default Fund/Function)
+                    # 4. Create/Update BudgetHead (if not skipped)
+                    if skip_budget_heads:
+                        created_count += 1
+                        continue
+                    
                     if dry_run:
                         created_count += 1
                         continue
+                     
+                    # Iterate through ALL target functions for this row
+                    for target_function in target_functions:
+                        budget_head, created = BudgetHead.objects.update_or_create(
+                            fund=target_fund,
+                            function=target_function,
+                            global_head=global_obj,
+                            sub_code='00',  # Regular head
+                            defaults={
+                                'head_type': 'REGULAR',
+                                'local_description': '',
+                                'budget_control': True,
+                                'project_required': False,
+                                'posting_allowed': True,
+                                'is_active': True 
+                            }
+                        )
                         
-                    budget_head, created = BudgetHead.objects.update_or_create(
-                        fund=default_fund,
-                        global_head=global_obj,
-                        function=default_function,
-                        defaults={
-                            'budget_control': True,
-                            'project_required': False,
-                            'posting_allowed': True,
-                            'is_active': True 
-                        }
-                    )
-                    
-                    if created:
-                        created_count += 1
-                    else:
-                        updated_count += 1
+                        if created:
+                            created_count += 1
+                        else:
+                            updated_count += 1
                         
                 except Exception as e:
                     error_count += 1

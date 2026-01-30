@@ -15,7 +15,7 @@ from django.views.generic import (
 )
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.db import transaction
@@ -25,7 +25,8 @@ from apps.expenditure.models import Payee, Bill, Payment, BillStatus
 from apps.expenditure.forms import (
     PayeeForm, BillForm, BillSubmitForm, BillApprovalForm, PaymentForm
 )
-from apps.budgeting.models import FiscalYear, BudgetAllocation
+from apps.budgeting.models import FiscalYear, BudgetAllocation, Department
+from apps.finance.models import BudgetHead, AccountType, FunctionCode
 from apps.core.exceptions import BudgetExceededException, WorkflowTransitionException
 
 
@@ -481,3 +482,48 @@ class BillAmountAPIView(LoginRequiredMixin, View):
                 'success': False,
                 'error': 'Bill not found'
             }, status=404)
+
+
+def load_functions(request):
+    """
+    AJAX view to load functions filtered by department.
+    """
+    department_id = request.GET.get('department')
+    functions = FunctionCode.objects.none()
+    
+    if department_id:
+        try:
+            dept = Department.objects.get(id=department_id)
+            functions = dept.related_functions.all().order_by('code')
+        except (ValueError, TypeError, Department.DoesNotExist):
+            pass
+            
+    return render(request, 'expenditure/partials/function_options.html', {'functions': functions})
+
+
+def load_budget_heads(request):
+    """
+    AJAX view to load budget heads filtered by department and/or function.
+    """
+    department_id = request.GET.get('department')
+    function_id = request.GET.get('function')
+    
+    # Base queryset (same as BillForm)
+    budget_heads = BudgetHead.objects.filter(
+        global_head__account_type=AccountType.EXPENDITURE,
+        posting_allowed=True,
+        is_active=True
+    ).exclude(
+        global_head__code__startswith='A01'
+    ).order_by('global_head__name', 'global_head__code')
+    
+    if function_id:
+        budget_heads = budget_heads.filter(function_id=function_id)
+    elif department_id:
+        try:
+            dept = Department.objects.get(id=department_id)
+            budget_heads = budget_heads.filter(function__in=dept.related_functions.all())
+        except (ValueError, TypeError, Department.DoesNotExist):
+            pass
+            
+    return render(request, 'expenditure/partials/budget_head_options.html', {'budget_heads': budget_heads})

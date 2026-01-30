@@ -75,23 +75,29 @@ class BudgetHeadAdmin(admin.ModelAdmin):
     """Admin configuration for BudgetHead model."""
     
     list_display = (
-        'fund', 'get_code', 'get_name',
+        'fund', 'get_function', 'get_code', 'get_name', 'sub_code', 'head_type',
         'get_account_type', 'budget_control', 'is_active'
     )
     list_filter = (
-        'fund', 'global_head__account_type',
+        'fund', 'function', 'head_type', 'global_head__account_type',
         'budget_control', 'project_required', 'is_active'
     )
     search_fields = (
-        'global_head__code', 'global_head__name'
+        'global_head__code', 'global_head__name', 'local_description', 'sub_code'
     )
-    ordering = ('fund', 'global_head__code')
+    ordering = ('fund', 'function__code', 'global_head__code', 'sub_code')
+    list_editable = ('sub_code', 'head_type')
     
     readonly_fields = ('created_at', 'updated_at', 'created_by', 'updated_by')
+    autocomplete_fields = ['fund', 'function', 'global_head']
     
     fieldsets = (
-        (_('Link'), {
-            'fields': ('fund', 'global_head', 'function')
+        (_('Classification'), {
+            'fields': ('fund', 'function', 'global_head')
+        }),
+        (_('Sub-Head Configuration'), {
+            'fields': ('head_type', 'sub_code', 'local_description'),
+            'description': _('For local sub-heads, set head_type to SUB_HEAD, provide sub_code (01-99), and a local description.')
         }),
         (_('Budget'), {
             'fields': ('current_budget',)
@@ -105,13 +111,18 @@ class BudgetHeadAdmin(admin.ModelAdmin):
         }),
     )
     
+    def get_function(self, obj):
+        return obj.function.code if obj.function else '-'
+    get_function.short_description = 'Func'
+    get_function.admin_order_field = 'function__code'
+    
     def get_code(self, obj):
-        return obj.global_head.code
+        return obj.code  # Uses the updated proxy property
     get_code.short_description = 'Code'
     get_code.admin_order_field = 'global_head__code'
     
     def get_name(self, obj):
-        return obj.global_head.name
+        return obj.name  # Uses the updated proxy property
     get_name.short_description = 'Name'
     
     def get_account_type(self, obj):

@@ -416,16 +416,35 @@ class DesignationMaster(TimeStampedMixin):
 
 class Department(TimeStampedMixin):
     """
-    Master table for Departments/Wings.
+    Master table for Departments/Wings (Administrative Wings).
     
-    Used to standardize department names across the system.
+    Used to standardize department names across the system and
+    link them to PIFRA Function Codes for functional classification.
+    
+    Examples:
+        - Infrastructure Wing -> Functions: WS (Water Supply), SW (Sanitation)
+        - Finance Wing -> Functions: AD (Administration)
     """
     
     name = models.CharField(
         max_length=100,
         unique=True,
         verbose_name=_('Department Name'),
-        help_text=_('Name of the Department or Wing (e.g., Administration, Finance).')
+        help_text=_('Name of the Department or Wing (e.g., Infrastructure, Finance).')
+    )
+    code = models.CharField(
+        max_length=10,
+        blank=True,
+        default='',
+        verbose_name=_('Department Code'),
+        help_text=_('Short code for the department (e.g., INFRA, FIN).')
+    )
+    related_functions = models.ManyToManyField(
+        'finance.FunctionCode',
+        blank=True,
+        related_name='departments',
+        verbose_name=_('Related Functions'),
+        help_text=_('Accounting functions (Element 3) managed by this wing.')
     )
     is_active = models.BooleanField(
         default=True,
@@ -438,7 +457,18 @@ class Department(TimeStampedMixin):
         ordering = ['name']
     
     def __str__(self) -> str:
+        if self.code:
+            return f"{self.code} - {self.name}"
         return self.name
+    
+    def get_available_functions(self):
+        """
+        Return the list of valid FunctionCodes for this department.
+        
+        Returns:
+            QuerySet of FunctionCode objects linked to this department.
+        """
+        return self.related_functions.filter(is_active=True)
 
 
 class BPSSalaryScale(AuditLogMixin):

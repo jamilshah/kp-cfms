@@ -1,0 +1,56 @@
+<!-- 
+HTMX response template for updating budget head options in the formset.
+This replaces the target div and uses a script to update all budget head selects dynamically.
+-->
+<div id="budget-head-options">
+    <script>
+        (function() {
+            // Get all budget head selects in the formset
+            const selects = document.querySelectorAll('select[name$="-budget_head"]');
+            
+            // The new options HTML
+            const newOptions = `
+                <option value="">---------</option>
+                {% for head in budget_heads %}
+                <option value="{{ head.pk }}">{{ head|escapejs }}</option>
+                {% endfor %}
+            `;
+            
+            selects.forEach(function(select) {
+                // We use jQuery for Select2 interactions
+                const $select = $(select);
+                const currentVal = $select.val();
+                
+                // 1. Destroy existing Select2 instance
+                if ($select.data('select2')) {
+                    $select.select2('destroy');
+                }
+                
+                // 2. Update the options in the DOM
+                select.innerHTML = newOptions;
+                
+                // 3. Restore selection if it still exists in the new options
+                // (Using option[value="..."] check to be safe)
+                if (currentVal && select.querySelector(`option[value="${currentVal}"]`)) {
+                    select.value = currentVal;
+                } else {
+                    select.value = "";
+                }
+                
+                // 4. Re-initialize Select2 with same config as global
+                $select.select2({
+                    theme: 'bootstrap-5',
+                    width: '100%',
+                    placeholder: "Type to search...",
+                    allowClear: true
+                });
+            });
+            
+            // Also update the hidden empty form template so new rows get the filtered options
+            const emptySelect = document.querySelector('#emptyFormTemplate select[name$="-budget_head"]');
+            if (emptySelect) {
+                emptySelect.innerHTML = newOptions;
+            }
+        })();
+    </script>
+</div>

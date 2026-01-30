@@ -1,0 +1,9 @@
+<option value="">---------</option>
+{% for func in functions %}
+<option value="{{ func.pk }}">{{ func }}</option>
+{% endfor %}
+
+{# Clear budget heads when function list is reloaded #}
+<div id="id_budget_head" hx-swap-oob="innerHTML">
+    <option value="">---------</option>
+</div>

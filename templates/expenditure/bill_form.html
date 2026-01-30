@@ -90,6 +90,29 @@ Description: Bill Create/Edit Form Template
                         </div>
                     </div>
                     
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label for="{{ form.department.id_for_label }}" class="form-label">
+                                Department (Optional Filter)
+                            </label>
+                            {{ form.department }}
+                            {% if form.department.errors %}
+                            <div class="invalid-feedback d-block">{{ form.department.errors.0 }}</div>
+                            {% endif %}
+                            <small class="text-muted">Filter by department</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.function.id_for_label }}" class="form-label">
+                                Function (Optional)
+                            </label>
+                            {{ form.function }}
+                            {% if form.function.errors %}
+                            <div class="invalid-feedback d-block">{{ form.function.errors.0 }}</div>
+                            {% endif %}
+                            <small class="text-muted">Filter by function</small>
+                        </div>
+                    </div>
+
                     <div class="mb-4">
                         <label for="{{ form.budget_head.id_for_label }}" class="form-label">
                             Budget Head (Expense Account) <span class="text-danger">*</span>
@@ -98,7 +121,7 @@ Description: Bill Create/Edit Form Template
                         {% if form.budget_head.errors %}
                         <div class="invalid-feedback d-block">{{ form.budget_head.errors.0 }}</div>
                         {% endif %}
-                        <small class="text-muted">Select the expense head to charge.</small>
+                        <small class="text-muted">Select the expense head.</small>
                     </div>
                     
                     <div class="mb-4">
@@ -178,5 +201,22 @@ Description: Bill Create/Edit Form Template
     
     // Calculate on page load
     calculateNetAmount();
+    
+    // Re-initialize Select2 after HTMX swap
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        if (evt.target.id === 'id_budget_head') {
+            // Re-apply Select2 to the updated budget head dropdown
+            $('#id_budget_head').select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                placeholder: "Type to search...",
+                allowClear: true
+            });
+        }
+    });
+
+    // Also need to handle clearing the department filter
+    // If department is cleared (value=''), it triggers change, HTMX fires, returns all options.
+    // Logic handles empty department_id correctly (returns base queryset).
 </script>
 {% endblock %}

@@ -16,7 +16,7 @@ from django.db.models import Sum
 from apps.budgeting.models import (
     FiscalYear, BudgetAllocation, ScheduleOfEstablishment,
     QuarterlyRelease, SAERecord, BudgetStatus,
-    DesignationMaster, BPSSalaryScale,
+    DesignationMaster, BPSSalaryScale, Department,
     # Phase 3: Pension & Budget Execution
     PensionEstimate, RetiringEmployee, PensionEstimateStatus,
     SupplementaryGrant, SupplementaryGrantStatus,
@@ -668,8 +668,36 @@ class ReappropriationAdmin(admin.ModelAdmin):
             except Exception as e:
                 self.message_user(request, f'{reappropriation.reference_no}: {str(e)}', messages.ERROR)
     
-    def save_model(self, request, obj, form, change):
         if not change:
             obj.created_by = request.user
         obj.updated_by = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(Department)
+class DepartmentAdmin(admin.ModelAdmin):
+    """
+    Admin configuration for Department model.
+    """
+    
+    list_display = ['name', 'code', 'get_related_functions', 'is_active', 'created_at']
+    list_filter = ['is_active', 'created_at']
+    search_fields = ['name', 'code']
+    readonly_fields = ['created_at', 'updated_at']
+    ordering = ['name']
+    
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'code', 'related_functions', 'is_active')
+        }),
+        (_('Audit Info'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    filter_horizontal = ('related_functions',)
+    
+    def get_related_functions(self, obj):
+        return ", ".join([f.code for f in obj.related_functions.all()])
+    get_related_functions.short_description = 'Functions'

@@ -35,6 +35,10 @@ from apps.finance.views import (
     VoucherCreateView,
     VoucherDetailView,
     PostVoucherView,
+    
+    # AJAX Views
+    load_functions,
+    load_budget_heads_options,
 )
 
 app_name = 'finance'
@@ -64,4 +68,8 @@ urlpatterns = [
     path('vouchers/create/', VoucherCreateView.as_view(), name='voucher_create'),
     path('vouchers/<int:pk>/', VoucherDetailView.as_view(), name='voucher_detail'),
     path('vouchers/<int:pk>/post/', PostVoucherView.as_view(), name='voucher_post'),
+    
+    # AJAX
+    path('ajax/load-functions/', load_functions, name='load_functions'),
+    path('ajax/load-budget-heads-options/', load_budget_heads_options, name='load_budget_heads_options'),
 ]

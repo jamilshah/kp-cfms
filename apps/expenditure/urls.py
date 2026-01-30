@@ -15,7 +15,7 @@ from apps.expenditure.views import (
     BillListView, BillCreateView, BillDetailView,
     BillSubmitView, BillApproveView,
     PaymentCreateView, PaymentListView,
-    BillAmountAPIView,
+    BillAmountAPIView, load_budget_heads, load_functions
 )
 
 app_name = 'expenditure'
@@ -43,4 +43,6 @@ urlpatterns = [
     
     # API Endpoints
     path('api/bills/<int:pk>/amount/', BillAmountAPIView.as_view(), name='bill_amount_api'),
+    path('ajax/load-budget-heads/', load_budget_heads, name='load_budget_heads'),
+    path('ajax/load-functions/', load_functions, name='load_functions'),
 ]

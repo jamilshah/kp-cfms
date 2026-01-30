@@ -71,52 +71,64 @@
 <div class="filter-section mb-4">
     <form method="get" id="filterForm">
         <div class="row g-3">
-            <div class="col-md-2">
-                <label class="form-label fw-semibold small">Search</label>
+            <!-- Row 1: Primary Context -->
+            <div class="col-md-3">
+                <label class="form-label fw-bold small text-muted">SEARCH</label>
                 <div class="input-group">
-                    <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" name="q" class="form-control" placeholder="Code or description..." value="{{ request.GET.q|default:'' }}">
+                    <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" name="q" class="form-control border-start-0 ps-0" placeholder="Search Code or Description..." value="{{ request.GET.q|default:'' }}">
                 </div>
             </div>
+            <div class="col-md-3">
+                <label class="form-label fw-bold small text-muted">DEPARTMENT</label>
+                <select name="department" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.id }}" {% if request.GET.department|add:0 == dept.id %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-bold small text-muted">FUNCTION</label>
+                <select name="function" class="form-select">
+                    <option value="">All Functions</option>
+                    {% for func in functions %}
+                    <option value="{{ func.id }}" {% if request.GET.function|add:0 == func.id %}selected{% endif %}>{{ func.code }} - {{ func.name|truncatechars:30 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-bold small text-muted">FUND</label>
+                <select name="fund" class="form-select">
+                    <option value="">All Funds</option>
+                    {% for fund in funds %}
+                    <option value="{{ fund.id }}" {% if request.GET.fund|add:0 == fund.id %}selected{% endif %}>{{ fund.code }} - {{ fund.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Row 2: Attributes -->
             <div class="col-md-2">
-                <label class="form-label fw-semibold small">Account Type</label>
-                <select name="account_type" class="form-select">
+                <label class="form-label fw-bold small text-muted">ACCOUNT TYPE</label>
+                <select name="account_type" class="form-select form-select-sm">
                     <option value="">All Types</option>
                     {% for value, label in account_types %}
                     <option value="{{ value }}" {% if request.GET.account_type == value %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-1">
-                <label class="form-label fw-semibold small">Fund</label>
-                <select name="fund" class="form-select">
-                    <option value="">All</option>
-                    {% for fund in funds %}
-                    <option value="{{ fund.id }}" {% if request.GET.fund|add:0 == fund.id %}selected{% endif %}>{{ fund.code }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-1">
-                <label class="form-label fw-semibold small">Function</label>
-                <select name="function" class="form-select">
-                    <option value="">All</option>
-                    {% for func in functions %}
-                    <option value="{{ func.id }}" {% if request.GET.function|add:0 == func.id %}selected{% endif %}>{{ func.code }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-1">
-                <label class="form-label fw-semibold small">Major</label>
-                <select name="major_head" class="form-select">
+            <div class="col-md-2">
+                <label class="form-label fw-bold small text-muted">MAJOR HEAD</label>
+                <select name="major_head" class="form-select form-select-sm">
                     <option value="">All</option>
                     {% for major in major_heads %}
                     <option value="{{ major }}" {% if request.GET.major_head == major %}selected{% endif %}>{{ major }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-1">
-                <label class="form-label fw-semibold small">Minor</label>
-                <select name="minor_head" class="form-select">
+            <div class="col-md-2">
+                <label class="form-label fw-bold small text-muted">MINOR HEAD</label>
+                <select name="minor_head" class="form-select form-select-sm">
                     <option value="">All</option>
                     {% for minor in minor_heads %}
                     <option value="{{ minor }}" {% if request.GET.minor_head == minor %}selected{% endif %}>{{ minor }}</option>
@@ -124,26 +136,24 @@
                 </select>
             </div>
             <div class="col-md-2">
-                <label class="form-label fw-semibold small">Status</label>
-                <select name="is_active" class="form-select">
+                <label class="form-label fw-bold small text-muted">STATUS</label>
+                <select name="is_active" class="form-select form-select-sm">
                     <option value="">All</option>
                     <option value="true" {% if request.GET.is_active == 'true' %}selected{% endif %}>Active Only</option>
                     <option value="false" {% if request.GET.is_active == 'false' %}selected{% endif %}>Inactive Only</option>
                 </select>
             </div>
-            <div class="col-md-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="bi bi-funnel"></i> Filter
+            <div class="col-md-4 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-grow-1">
+                    <i class="bi bi-funnel"></i> Apply Filters
                 </button>
+                {% if request.GET.q or request.GET.account_type or request.GET.fund or request.GET.function or request.GET.is_active or request.GET.major_head or request.GET.minor_head or request.GET.department %}
+                <a href="{% url 'budgeting:setup_coa_list' %}" class="btn btn-outline-secondary" title="Clear Filters">
+                    <i class="bi bi-x-lg"></i>
+                </a>
+                {% endif %}
             </div>
         </div>
-        {% if request.GET.q or request.GET.account_type or request.GET.fund or request.GET.function or request.GET.is_active or request.GET.major_head or request.GET.minor_head %}
-        <div class="mt-2">
-            <a href="{% url 'budgeting:setup_coa_list' %}" class="btn btn-sm btn-link text-decoration-none">
-                <i class="bi bi-x-circle"></i> Clear Filters
-            </a>
-        </div>
-        {% endif %}
     </form>
 </div>
 
@@ -158,66 +168,63 @@
         <table class="table table-hover align-middle mb-0" id="coaTree">
             <thead class="table-light">
                 <tr>
-                    <th style="width: 35%;">Object Code / Description</th>
-                    <th style="width: 15%;">Sub-Object</th>
-                    <th style="width: 10%;">Fund</th>
-                    <th style="width: 10%;">Function</th>
-                    <th style="width: 12%;">Type</th>
-                    <th class="text-center" style="width: 8%;">Status</th>
+                    <th style="width: 50%;">Object Code / Description</th>
+                    <th style="width: 15%;">Fund</th>
+                    <th style="width: 15%;">Type</th>
+                    <th class="text-center" style="width: 10%;">Status</th>
                     <th class="text-end" style="width: 10%;">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for node in tree_nodes %}
-                {% with head=node.obj %}
-                <tr class="tree-row" data-level="{{ node.level }}" data-code="{{ head.code }}" data-parent="{{ node.parent_code|default:'' }}">
-                    <td>
-                        <div style="padding-left: calc({{ node.level }} * 1.5rem); display: flex; align-items: center;">
-                            {% if node.has_children %}
-                                <span class="tree-toggle expanded" data-code="{{ head.code }}"></span>
-                            {% else %}
-                                <span style="width: 20px; display: inline-block;"></span>
-                            {% endif %}
-                            
-                            {% if not node.is_leaf %}
-                                <i class="bi bi-folder2-open text-primary me-2" style="font-size: 1.1em;"></i>
-                            {% else %}
+                {% if node.is_group_header %}
+                    <!-- Function Group Header -->
+                    <tr class="tree-row table-light fw-bold" data-level="0" data-code="{{ node.obj.code }}" data-parent="">
+                        <td colspan="5">
+                            <i class="bi bi-folder2-open text-primary me-2"></i>
+                            <span class="tree-toggle expanded" data-code="{{ node.obj.code }}"></span>
+                            {{ node.group_name }}
+                        </td>
+                    </tr>
+                {% else %}
+                    <!-- Budget Head Row -->
+                    {% with head=node.obj %}
+                    <tr class="tree-row" data-level="1" data-code="{{ head.code }}" data-parent="{{ node.parent_code }}">
+                        <td>
+                            <div style="padding-left: 2.5rem; display: flex; align-items: center;">
                                 <i class="bi bi-file-earmark-text text-muted me-2"></i>
-                            {% endif %}
-                            
-                            <div>
-                                <code class="text-primary fw-semibold">{{ head.code }}</code>
-                                <div class="small text-muted mt-1">{{ head.name|truncatewords:15 }}</div>
+                                <div>
+                                    <code class="text-primary fw-semibold">{{ head.code }}</code>
+                                    <div class="small text-muted mt-1">{{ head.name|truncatewords:15 }}</div>
+                                </div>
                             </div>
-                        </div>
-                    </td>
-                    <td><span class="badge bg-light text-dark border">{{ head.code }}</span></td>
-                    <td><small class="text-muted">{{ head.fund.code }}</small></td>
-                    <td><small class="text-muted">{{ head.function.code|default:"—" }}</small></td>
-                    <td>
-                        <span class="badge badge-type-{{ head.account_type|lower }}">
-                            {{ head.get_account_type_display }}
-                        </span>
-                    </td>
-                    <td class="text-center">
-                        {% if head.is_active %}
-                            <i class="bi bi-check-circle-fill text-success" title="Active"></i>
-                        {% else %}
-                            <i class="bi bi-x-circle text-danger" title="Inactive"></i>
-                        {% endif %}
-                    </td>
-                    <td class="text-end">
-                        <div class="btn-group btn-group-sm">
-                            <a href="{% url 'budgeting:setup_coa_edit' head.pk %}" class="btn btn-outline-primary" title="Edit">
-                                <i class="bi bi-pencil"></i>
-                            </a>
-                            <a href="{% url 'budgeting:setup_coa_delete' head.pk %}" class="btn btn-outline-danger" title="Delete" onclick="return confirm('Delete this budget head?')">
-                                <i class="bi bi-trash"></i>
-                            </a>
-                        </div>
-                    </td>
-                </tr>
-                {% endwith %}
+                        </td>
+                        <td><span class="badge bg-light text-dark border">{{ head.fund.code }}</span></td>
+                        <td>
+                            <span class="badge badge-type-{{ head.global_head.account_type|lower }}">
+                                {{ head.global_head.get_account_type_display }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            {% if head.is_active %}
+                                <i class="bi bi-check-circle-fill text-success" title="Active"></i>
+                            {% else %}
+                                <i class="bi bi-x-circle text-danger" title="Inactive"></i>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="{% url 'budgeting:setup_coa_edit' head.pk %}" class="btn btn-outline-primary" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <a href="{% url 'budgeting:setup_coa_delete' head.pk %}" class="btn btn-outline-danger" title="Delete" onclick="return confirm('Delete this budget head?')">
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endwith %}
+                {% endif %}
                 {% empty %}
                 <tr>
                     <td colspan="7" class="text-center py-5 text-muted">

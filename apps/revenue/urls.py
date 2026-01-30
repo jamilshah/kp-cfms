@@ -38,4 +38,8 @@ urlpatterns = [
     
     # API
     path('api/demands/<int:pk>/outstanding/', views.DemandOutstandingAPIView.as_view(), name='demand_outstanding_api'),
+    
+    # AJAX
+    path('ajax/load-functions/', views.load_functions, name='load_functions'),
+    path('ajax/load-revenue-heads/', views.load_revenue_heads, name='load_revenue_heads'),
 ]
