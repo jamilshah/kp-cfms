@@ -320,3 +320,100 @@ class BankAccount(AuditLogMixin, StatusMixin):
 
 # Backward compatibility alias - DEPRECATED, use Organization instead
 TMA = Organization
+
+
+class NotificationCategory(models.TextChoices):
+    """
+    Categories for notifications.
+    
+    WORKFLOW: Notifications related to workflow transitions
+    SYSTEM: System-generated notifications (e.g., fiscal year changes)
+    ALERT: Critical alerts requiring immediate attention
+    """
+    WORKFLOW = 'WORKFLOW', _('Workflow')
+    SYSTEM = 'SYSTEM', _('System')
+    ALERT = 'ALERT', _('Alert')
+
+
+class Notification(TimeStampedMixin):
+    """
+    Notification model for user alerts.
+    
+    Notifies users when a document (Bill, Voucher, Budget) requires
+    their action or when important system events occur.
+    
+    Attributes:
+        recipient: User who should receive the notification.
+        title: Short notification title (e.g., "Bill #105 Pending Audit").
+        message: Detailed notification message.
+        link: URL to the specific document requiring action.
+        is_read: Whether the notification has been read.
+        category: Type of notification (WORKFLOW, SYSTEM, ALERT).
+        icon: Bootstrap icon class (e.g., 'bi-file-earmark-text').
+    """
+    
+    recipient = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        verbose_name=_('Recipient'),
+        help_text=_('User who should receive this notification.')
+    )
+    title = models.CharField(
+        max_length=200,
+        verbose_name=_('Title'),
+        help_text=_('Short notification title.')
+    )
+    message = models.TextField(
+        verbose_name=_('Message'),
+        help_text=_('Detailed notification message.')
+    )
+    link = models.CharField(
+        max_length=500,
+        blank=True,
+        verbose_name=_('Link'),
+        help_text=_('URL to the document or page requiring action.')
+    )
+    is_read = models.BooleanField(
+        default=False,
+        verbose_name=_('Is Read'),
+        help_text=_('Whether the notification has been read.')
+    )
+    category = models.CharField(
+        max_length=20,
+        choices=NotificationCategory.choices,
+        default=NotificationCategory.WORKFLOW,
+        verbose_name=_('Category')
+    )
+    icon = models.CharField(
+        max_length=50,
+        default='bi-bell',
+        verbose_name=_('Icon'),
+        help_text=_('Bootstrap icon class for display.')
+    )
+    
+    class Meta:
+        verbose_name = _('Notification')
+        verbose_name_plural = _('Notifications')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['recipient', 'is_read']),
+            models.Index(fields=['recipient', '-created_at']),
+        ]
+    
+    def __str__(self) -> str:
+        return f"{self.title} - {self.recipient.get_full_name()}"
+    
+    def mark_as_read(self) -> None:
+        """Mark this notification as read."""
+        if not self.is_read:
+            self.is_read = True
+            self.save(update_fields=['is_read'])
+    
+    def get_badge_class(self) -> str:
+        """Return Bootstrap badge class based on category."""
+        return {
+            NotificationCategory.WORKFLOW: 'bg-primary',
+            NotificationCategory.SYSTEM: 'bg-info',
+            NotificationCategory.ALERT: 'bg-danger',
+        }.get(self.category, 'bg-secondary')

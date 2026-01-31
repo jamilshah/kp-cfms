@@ -1,0 +1,156 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: PAO / TMO Workspace (Sanctioning Authority)
+-------------------------------------------------------------------------
+-->
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}PAO Workspace - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="mb-4">
+        <h2 class="mb-1">
+            <i class="bi bi-award me-2"></i>PAO Workspace
+        </h2>
+        <p class="text-muted">Sanctioning Authority - Final Approvals</p>
+    </div>
+
+    {% if no_organization or no_fiscal_year %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> Configuration required.
+    </div>
+    {% else %}
+
+    <!-- Budget Performance -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="stat-label">Total Budget</div>
+                    <div class="stat-value">Rs. {{ budget_performance.total_budget|floatformat:0 }}M</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <div class="stat-label">Utilized</div>
+                    <div class="stat-value">Rs. {{ budget_performance.total_spent|floatformat:0 }}M</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card warning">
+                <div class="card-body">
+                    <div class="stat-label">Available</div>
+                    <div class="stat-value">Rs. {{ budget_performance.available|floatformat:0 }}M</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card {% if budget_performance.utilization_rate > 90 %}danger{% else %}success{% endif %}">
+                <div class="card-body">
+                    <div class="stat-label">Utilization</div>
+                    <div class="stat-value">{{ budget_performance.utilization_rate|floatformat:1 }}%</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <!-- Approval Queue -->
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-check-circle me-2"></i>Bills Awaiting Approval
+                        <span class="badge bg-primary ms-2">{{ approval_queue_count }}</span>
+                    </h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% if approval_queue %}
+                    <div class="list-group">
+                        {% for bill in approval_queue %}
+                        <a href="{% url 'expenditure:bill_detail' bill.pk %}" 
+                           class="list-group-item list-group-item-action">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1">{{ bill.bill_number }}</h6>
+                                    <p class="mb-1 small">{{ bill.payee.name }}</p>
+                                    <small class="text-muted">{{ bill.bill_date|date:"d M Y" }}</small>
+                                </div>
+                                <span class="badge bg-primary">Rs. {{ bill.net_amount|floatformat:2 }}</span>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fs-3"></i>
+                        <p class="mt-2">No pending approvals</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <!-- Critical Alerts -->
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0 text-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>Critical Budget Alerts
+                    </h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% if critical_heads %}
+                    <div class="list-group">
+                        {% for head in critical_heads %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1">{{ head.budget_head.name }}</h6>
+                                    <small class="text-muted">{{ head.budget_head.code }}</small>
+                                </div>
+                                <span class="badge bg-danger">{{ head.utilization|floatformat:0 }}%</span>
+                            </div>
+                            <div class="progress mt-2" style="height: 5px;">
+                                <div class="progress-bar bg-danger" 
+                                     style="width: {{ head.utilization }}%"></div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-check-circle fs-3 text-success"></i>
+                        <p class="mt-2">All budget heads healthy</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Summary -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-calendar-month me-2"></i>This Month's Expenditure
+            </h5>
+        </div>
+        <div class="card-body text-center">
+            <div class="stat-value text-primary">Rs. {{ monthly_expenditure|floatformat:2 }}</div>
+            <p class="text-muted mt-2">Total expenditure for current month</p>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}

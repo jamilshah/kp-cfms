@@ -211,6 +211,43 @@ Description: Base template with Bootstrap 5 and navigation.
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
+                    <!-- Workspace Link -->
+                    {% if user.is_authenticated %}
+                    <li class="nav-item me-2">
+                        <a class="nav-link" href="{% url 'dashboard:workspace_redirect' %}">
+                            <i class="bi bi-columns-gap"></i> Workspace
+                        </a>
+                    </li>
+
+                    <!-- Notification Bell -->
+                    <li class="nav-item dropdown me-3">
+                        <a class="nav-link position-relative" 
+                           href="#" 
+                           data-bs-toggle="dropdown"
+                           aria-expanded="false"
+                           hx-get="{% url 'core:notification_dropdown' %}"
+                           hx-trigger="click"
+                           hx-target="#notification-dropdown-content"
+                           hx-swap="innerHTML">
+                            <i class="bi bi-bell fs-5"></i>
+                            <span id="notification-badge" 
+                                  hx-get="{% url 'core:notification_badge' %}"
+                                  hx-trigger="load, every 30s"
+                                  hx-swap="innerHTML">
+                                {% include 'core/notification_badge.html' %}
+                            </span>
+                        </a>
+                        <div class="dropdown-menu dropdown-menu-end" style="min-width: 400px; max-width: 500px;" id="notification-dropdown-content">
+                            <div class="text-center p-3">
+                                <div class="spinner-border spinner-border-sm" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                    {% endif %}
+                    
+                    <!-- User Profile Dropdown -->
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
                             <i class="bi bi-person-circle"></i>

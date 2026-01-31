@@ -1,0 +1,151 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Audit Officer Workspace (Resident Audit Team)
+-------------------------------------------------------------------------
+-->
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Audit Workspace - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="mb-4">
+        <h2 class="mb-1">
+            <i class="bi bi-shield-check me-2"></i>Audit Workspace
+        </h2>
+        <p class="text-muted">Pre-Audit & Compliance Review</p>
+    </div>
+
+    {% if no_organization or no_fiscal_year %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> Configuration required.
+    </div>
+    {% else %}
+
+    <!-- Audit Statistics -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card stat-card warning">
+                <div class="card-body">
+                    <div class="stat-label">Pending Audit</div>
+                    <div class="stat-value">{{ audit_stats.pending_audit }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <div class="stat-label">Audited (Passed)</div>
+                    <div class="stat-value">{{ audit_stats.total_audited }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stat-card danger">
+                <div class="card-body">
+                    <div class="stat-label">Rejected</div>
+                    <div class="stat-value">{{ audit_stats.total_rejected }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Queue -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-clipboard-check me-2"></i>Bills Requiring Audit
+                <span class="badge bg-warning ms-2">{{ audit_bills_count }}</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            {% if audit_bills %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" id="select-all"></th>
+                            <th>Bill #</th>
+                            <th>Date</th>
+                            <th>Payee</th>
+                            <th>Amount</th>
+                            <th>Submitted By</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bill in audit_bills %}
+                        <tr>
+                            <td><input type="checkbox" class="bill-checkbox" value="{{ bill.pk }}"></td>
+                            <td><strong>{{ bill.bill_number }}</strong></td>
+                            <td>{{ bill.bill_date|date:"d M Y" }}</td>
+                            <td>{{ bill.payee.name }}</td>
+                            <td><strong>Rs. {{ bill.net_amount|floatformat:2 }}</strong></td>
+                            <td>{{ bill.submitted_by.get_full_name }}</td>
+                            <td>
+                                <a href="{% url 'expenditure:bill_detail' bill.pk %}" 
+                                   class="btn btn-sm btn-primary">
+                                    <i class="bi bi-eye"></i> Audit
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-3">
+                <button class="btn btn-success me-2" onclick="bulkPass()">
+                    <i class="bi bi-check-all"></i> Bulk Pass
+                </button>
+                <button class="btn btn-danger" onclick="bulkReturn()">
+                    <i class="bi bi-arrow-return-left"></i> Bulk Return
+                </button>
+            </div>
+            {% else %}
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-clipboard-check fs-1"></i>
+                <p class="mt-3">No bills pending audit</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+
+<script>
+document.getElementById('select-all')?.addEventListener('change', function(e) {
+    document.querySelectorAll('.bill-checkbox').forEach(cb => cb.checked = e.target.checked);
+});
+
+function bulkPass() {
+    const selected = Array.from(document.querySelectorAll('.bill-checkbox:checked')).map(cb => cb.value);
+    if (selected.length === 0) {
+        alert('Please select at least one bill');
+        return;
+    }
+    if (confirm(`Pass ${selected.length} bill(s) for approval?`)) {
+        // Implementation: Send AJAX request to bulk pass endpoint
+        console.log('Bulk pass:', selected);
+    }
+}
+
+function bulkReturn() {
+    const selected = Array.from(document.querySelectorAll('.bill-checkbox:checked')).map(cb => cb.value);
+    if (selected.length === 0) {
+        alert('Please select at least one bill');
+        return;
+    }
+    const reason = prompt('Enter objection reason:');
+    if (reason) {
+        // Implementation: Send AJAX request to bulk return endpoint
+        console.log('Bulk return:', selected, reason);
+    }
+}
+</script>
+{% endblock %}

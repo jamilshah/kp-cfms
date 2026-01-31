@@ -11,7 +11,7 @@ Description: Django admin configuration for core models including
 from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.models import Division, District, Tehsil, Organization, BankAccount
+from apps.core.models import Division, District, Tehsil, Organization, BankAccount, Notification
 
 
 @admin.register(Division)
@@ -146,4 +146,32 @@ class BankAccountAdmin(admin.ModelAdmin):
             obj.created_by = request.user
         obj.updated_by = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    """Admin configuration for Notification model."""
+    
+    list_display = ['title', 'recipient', 'category', 'is_read', 'created_at']
+    list_filter = ['category', 'is_read', 'created_at']
+    search_fields = ['title', 'message', 'recipient__first_name', 'recipient__last_name']
+    ordering = ['-created_at']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    fieldsets = (
+        (_('Notification Details'), {
+            'fields': ('recipient', 'title', 'message', 'link')
+        }),
+        (_('Classification'), {
+            'fields': ('category', 'icon', 'is_read')
+        }),
+        (_('Timestamps'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        """Prevent manual notification creation in admin (use services instead)."""
+        return False
 

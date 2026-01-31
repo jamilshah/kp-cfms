@@ -1,13 +1,158 @@
 """
-Views for the Core module.
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Core views including notification management and bank accounts.
+-------------------------------------------------------------------------
 """
-from django.views.generic import ListView, CreateView, UpdateView, DeleteView
+from typing import Dict, Any
+from django.views.generic import ListView, CreateView, UpdateView, DeleteView, TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404
+from django.views.decorators.http import require_POST
+from django.contrib.auth.decorators import login_required
+from django.template.loader import render_to_string
 
 from apps.users.permissions import AdminRequiredMixin
-from apps.core.models import BankAccount
+from apps.core.models import BankAccount, Notification, NotificationCategory
+from apps.core.services import NotificationService
+
+
+# =====================================================================
+# NOTIFICATION VIEWS
+# =====================================================================
+
+class NotificationListView(LoginRequiredMixin, ListView):
+    """
+    List all notifications for the current user.
+    
+    Features:
+    - Tabbed interface (All, Unread, Workflow, Alerts)
+    - Paginated results
+    - Mark as read functionality
+    """
+    model = Notification
+    template_name = 'core/notification_list.html'
+    context_object_name = 'notifications'
+    paginate_by = 20
+    
+    def get_queryset(self):
+        """Return notifications for current user."""
+        return Notification.objects.filter(
+            recipient=self.request.user
+        ).order_by('-created_at')
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        
+        # Get all notifications
+        all_notifications = self.get_queryset()
+        
+        # Filter by category
+        context['unread_notifications'] = all_notifications.filter(is_read=False)
+        context['workflow_notifications'] = all_notifications.filter(
+            category=NotificationCategory.WORKFLOW
+        )
+        context['alert_notifications'] = all_notifications.filter(
+            category=NotificationCategory.ALERT
+        )
+        
+        # Counts
+        context['unread_count'] = NotificationService.get_unread_count(user)
+        context['workflow_count'] = all_notifications.filter(
+            category=NotificationCategory.WORKFLOW
+        ).count()
+        context['alert_count'] = all_notifications.filter(
+            category=NotificationCategory.ALERT
+        ).count()
+        
+        return context
+
+
+@login_required
+def notification_dropdown_view(request):
+    """
+    HTMX endpoint for notification dropdown content.
+    
+    Returns HTML fragment with recent notifications.
+    """
+    notifications = NotificationService.get_recent_notifications(request.user, limit=5)
+    unread_count = NotificationService.get_unread_count(request.user)
+    
+    html = render_to_string(
+        'core/notification_dropdown.html',
+        {
+            'notifications': notifications,
+            'unread_count': unread_count,
+        },
+        request=request
+    )
+    return HttpResponse(html)
+
+
+@login_required
+def notification_badge_view(request):
+    """
+    HTMX endpoint for notification badge (unread count).
+    
+    Returns HTML fragment with badge showing unread count.
+    """
+    unread_count = NotificationService.get_unread_count(request.user)
+    
+    html = render_to_string(
+        'core/notification_badge.html',
+        {'unread_count': unread_count},
+        request=request
+    )
+    return HttpResponse(html)
+
+
+@login_required
+@require_POST
+def notification_mark_read_view(request, pk):
+    """
+    Mark a specific notification as read.
+    
+    HTMX endpoint - returns updated notification HTML.
+    """
+    notification = get_object_or_404(
+        Notification,
+        pk=pk,
+        recipient=request.user
+    )
+    notification.mark_as_read()
+    
+    return HttpResponse('')
+
+
+@login_required
+@require_POST
+def notification_mark_all_read_view(request):
+    """
+    Mark all notifications for current user as read.
+    
+    HTMX endpoint - returns updated badge HTML.
+    """
+    NotificationService.mark_all_as_read(request.user)
+    
+    # Return updated badge
+    html = render_to_string(
+        'core/notification_badge.html',
+        {'unread_count': 0},
+        request=request
+    )
+    return HttpResponse(html)
+
+
+# =====================================================================
+# BANK ACCOUNT VIEWS
+# =====================================================================
 
 
 class BankAccountListView(LoginRequiredMixin, AdminRequiredMixin, ListView):

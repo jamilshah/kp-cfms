@@ -4,15 +4,18 @@ System: KP-CFMS (Computerized Financial Management System)
 Client: Local Government Department, Khyber Pakhtunkhwa
 Team Lead: Jamil Shah
 Developers: Ali Asghar, Akhtar Munir and Zarif Khan
-Description: Dashboard views with caching for performance optimization.
+Description: Dashboard views with caching for performance optimization
+             and role-based workspaces.
 -------------------------------------------------------------------------
 """
 from decimal import Decimal
 from typing import Dict, Any, Optional
-from django.views.generic import TemplateView
+from django.views.generic import TemplateView, RedirectView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
 from django.utils import timezone
+from django.shortcuts import redirect
+from django.urls import reverse
 
 from apps.budgeting.models import FiscalYear
 from apps.core.models import Organization
@@ -44,7 +47,9 @@ class ExecutiveDashboardView(LoginRequiredMixin, TemplateView):
             # (Super admins with org assignment can see TMA dashboard)
             if not user.organization:
                 return redirect('dashboard:provincial')
-        
+
+        # Note: role-based workspace redirect is handled via
+        # `DashboardRedirectView` at '/dashboard/workspace/'.
         return super().dispatch(request, *args, **kwargs)
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
@@ -290,3 +295,372 @@ class ProvincialDashboardView(LoginRequiredMixin, TemplateView):
             'deficit_tmas': deficit_tmas,
             'low_utilization_tmas': low_utilization_tmas,
         }
+
+
+# =====================================================================
+# ROLE-BASED WORKSPACE VIEWS
+# =====================================================================
+
+class DashboardRedirectView(LoginRequiredMixin, RedirectView):
+    """
+    Central redirect view that routes users to their role-specific workspace.
+    
+    Based on user's primary role:
+    - Finance Officer / Accountant -> Finance Workspace
+    - Dealing Assistant -> Maker Workspace  
+    - TMO -> PAO Workspace (Approval Authority)
+    - Cashier -> Revenue Workspace
+    - LCB Officer -> Provincial Dashboard
+    - Others -> Executive Dashboard
+    """
+    
+    permanent = False
+    
+    def get_redirect_url(self, *args, **kwargs):
+        """Route user to appropriate workspace based on their role."""
+        user = self.request.user
+        
+        # LCB Officers -> Provincial Dashboard
+        if user.is_lcb_officer():
+            return reverse('dashboard:provincial')
+        
+        # Finance Officers / Accountants -> Finance Workspace
+        if user.is_finance_officer() or user.is_checker():
+            return reverse('dashboard:workspace_finance')
+        
+        # TMO (Approval Authority) -> PAO Workspace
+        if user.is_approver():
+            return reverse('dashboard:workspace_pao')
+        
+        # Cashier -> Revenue Workspace
+        if user.is_cashier():
+            return reverse('dashboard:workspace_revenue')
+        
+        # Dealing Assistant (Makers) -> Executive Dashboard (default)
+        # System Admin -> Executive Dashboard
+        return reverse('dashboard:index')
+
+
+class FinanceWorkspaceView(LoginRequiredMixin, TemplateView):
+    """
+    Finance Officer / Accountant Workspace.
+    
+    Features:
+    - Budget utilization metrics
+    - Action queue: Bills with status SUBMITTED (awaiting scrutiny)
+    - Pending reconciliations
+    - Quick links to budget management tools
+    """
+    
+    template_name = 'dashboard/workspace_finance.html'
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        
+        # Get user's organization
+        organization = user.organization
+        if not organization:
+            context['no_organization'] = True
+            return context
+        
+        # Get current fiscal year
+        fiscal_year = FiscalYear.get_current_operating_year(organization)
+        if not fiscal_year:
+            context['no_fiscal_year'] = True
+            return context
+        
+        context['fiscal_year'] = fiscal_year
+        context['organization'] = organization
+        
+        # Import here to avoid circular imports
+        from apps.expenditure.models import Bill, BillStatus
+        from apps.budgeting.models import BudgetAllocation
+        from django.db.models import Sum, Q
+        
+        # Action Queue: Bills awaiting scrutiny
+        pending_bills = Bill.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            status=BillStatus.SUBMITTED
+        ).select_related('payee', 'budget_head').order_by('-bill_date')[:10]
+        
+        context['pending_bills'] = pending_bills
+        context['pending_bills_count'] = pending_bills.count()
+        
+        # Budget Utilization Metrics
+        budget_allocations = BudgetAllocation.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year
+        )
+        
+        total_budget = budget_allocations.aggregate(
+            total=Sum('revised_allocation')
+        )['total'] or Decimal('0.00')
+        
+        total_spent = budget_allocations.aggregate(
+            total=Sum('spent_amount')
+        )['total'] or Decimal('0.00')
+        
+        utilization_rate = (total_spent / total_budget * 100) if total_budget > 0 else Decimal('0.00')
+        
+        context['budget_metrics'] = {
+            'total_budget': total_budget,
+            'total_spent': total_spent,
+            'available': total_budget - total_spent,
+            'utilization_rate': utilization_rate,
+        }
+        
+        # Pending Liabilities (Approved but not paid bills)
+        pending_liabilities = Bill.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            status=BillStatus.APPROVED
+        ).aggregate(total=Sum('net_amount'))['total'] or Decimal('0.00')
+        
+        context['pending_liabilities'] = pending_liabilities
+        
+        return context
+
+
+class AuditWorkspaceView(LoginRequiredMixin, TemplateView):
+    """
+    Audit Officer Workspace (Resident Audit Team).
+    
+    Features:
+    - Action queue: Bills marked for audit
+    - Bulk pass/return with objections
+    - Audit statistics and compliance metrics
+    """
+    
+    template_name = 'dashboard/workspace_audit.html'
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        
+        organization = user.organization
+        if not organization:
+            context['no_organization'] = True
+            return context
+        
+        fiscal_year = FiscalYear.get_current_operating_year(organization)
+        if not fiscal_year:
+            context['no_fiscal_year'] = True
+            return context
+        
+        context['fiscal_year'] = fiscal_year
+        context['organization'] = organization
+        
+        from apps.expenditure.models import Bill, BillStatus
+        from django.db.models import Sum
+        
+        # Action Queue: Bills marked for audit (if status exists)
+        # Note: MARKED_FOR_AUDIT status will be added in next task
+        audit_bills = Bill.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            status__in=[BillStatus.SUBMITTED]  # Will add MARKED_FOR_AUDIT
+        ).select_related('payee', 'budget_head', 'submitted_by').order_by('-bill_date')[:15]
+        
+        context['audit_bills'] = audit_bills
+        context['audit_bills_count'] = audit_bills.count()
+        
+        # Audit Statistics
+        total_audited = Bill.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            status__in=[BillStatus.APPROVED, BillStatus.PAID]
+        ).count()
+        
+        total_rejected = Bill.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            status=BillStatus.REJECTED
+        ).count()
+        
+        context['audit_stats'] = {
+            'total_audited': total_audited,
+            'total_rejected': total_rejected,
+            'pending_audit': audit_bills.count(),
+        }
+        
+        return context
+
+
+class RevenueWorkspaceView(LoginRequiredMixin, TemplateView):
+    """
+    Revenue / Collecting Officer Workspace.
+    
+    Features:
+    - Today's collection metrics
+    - Month-to-date recovery vs target
+    - Unreconciled challans/receipts
+    - Outstanding demands
+    """
+    
+    template_name = 'dashboard/workspace_revenue.html'
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        
+        organization = user.organization
+        if not organization:
+            context['no_organization'] = True
+            return context
+        
+        fiscal_year = FiscalYear.get_current_operating_year(organization)
+        if not fiscal_year:
+            context['no_fiscal_year'] = True
+            return context
+        
+        context['fiscal_year'] = fiscal_year
+        context['organization'] = organization
+        
+        from apps.revenue.models import RevenueDemand, RevenueCollection, DemandStatus
+        from django.db.models import Sum, Q
+        from datetime import date
+        
+        today = timezone.now().date()
+        month_start = date(today.year, today.month, 1)
+        
+        # Today's Collections
+        today_collections = RevenueCollection.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            collection_date=today
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        
+        context['today_collections'] = today_collections
+        
+        # Month-to-Date Collections
+        mtd_collections = RevenueCollection.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            collection_date__gte=month_start
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        
+        context['mtd_collections'] = mtd_collections
+        
+        # Outstanding Demands
+        outstanding_demands = RevenueDemand.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            status__in=[DemandStatus.PENDING, DemandStatus.PARTIALLY_PAID]
+        ).select_related('payer', 'revenue_head').order_by('due_date')[:10]
+        
+        context['outstanding_demands'] = outstanding_demands
+        context['outstanding_demands_count'] = outstanding_demands.count()
+        
+        # Total Outstanding Amount
+        total_outstanding = outstanding_demands.aggregate(
+            total=Sum('amount')
+        )['total'] or Decimal('0.00')
+        
+        context['total_outstanding'] = total_outstanding
+        
+        # Unreconciled Collections (not posted to GL)
+        unreconciled_collections = RevenueCollection.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            is_posted=False
+        ).count()
+        
+        context['unreconciled_collections'] = unreconciled_collections
+        
+        return context
+
+
+class PAOWorkspaceView(LoginRequiredMixin, TemplateView):
+    """
+    PAO / TMO Workspace (Sanctioning Authority).
+    
+    Features:
+    - Action queue: Bills audited and ready for final approval
+    - High-level monthly expenditure summary
+    - Budget vs actual performance
+    - Critical alerts and compliance issues
+    """
+    
+    template_name = 'dashboard/workspace_pao.html'
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        
+        organization = user.organization
+        if not organization:
+            context['no_organization'] = True
+            return context
+        
+        fiscal_year = FiscalYear.get_current_operating_year(organization)
+        if not fiscal_year:
+            context['no_fiscal_year'] = True
+            return context
+        
+        context['fiscal_year'] = fiscal_year
+        context['organization'] = organization
+        
+        from apps.expenditure.models import Bill, BillStatus
+        from apps.budgeting.models import BudgetAllocation
+        from django.db.models import Sum
+        from datetime import date
+        
+        # Action Queue: Bills ready for final approval
+        # (After audit, waiting for TMO approval)
+        approval_queue = Bill.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            status=BillStatus.SUBMITTED  # Will add AUDITED status
+        ).select_related('payee', 'budget_head', 'submitted_by').order_by('-bill_date')[:10]
+        
+        context['approval_queue'] = approval_queue
+        context['approval_queue_count'] = approval_queue.count()
+        
+        # Monthly Expenditure Summary
+        today = timezone.now().date()
+        month_start = date(today.year, today.month, 1)
+        
+        monthly_expenditure = Bill.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            status__in=[BillStatus.APPROVED, BillStatus.PAID],
+            bill_date__gte=month_start
+        ).aggregate(total=Sum('net_amount'))['total'] or Decimal('0.00')
+        
+        context['monthly_expenditure'] = monthly_expenditure
+        
+        # Budget Performance
+        budget_allocations = BudgetAllocation.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year
+        )
+        
+        total_budget = budget_allocations.aggregate(
+            total=Sum('revised_allocation')
+        )['total'] or Decimal('0.00')
+        
+        total_spent = budget_allocations.aggregate(
+            total=Sum('spent_amount')
+        )['total'] or Decimal('0.00')
+        
+        context['budget_performance'] = {
+            'total_budget': total_budget,
+            'total_spent': total_spent,
+            'available': total_budget - total_spent,
+            'utilization_rate': (total_spent / total_budget * 100) if total_budget > 0 else Decimal('0.00'),
+        }
+        
+        # Critical Alerts (Heads with >90% utilization)
+        critical_heads = budget_allocations.filter(
+            revised_allocation__gt=0
+        ).annotate(
+            utilization=Sum('spent_amount') * 100 / Sum('revised_allocation')
+        ).filter(
+            utilization__gte=90
+        ).select_related('budget_head')[:5]
+        
+        context['critical_heads'] = critical_heads
+        
+        return context

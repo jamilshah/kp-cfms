@@ -1,0 +1,15 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Notification badge component (unread count for navbar).
+-------------------------------------------------------------------------
+-->
+{% if unread_count > 0 %}
+<span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+    {{ unread_count }}
+    <span class="visually-hidden">unread notifications</span>
+</span>
+{% endif %}

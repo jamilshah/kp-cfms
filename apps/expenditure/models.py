@@ -30,15 +30,21 @@ class BillStatus(models.TextChoices):
     
     DRAFT: Bill created but not yet submitted
     SUBMITTED: Bill submitted for approval
+    MARKED_FOR_AUDIT: Bill marked for audit review
+    AUDITED: Bill passed audit, ready for approval
     APPROVED: Bill approved, liability recorded in GL
     PAID: Payment issued against the bill
     REJECTED: Bill rejected in approval workflow
+    RETURNED: Bill returned for corrections
     """
     DRAFT = 'DRAFT', _('Draft')
     SUBMITTED = 'SUBMITTED', _('Submitted for Approval')
+    MARKED_FOR_AUDIT = 'MARKED_FOR_AUDIT', _('Marked for Audit')
+    AUDITED = 'AUDITED', _('Audited')
     APPROVED = 'APPROVED', _('Approved')
     PAID = 'PAID', _('Paid')
     REJECTED = 'REJECTED', _('Rejected')
+    RETURNED = 'RETURNED', _('Returned for Corrections')
 
 
 class Payee(AuditLogMixin, StatusMixin, TenantAwareMixin):
@@ -236,7 +242,7 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         help_text=_('Amount payable to vendor (Gross - Tax).')
     )
     status = models.CharField(
-        max_length=15,
+        max_length=32,
         choices=BillStatus.choices,
         default=BillStatus.DRAFT,
         verbose_name=_('Status')
