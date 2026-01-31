@@ -90,39 +90,26 @@ Description: Bill Create/Edit Form Template
                         </div>
                     </div>
                     
-                    <div class="row mb-4">
+                    <!-- Filters -->
+                    <div class="row mb-3 p-3 bg-light rounded border">
+                        <h6 class="text-muted mb-3"><i class="bi bi-funnel"></i> Filter Budget Heads</h6>
                         <div class="col-md-6">
                             <label for="{{ form.department.id_for_label }}" class="form-label">
-                                Department (Optional Filter)
+                                {{ form.department.label }}
                             </label>
                             {{ form.department }}
-                            {% if form.department.errors %}
-                            <div class="invalid-feedback d-block">{{ form.department.errors.0 }}</div>
-                            {% endif %}
-                            <small class="text-muted">Filter by department</small>
+                            <div class="form-text">{{ form.department.help_text }}</div>
                         </div>
                         <div class="col-md-6">
                             <label for="{{ form.function.id_for_label }}" class="form-label">
-                                Function (Optional)
+                                {{ form.function.label }}
                             </label>
                             {{ form.function }}
-                            {% if form.function.errors %}
-                            <div class="invalid-feedback d-block">{{ form.function.errors.0 }}</div>
-                            {% endif %}
-                            <small class="text-muted">Filter by function</small>
+                            <div class="form-text">{{ form.function.help_text }}</div>
                         </div>
                     </div>
 
-                    <div class="mb-4">
-                        <label for="{{ form.budget_head.id_for_label }}" class="form-label">
-                            Budget Head (Expense Account) <span class="text-danger">*</span>
-                        </label>
-                        {{ form.budget_head }}
-                        {% if form.budget_head.errors %}
-                        <div class="invalid-feedback d-block">{{ form.budget_head.errors.0 }}</div>
-                        {% endif %}
-                        <small class="text-muted">Select the expense head.</small>
-                    </div>
+                    <!-- Single Budget Head Removed -->
                     
                     <div class="mb-4">
                         <label for="{{ form.description.id_for_label }}" class="form-label">
@@ -134,6 +121,70 @@ Description: Bill Create/Edit Form Template
                         {% endif %}
                     </div>
                     
+                    <!-- Bill Lines Section -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0"><i class="bi bi-list-ul"></i> Bill Items / Heads</h6>
+                            <button type="button" class="btn btn-sm btn-success" id="addLineBtn">
+                                <i class="bi bi-plus-circle"></i> Add Item
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            {{ lines.management_form }}
+                            {% if lines.non_form_errors %}
+                            <div class="alert alert-danger m-2">{{ lines.non_form_errors }}</div>
+                            {% endif %}
+                            
+                            <div class="table-responsive">
+                                <table class="table table-bordered mb-0" id="linesTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 40%">Budget Head (Department/Function) <span class="text-danger">*</span></th>
+                                            <th style="width: 35%">Description</th>
+                                            <th style="width: 20%">Amount (Rs.) <span class="text-danger">*</span></th>
+                                            <th style="width: 5%"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="linesBody">
+                                        {% for line_form in lines %}
+                                        <tr class="line-row">
+                                            <td>
+                                                {% for hidden in line_form.hidden_fields %}
+                                                    {{ hidden }}
+                                                {% endfor %}
+                                                {{ line_form.budget_head }}
+                                                {% if line_form.budget_head.errors %}
+                                                    <div class="text-danger small">{{ line_form.budget_head.errors.0 }}</div>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {{ line_form.description }}
+                                                {% if line_form.description.errors %}
+                                                    <div class="text-danger small">{{ line_form.description.errors.0 }}</div>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {{ line_form.amount }}
+                                                {% if line_form.amount.errors %}
+                                                    <div class="text-danger small">{{ line_form.amount.errors.0 }}</div>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-center">
+                                                {% if lines.can_delete %}
+                                                    {{ line_form.DELETE }}
+                                                {% endif %}
+                                                <button type="button" class="btn btn-sm btn-danger delete-row" title="Remove">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Amount Section -->
                     <div class="card bg-light mb-4">
                         <div class="card-header">
@@ -146,6 +197,7 @@ Description: Bill Create/Edit Form Template
                                         Gross Amount (Rs.) <span class="text-danger">*</span>
                                     </label>
                                     {{ form.gross_amount }}
+                                    <small class="text-muted">Auto-calculated from lines</small>
                                     {% if form.gross_amount.errors %}
                                     <div class="invalid-feedback d-block">{{ form.gross_amount.errors.0 }}</div>
                                     {% endif %}
@@ -187,36 +239,124 @@ Description: Bill Create/Edit Form Template
 {% endblock %}
 
 {% block extra_js %}
-<script>
-    // Auto-calculate net amount
-    function calculateNetAmount() {
-        const grossAmount = parseFloat(document.getElementById('{{ form.gross_amount.id_for_label }}').value) || 0;
-        const taxAmount = parseFloat(document.getElementById('{{ form.tax_amount.id_for_label }}').value) || 0;
-        const netAmount = grossAmount - taxAmount;
-        document.getElementById('net_amount_display').value = netAmount.toFixed(2);
-    }
-    
-    document.getElementById('{{ form.gross_amount.id_for_label }}').addEventListener('input', calculateNetAmount);
-    document.getElementById('{{ form.tax_amount.id_for_label }}').addEventListener('input', calculateNetAmount);
-    
-    // Calculate on page load
-    calculateNetAmount();
-    
-    // Re-initialize Select2 after HTMX swap
-    document.body.addEventListener('htmx:afterSwap', function(evt) {
-        if (evt.target.id === 'id_budget_head') {
-            // Re-apply Select2 to the updated budget head dropdown
-            $('#id_budget_head').select2({
-                theme: 'bootstrap-5',
-                width: '100%',
-                placeholder: "Type to search...",
-                allowClear: true
-            });
-        }
-    });
+<!-- Template for new row (hidden) -->
+<table style="display: none;">
+    <tbody id="emptyRowTemplate">
+        <tr class="line-row">
+            <td>
+                {{ lines.empty_form.budget_head }}
+            </td>
+            <td>
+                {{ lines.empty_form.description }}
+            </td>
+            <td>
+                {{ lines.empty_form.amount }}
+            </td>
+            <td class="text-center">
+                {% if lines.can_delete %}
+                    {{ lines.empty_form.DELETE }}
+                {% endif %}
+                <button type="button" class="btn btn-sm btn-danger delete-row">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    </tbody>
+</table>
 
-    // Also need to handle clearing the department filter
-    // If department is cleared (value=''), it triggers change, HTMX fires, returns all options.
-    // Logic handles empty department_id correctly (returns base queryset).
+<!-- Hidden container for HTMX response scripts -->
+<div id="budget-head-options" style="display:none;"></div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- FormSet Logic ---
+        const linesBody = document.getElementById('linesBody');
+        const addLineBtn = document.getElementById('addLineBtn');
+        const totalFormsInput = document.querySelector('#id_lines-TOTAL_FORMS');
+        const grossAmountInput = document.getElementById('{{ form.gross_amount.id_for_label }}');
+        const taxAmountInput = document.getElementById('{{ form.tax_amount.id_for_label }}');
+        const netAmountDisplay = document.getElementById('net_amount_display');
+        
+        // Function to update totals
+        function updateTotals() {
+            let total = 0;
+            document.querySelectorAll('.line-row').forEach(row => {
+                // Check if deleted
+                const deleteInput = row.querySelector('input[name$="-DELETE"]');
+                if (deleteInput && deleteInput.checked) return; // Skip deleted rows
+                
+                // Find amount input
+                const amountInput = row.querySelector('input[name$="-amount"]');
+                if (amountInput) {
+                     total += parseFloat(amountInput.value) || 0;
+                }
+            });
+            
+            // Update Gross Amount
+            grossAmountInput.value = total.toFixed(2);
+            
+            // Update Net Amount
+            const tax = parseFloat(taxAmountInput.value) || 0;
+            const net = total - tax;
+            netAmountDisplay.value = net.toFixed(2);
+        }
+        
+        // Attach listeners to a row
+        function attachRowListeners(row) {
+            const amountInput = row.querySelector('input[name$="-amount"]');
+            if (amountInput) {
+                amountInput.addEventListener('input', updateTotals);
+            }
+            
+            const deleteBtn = row.querySelector('.delete-row');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', function() {
+                    const deleteInput = row.querySelector('input[name$="-DELETE"]');
+                    if (deleteInput) {
+                        deleteInput.checked = true;
+                        row.style.display = 'none';
+                    } else {
+                        row.remove(); // For dynamic rows
+                    }
+                    updateTotals();
+                });
+            }
+            
+             // Initialize Select2
+            const select = row.querySelector('select');
+            if (select && typeof $ !== 'undefined') {
+                 $(select).select2({
+                    theme: 'bootstrap-5',
+                    width: '100%',
+                    placeholder: "Search Budget Head...",
+                    allowClear: true
+                });
+            }
+        }
+        
+        // Add Line Handler
+        addLineBtn.addEventListener('click', function() {
+            const currentFormCount = parseInt(totalFormsInput.value);
+            const template = document.getElementById('emptyRowTemplate').innerHTML;
+            const newHtml = template.replace(/__prefix__/g, currentFormCount);
+            
+            linesBody.insertAdjacentHTML('beforeend', newHtml);
+            totalFormsInput.value = currentFormCount + 1;
+            
+            const newRow = linesBody.lastElementChild;
+            attachRowListeners(newRow);
+        });
+        
+        // Initial setup for existing rows
+        document.querySelectorAll('.line-row').forEach(row => {
+            attachRowListeners(row);
+        });
+        
+        // Global tax listener
+        taxAmountInput.addEventListener('input', updateTotals);
+        
+        // Initial Calculation
+        updateTotals();
+    });
 </script>
 {% endblock %}

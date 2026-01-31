@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Global Heads - Master Data - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:dashboard' %}">System Admin</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:master_data_seed' %}">Master Data</a></li>
+            <li class="breadcrumb-item active">Global Heads</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-diagram-3 me-2"></i>Global Heads</h2>
+            <p class="text-muted mb-0">Master Inventory of PIFRA Object Codes (Chart of Accounts)</p>
+        </div>
+        <a href="{% url 'system_admin:global_head_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i> Add Global Head
+        </a>
+    </div>
+
+    <!-- Search/Filter Card -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-6">
+                    <label for="search" class="form-label">Search</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" 
+                               name="search" 
+                               id="search" 
+                               class="form-control" 
+                               placeholder="Search by code, name, or minor head..."
+                               value="{{ search_query }}">
+                        <button type="submit" class="btn btn-primary">Search</button>
+                        {% if search_query %}
+                            <a href="{% url 'system_admin:global_head_list' %}" class="btn btn-outline-secondary">Clear</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Code</th>
+                            <th>Name</th>
+                            <th>Minor Head</th>
+                            <th>Major Head</th>
+                            <th>Type</th>
+                            <th class="text-end pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for head in global_heads %}
+                            <tr>
+                                <td class="ps-4 font-monospace fw-bold text-primary">{{ head.code }}</td>
+                                <td>{{ head.name }}</td>
+                                <td>
+                                    <span class="d-block">{{ head.minor.name }}</span>
+                                    <small class="text-muted font-monospace">{{ head.minor.code }}</small>
+                                </td>
+                                <td>
+                                    <span class="d-block">{{ head.minor.major.name }}</span>
+                                    <small class="text-muted font-monospace">{{ head.minor.major.code }}</small>
+                                </td>
+                                <td>
+                                    {% if head.account_type == 'EXP' %}
+                                        <span class="badge bg-danger">Expenditure</span>
+                                    {% elif head.account_type == 'REV' %}
+                                        <span class="badge bg-success">Revenue</span>
+                                    {% elif head.account_type == 'LIA' %}
+                                        <span class="badge bg-warning text-dark">Liability</span>
+                                    {% elif head.account_type == 'AST' %}
+                                        <span class="badge bg-info text-dark">Asset</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ head.get_account_type_display }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end pe-4">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{% url 'system_admin:global_head_edit' head.pk %}" 
+                                           class="btn btn-outline-primary" 
+                                           title="Edit">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <a href="{% url 'system_admin:global_head_delete' head.pk %}" 
+                                           class="btn btn-outline-danger" 
+                                           title="Delete">
+                                            <i class="bi bi-trash"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-5 text-muted">
+                                    <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                                    No Global Heads found matching your criteria.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Pagination -->
+        {% if is_paginated %}
+        <div class="card-footer bg-light py-3">
+            <nav aria-label="Page navigation">
+                <ul class="pagination pagination-sm justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="bi bi-chevron-left"></i></span>
+                        </li>
+                    {% endif %}
+
+                    {% for i in paginator.page_range %}
+                        {% if page_obj.number == i %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ i }}</span>
+                            </li>
+                        {% elif i > page_obj.number|add:'-3' and i < page_obj.number|add:'3' %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ i }}{% if search_query %}&search={{ search_query }}{% endif %}">{{ i }}</a>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="bi bi-chevron-right"></i></span>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -115,6 +115,44 @@ class Payee(AuditLogMixin, StatusMixin, TenantAwareMixin):
         return self.name
 
 
+class BillLine(models.Model):
+    """
+    Line item for a Bill.
+    Allows splitting a bill across multiple budget heads (e.g., Salary split by department).
+    """
+    bill = models.ForeignKey(
+        'Bill',
+        on_delete=models.CASCADE,
+        related_name='lines',
+        verbose_name=_('Bill')
+    )
+    budget_head = models.ForeignKey(
+        'finance.BudgetHead',
+        on_delete=models.PROTECT,
+        related_name='bill_lines',
+        verbose_name=_('Budget Head'),
+        help_text=_('Expense head to charge.')
+    )
+    description = models.CharField(
+        max_length=255,
+        verbose_name=_('Description'),
+        help_text=_('Line item description.')
+    )
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name=_('Amount')
+    )
+    
+    class Meta:
+        verbose_name = _('Bill Line')
+        verbose_name_plural = _('Bill Lines')
+    
+    def __str__(self) -> str:
+        return f"{self.budget_head.code} - {self.amount}"
+
+
 class Bill(AuditLogMixin, TenantAwareMixin):
     """
     Bill/Invoice representing a liability to be paid.
@@ -150,13 +188,9 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         related_name='bills',
         verbose_name=_('Payee')
     )
-    budget_head = models.ForeignKey(
-        'finance.BudgetHead',
-        on_delete=models.PROTECT,
-        related_name='bills',
-        verbose_name=_('Budget Head'),
-        help_text=_('Expense head to charge.')
-    )
+    # Refactored: Budget Head moved to BillLine
+    # budget_head = models.ForeignKey(...) 
+    
     bill_date = models.DateField(
         verbose_name=_('Bill Date'),
         help_text=_('Date on the vendor invoice.')
@@ -315,12 +349,12 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         
         This method:
         1. Validates the workflow transition
-        2. Checks budget availability (Hard Budget Constraint)
+        2. Checks budget availability for EACH line (Hard Budget Constraint)
         3. Creates a Journal Voucher with:
-           - Debit: Expense Head (gross_amount)
+           - Multiple Debits: Expense Head (line.amount)
            - Credit: Accounts Payable (net_amount)
            - Credit: Tax Payable (tax_amount)
-        4. Updates the BudgetAllocation spent_amount
+        4. Updates the BudgetAllocation spent_amount for all heads
         5. Updates bill status to APPROVED
         
         Args:
@@ -340,25 +374,45 @@ class Bill(AuditLogMixin, TenantAwareMixin):
                 "Only SUBMITTED bills can be approved."
             )
         
-        # Get budget allocation
-        try:
-            allocation = BudgetAllocation.objects.get(
-                organization=self.organization,
-                fiscal_year=self.fiscal_year,
-                budget_head=self.budget_head
+        # Verify lines exist
+        lines = self.lines.all()
+        if not lines:
+             raise ValidationError(_("Cannot approve a bill with no actions/lines."))
+
+        # Validate total amount matches lines
+        total_line_amount = sum(line.amount for line in lines)
+        if total_line_amount != self.gross_amount:
+             raise ValidationError(
+                f"Line total ({total_line_amount}) does not match Bill Gross Amount ({self.gross_amount})."
             )
-        except BudgetAllocation.DoesNotExist:
-            raise BudgetExceededException(
-                f"No budget allocation found for {self.budget_head} in {self.fiscal_year}."
-            )
+
+        # check budget for EACH line
+        allocations_to_update = []
         
-        # Hard Budget Constraint check
-        if not allocation.can_spend(self.gross_amount):
-            available = allocation.get_available_budget()
-            raise BudgetExceededException(
-                f"Insufficient budget. Requested: Rs. {self.gross_amount}, "
-                f"Available: Rs. {available}."
-            )
+        for line in lines:
+            try:
+                allocation = BudgetAllocation.objects.get(
+                    organization=self.organization,
+                    fiscal_year=self.fiscal_year,
+                    budget_head=line.budget_head
+                )
+            except BudgetAllocation.DoesNotExist:
+                raise BudgetExceededException(
+                    f"No budget allocation found for {line.budget_head} in {self.fiscal_year}."
+                )
+            
+            # Hard Budget Constraint check
+            if not allocation.can_spend(line.amount):
+                available = allocation.get_available_budget()
+                raise BudgetExceededException(
+                    f"Insufficient budget for {line.budget_head}. Requested: Rs. {line.amount}, "
+                    f"Available: Rs. {available}."
+                )
+            
+            # Queue for update
+            allocation.spent_amount += line.amount
+            allocations_to_update.append(allocation)
+
         
         # Get system accounts
         try:
@@ -394,25 +448,26 @@ class Bill(AuditLogMixin, TenantAwareMixin):
             fiscal_year=self.fiscal_year,
             date=timezone.now().date(),
             voucher_type=VoucherType.JOURNAL,
-            fund=self.budget_head.fund,
+            fund=lines[0].budget_head.fund, # Use fund from first line (assuming single fund voucher)
             description=f"Liability for Bill #{self.id}: {self.payee.name} - {self.description[:100]}",
             created_by=user
         )
         
-        # Debit: Expense Head (gross_amount)
-        JournalEntry.objects.create(
-            voucher=voucher,
-            budget_head=self.budget_head,
-            description=f"Expense: {self.description[:100]}",
-            debit=self.gross_amount,
-            credit=Decimal('0.00')
-        )
+        # Debit: Expense Heads (Loop)
+        for line in lines:
+            JournalEntry.objects.create(
+                voucher=voucher,
+                budget_head=line.budget_head,
+                description=f"Expense: {line.description[:100]}",
+                debit=line.amount,
+                credit=Decimal('0.00')
+            )
         
         # Credit: Accounts Payable (net_amount)
         JournalEntry.objects.create(
             voucher=voucher,
             budget_head=ap_head,
-            description=f"Payable to: {self.payee.name}",
+            description=f"Clear payable: {self.payee.name}",
             debit=Decimal('0.00'),
             credit=self.net_amount
         )
@@ -430,9 +485,9 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         # Post the voucher
         voucher.post_voucher(user)
         
-        # Update budget allocation spent_amount
-        allocation.spent_amount += self.gross_amount
-        allocation.save(update_fields=['spent_amount', 'updated_at'])
+        # Commit budget updates
+        for allocation in allocations_to_update:
+            allocation.save(update_fields=['spent_amount', 'updated_at'])
         
         # Update bill status
         self.status = BillStatus.APPROVED
@@ -624,7 +679,8 @@ class Payment(AuditLogMixin, TenantAwareMixin):
             fiscal_year=self.bill.fiscal_year,
             date=self.cheque_date,
             voucher_type=VoucherType.PAYMENT,
-            fund=self.bill.budget_head.fund,
+            # fund=self.bill.budget_head.fund, # old way
+            fund=self.bill.lines.first().budget_head.fund, # new way: use fund from first line (Refinement needed if multi-fund)
             description=f"Payment for Bill #{self.bill.id}: {self.bill.payee.name} - Cheque #{self.cheque_number}",
             created_by=user
         )

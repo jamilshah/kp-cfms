@@ -62,6 +62,12 @@ urlpatterns = [
     path('master-data/tehsils/<int:pk>/edit/', md_views.TehsilUpdateView.as_view(), name='tehsil_edit'),
     path('master-data/tehsils/<int:pk>/delete/', md_views.TehsilDeleteView.as_view(), name='tehsil_delete'),
     
+    # Global Heads (CoA)
+    path('master-data/global-heads/', md_views.GlobalHeadListView.as_view(), name='global_head_list'),
+    path('master-data/global-heads/create/', md_views.GlobalHeadCreateView.as_view(), name='global_head_create'),
+    path('master-data/global-heads/<int:pk>/edit/', md_views.GlobalHeadUpdateView.as_view(), name='global_head_edit'),
+    path('master-data/global-heads/<int:pk>/delete/', md_views.GlobalHeadDeleteView.as_view(), name='global_head_delete'),
+    
     # ==========================================================================
     # Master Data CRUD - CSV Templates
     # ==========================================================================

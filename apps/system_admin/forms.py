@@ -320,3 +320,33 @@ class RoleForm(forms.ModelForm):
                 'placeholder': 'Role Description'
             }),
         }
+
+
+from apps.finance.models import GlobalHead
+
+class GlobalHeadForm(forms.ModelForm):
+    """Form for creating/editing Global Heads."""
+    
+    class Meta:
+        model = GlobalHead
+        fields = ['code', 'name', 'minor', 'account_type', 'system_code']
+        widgets = {
+            'code': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g. A01101'
+            }),
+            'name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g. Basic Pay - Officers'
+            }),
+            'minor': forms.Select(attrs={
+                'class': 'form-select searchable-select'
+            }),
+            'account_type': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+            'system_code': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+        }
+

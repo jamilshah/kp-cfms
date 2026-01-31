@@ -537,7 +537,7 @@ class JournalEntryForm(forms.ModelForm):
         self.fields['budget_head'].queryset = BudgetHead.objects.filter(
             posting_allowed=True,
             is_active=True
-        ).select_related('function').order_by('global_head__name', 'global_head__code')
+        ).select_related('function', 'global_head').order_by('global_head__name', 'global_head__code')
         
         # If organization-specific filtering is needed
         if self.organization:

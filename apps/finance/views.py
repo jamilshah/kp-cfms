@@ -1140,12 +1140,16 @@ def load_budget_heads_options(request):
     """
     department_id = request.GET.get('department')
     function_id = request.GET.get('function')
+    account_type = request.GET.get('account_type')
     
     # Base queryset - all posting-allowed heads
     budget_heads = BudgetHead.objects.filter(
         posting_allowed=True,
         is_active=True
     ).select_related('global_head', 'function').order_by('global_head__name', 'global_head__code')
+    
+    if account_type:
+        budget_heads = budget_heads.filter(global_head__account_type=account_type)
     
     if function_id:
         budget_heads = budget_heads.filter(function_id=function_id)

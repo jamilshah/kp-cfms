@@ -377,9 +377,104 @@ class TehsilDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
         messages.success(self.request, f'Tehsil "{self.object.name}" deleted.')
         return super().form_valid(form)
     
+    
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['item_type'] = 'Tehsil'
         context['item_name'] = self.object.name
         context['cancel_url'] = reverse_lazy('system_admin:tehsil_list')
         return context
+
+
+# =============================================================================
+# Global Head CRUD Views
+# =============================================================================
+
+
+from apps.finance.models import GlobalHead
+from .forms import GlobalHeadForm
+
+class GlobalHeadListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
+    """List all global heads."""
+    model = GlobalHead
+    template_name = 'system_admin/master_data/global_head_list.html'
+    context_object_name = 'global_heads'
+    paginate_by = 50
+    
+    def get_queryset(self):
+        queryset = GlobalHead.objects.select_related(
+            'minor', 'minor__major'
+        ).order_by('code')
+        
+        # Search filter
+        search_query = self.request.GET.get('search')
+        if search_query:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(code__icontains=search_query) |
+                Q(name__icontains=search_query) |
+                Q(minor__code__icontains=search_query) 
+            )
+            
+        return queryset
+        
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['search_query'] = self.request.GET.get('search', '')
+        return context
+
+
+class GlobalHeadCreateView(LoginRequiredMixin, SuperAdminRequiredMixin, CreateView):
+    """Create a new global head."""
+    model = GlobalHead
+    form_class = GlobalHeadForm
+    template_name = 'system_admin/master_data/global_head_form.html'
+    success_url = reverse_lazy('system_admin:global_head_list')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Global Head "{form.instance.code} - {form.instance.name}" created successfully.')
+        return super().form_valid(form)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = 'Add Global Head'
+        context['is_edit'] = False
+        return context
+
+
+class GlobalHeadUpdateView(LoginRequiredMixin, SuperAdminRequiredMixin, UpdateView):
+    """Update a global head."""
+    model = GlobalHead
+    form_class = GlobalHeadForm
+    template_name = 'system_admin/master_data/global_head_form.html'
+    success_url = reverse_lazy('system_admin:global_head_list')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Global Head "{form.instance.code}" updated successfully.')
+        return super().form_valid(form)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = 'Edit Global Head'
+        context['is_edit'] = True
+        return context
+
+
+
+class GlobalHeadDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
+    """Delete a global head."""
+    model = GlobalHead
+    template_name = 'system_admin/master_data/confirm_delete.html'
+    success_url = reverse_lazy('system_admin:global_head_list')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Global Head "{self.object.code}" deleted.')
+        return super().form_valid(form)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['item_type'] = 'Global Head'
+        context['item_name'] = f"{self.object.code} - {self.object.name}"
+        context['cancel_url'] = reverse_lazy('system_admin:global_head_list')
+        return context
+

@@ -18,7 +18,7 @@ from django.utils import timezone
 from apps.core.models import Organization, BankAccount
 from apps.finance.models import BudgetHead, FunctionCode, Fund, AccountType, MajorHead, MinorHead, GlobalHead
 from apps.budgeting.models import FiscalYear, BudgetAllocation
-from apps.expenditure.models import Payee, Bill, BillStatus
+from apps.expenditure.models import Payee, Bill, BillLine, BillStatus
 from apps.users.models import CustomUser
 
 
@@ -400,6 +400,7 @@ class Command(BaseCommand):
         ]
         
         for data in bills_data:
+            budget_head = data.pop('budget_head')
             net_amount = data['gross_amount'] - data['tax_amount']
             bill, created = Bill.objects.get_or_create(
                 organization=org,
@@ -411,6 +412,16 @@ class Command(BaseCommand):
                     'status': BillStatus.DRAFT,
                 }
             )
+            
+            # Create Line if bill created or has no lines
+            if not bill.lines.exists():
+                BillLine.objects.create(
+                    bill=bill,
+                    budget_head=budget_head,
+                    description=data['description'],
+                    amount=data['gross_amount']
+                )
+            
             status = 'created' if created else 'exists'
             self.stdout.write(
                 f'    Bill {data["bill_number"]}: {status} '

@@ -74,8 +74,25 @@ Description: Bill Detail Template with Workflow Actions
                 </div>
                 
                 <div class="mb-3">
-                    <strong>Budget Head:</strong><br>
-                    {{ bill.budget_head.code }} - {{ bill.budget_head.name }}
+                    <strong>Bill Items:</strong>
+                    <table class="table table-sm table-bordered mt-2">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Head</th>
+                                <th>Description</th>
+                                <th class="text-end">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for line in bill.lines.all %}
+                            <tr>
+                                <td>{{ line.budget_head.code }} - {{ line.budget_head.name }}</td>
+                                <td>{{ line.description }}</td>
+                                <td class="text-end">Rs. {{ line.amount|currency }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
                 
                 <div class="mb-3">
@@ -109,39 +126,58 @@ Description: Bill Detail Template with Workflow Actions
         </div>
         
         <!-- Budget Allocation Info -->
-        {% if allocation %}
+        {% if line_allocations %}
         <div class="card mb-4">
             <div class="card-header">
-                <h6 class="mb-0"><i class="bi bi-graph-up"></i> Budget Status</h6>
+                <h6 class="mb-0"><i class="bi bi-graph-up"></i> Budget Status (Per Head)</h6>
             </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="text-muted small">Released Amount</div>
-                        <div class="fs-5">Rs. {{ allocation.released_amount|currency }}</div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-muted small">Spent Amount</div>
-                        <div class="fs-5 text-danger">Rs. {{ allocation.spent_amount|currency }}</div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="text-muted small">Available Balance</div>
-                        <div class="fs-5 text-success">Rs. {{ allocation.get_available_budget|currency }}</div>
-                    </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Budget Head</th>
+                                <th class="text-end">Released</th>
+                                <th class="text-end">Spent</th>
+                                <th class="text-end">Available</th>
+                                <th style="width: 25%">Utilization</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in line_allocations %}
+                            {% with alloc=item.allocation line=item.line %}
+                            <tr>
+                                <td>
+                                    <small class="d-block fw-bold">{{ line.budget_head.code }}</small>
+                                    <small class="text-muted">{{ line.budget_head.name|truncatechars:20 }}</small>
+                                </td>
+                                {% if alloc %}
+                                <td class="text-end align-middle">{{ alloc.released_amount|currency }}</td>
+                                <td class="text-end text-danger align-middle">{{ alloc.spent_amount|currency }}</td>
+                                <td class="text-end text-success align-middle">{{ alloc.get_available_budget|currency }}</td>
+                                <td class="align-middle">
+                                    {% if alloc.released_amount > 0 %}
+                                    <div class="progress" style="height: 15px;">
+                                        <div class="progress-bar" role="progressbar" 
+                                             style="width: {% widthratio alloc.spent_amount alloc.released_amount 100 %}%"
+                                             aria-valuenow="{% widthratio alloc.spent_amount alloc.released_amount 100 %}" 
+                                             aria-valuemin="0" aria-valuemax="100">
+                                            {% widthratio alloc.spent_amount alloc.released_amount 100 %}%
+                                        </div>
+                                    </div>
+                                    {% else %}
+                                    <span class="badge bg-secondary">No Budget</span>
+                                    {% endif %}
+                                </td>
+                                {% else %}
+                                <td colspan="4" class="text-center text-muted align-middle">No allocation found</td>
+                                {% endif %}
+                            </tr>
+                            {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
-                
-                {% with utilization=allocation.spent_amount|floatformat:0|add:0 released=allocation.released_amount|floatformat:0|add:0 %}
-                {% if allocation.released_amount > 0 %}
-                <div class="progress mt-3" style="height: 20px;">
-                    <div class="progress-bar" role="progressbar" 
-                         style="width: {% widthratio allocation.spent_amount allocation.released_amount 100 %}%"
-                         aria-valuenow="{% widthratio allocation.spent_amount allocation.released_amount 100 %}" 
-                         aria-valuemin="0" aria-valuemax="100">
-                        {% widthratio allocation.spent_amount allocation.released_amount 100 %}% Used
-                    </div>
-                </div>
-                {% endif %}
-                {% endwith %}
             </div>
         </div>
         {% endif %}

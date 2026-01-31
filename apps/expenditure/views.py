@@ -23,7 +23,8 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.expenditure.models import Payee, Bill, Payment, BillStatus
 from apps.expenditure.forms import (
-    PayeeForm, BillForm, BillSubmitForm, BillApprovalForm, PaymentForm
+    PayeeForm, BillForm, BillSubmitForm, BillApprovalForm, PaymentForm,
+    BillLineFormSet
 )
 from apps.budgeting.models import FiscalYear, BudgetAllocation, Department
 from apps.finance.models import BudgetHead, AccountType, FunctionCode
@@ -142,7 +143,7 @@ class BillListView(LoginRequiredMixin, ListView):
         queryset = Bill.objects.filter(
             organization=org
         ).select_related(
-            'payee', 'budget_head', 'fiscal_year'
+            'payee', 'fiscal_year'
         ).order_by('-bill_date', '-created_at')
         
         # Filter by status if provided
@@ -222,29 +223,62 @@ class BillCreateView(LoginRequiredMixin, CreateView):
         org = getattr(user, 'organization', None)
         if org:
             context['current_fiscal_year'] = FiscalYear.get_current_operating_year(org)
+            
+        if self.request.POST:
+            context['lines'] = BillLineFormSet(self.request.POST)
+        else:
+            context['lines'] = BillLineFormSet()
         return context
     
+    @transaction.atomic
     def form_valid(self, form):
+        context = self.get_context_data()
+        lines = context['lines']
+        
         user = self.request.user
         org = getattr(user, 'organization', None)
         
-        form.instance.organization = org
-        form.instance.created_by = user
-        
-        # Set fiscal year from the form's auto-selected value (since disabled field doesn't submit)
-        if form._current_fiscal_year:
-            form.instance.fiscal_year = form._current_fiscal_year
-        
-        # Calculate net_amount
-        gross = form.cleaned_data.get('gross_amount', Decimal('0.00'))
-        tax = form.cleaned_data.get('tax_amount', Decimal('0.00'))
-        form.instance.net_amount = gross - tax
-        
-        # Store organization reference for form validation
-        form.organization = org
-        
-        messages.success(self.request, _('Bill created successfully.'))
-        return super().form_valid(form)
+        if lines.is_valid():
+            form.instance.organization = org
+            form.instance.created_by = user
+            
+            # Set fiscal year
+            if form._current_fiscal_year:
+                form.instance.fiscal_year = form._current_fiscal_year
+            
+            # Save Bill (Parent)
+            self.object = form.save(commit=False)
+            
+            # --- Auto-calculate Gross Amount from Lines ---
+            # Use line amounts to set gross_amount, ignoring the field input if necessary, 
+            # OR validate they match. For strictness/UX, let's override gross_amount with sum of lines.
+            
+            # Access cleaned_data of lines (list of dicts)
+            total_amount = Decimal('0.00')
+            for line_form in lines.forms:
+                if line_form.cleaned_data and not line_form.cleaned_data.get('DELETE', False):
+                    amount = line_form.cleaned_data.get('amount')
+                    if amount:
+                        total_amount += amount
+            
+            self.object.gross_amount = total_amount
+            
+            # Recalculate Net Amount
+            tax = form.cleaned_data.get('tax_amount', Decimal('0.00'))
+            self.object.tax_amount = tax
+            self.object.net_amount = total_amount - tax
+            
+            self.object.save()
+            
+            # Save Lines
+            lines.instance = self.object
+            lines.save()
+            
+            messages.success(self.request, _('Bill created successfully.'))
+            return redirect(self.get_success_url())
+        else:
+            # If lines are invalid, render form with errors
+            return self.render_to_response(self.get_context_data(form=form))
     
     def get_success_url(self) -> str:
         return reverse('expenditure:bill_detail', kwargs={'pk': self.object.pk})
@@ -269,8 +303,10 @@ class BillDetailView(LoginRequiredMixin, DetailView):
             return Bill.objects.filter(
                 organization=org
             ).select_related(
-                'payee', 'budget_head', 'fiscal_year',
+                'payee', 'fiscal_year',
                 'liability_voucher', 'submitted_by', 'approved_by'
+            ).prefetch_related(
+                'lines', 'lines__budget_head'
             )
         return Bill.objects.none()
     
@@ -288,17 +324,26 @@ class BillDetailView(LoginRequiredMixin, DetailView):
         )
         context['can_pay'] = bill.status == BillStatus.APPROVED
         
-        # Get budget allocation info
-        if bill.budget_head and bill.fiscal_year:
-            try:
-                allocation = BudgetAllocation.objects.get(
-                    organization=bill.organization,
-                    fiscal_year=bill.fiscal_year,
-                    budget_head=bill.budget_head
-                )
-                context['allocation'] = allocation
-            except BudgetAllocation.DoesNotExist:
-                context['allocation'] = None
+        # Get budget allocation info for each line
+        line_allocations = []
+        if bill.fiscal_year:
+            for line in bill.lines.all():
+                try:
+                    allocation = BudgetAllocation.objects.get(
+                        organization=bill.organization,
+                        fiscal_year=bill.fiscal_year,
+                        budget_head=line.budget_head
+                    )
+                    line_allocations.append({
+                        'line': line,
+                        'allocation': allocation
+                    })
+                except BudgetAllocation.DoesNotExist:
+                    line_allocations.append({
+                        'line': line,
+                        'allocation': None
+                    })
+        context['line_allocations'] = line_allocations
         
         # Get payments
         context['payments'] = bill.payments.all()

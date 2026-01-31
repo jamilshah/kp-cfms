@@ -11,7 +11,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from apps.expenditure.models import Payee, Bill, Payment, BillStatus
+from apps.expenditure.models import Payee, Bill, BillLine, Payment, BillStatus
 
 
 @admin.register(Payee)
@@ -48,12 +48,20 @@ class PayeeAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+
+class BillLineInline(admin.TabularInline):
+    """Inline for Bill Lines."""
+    model = BillLine
+    extra = 1
+    autocomplete_fields = ['budget_head']
+
+
 @admin.register(Bill)
 class BillAdmin(admin.ModelAdmin):
     """Admin interface for Bill model."""
     
     list_display = [
-        'id', 'bill_date', 'payee', 'budget_head_code',
+        'id', 'bill_date', 'payee',
         'gross_amount', 'tax_amount', 'net_amount',
         'status_badge', 'fiscal_year', 'organization'
     ]
@@ -71,7 +79,7 @@ class BillAdmin(admin.ModelAdmin):
         ('Bill Information', {
             'fields': (
                 'organization', 'fiscal_year', 'payee',
-                'budget_head', 'bill_date', 'bill_number', 'description'
+                'bill_date', 'bill_number', 'description'
             )
         }),
         ('Amount Details', {
@@ -93,9 +101,8 @@ class BillAdmin(admin.ModelAdmin):
         }),
     )
     
-    def budget_head_code(self, obj):
-        return obj.budget_head.code
-    budget_head_code.short_description = 'Budget Head'
+    
+    inlines = [BillLineInline]
     
     def status_badge(self, obj):
         colors = {
