@@ -132,32 +132,34 @@ class Command(BaseCommand):
         
         # Create Master Data for AR (A01001)
         # Note: A01 is normally Employee Expenses, but legacy seed used A01001 for AR.
-        # We preserve the code but ensure account_type is ASSET.
-        major, _ = MajorHead.objects.get_or_create(
-            code='A01', 
-            defaults={'name': 'Employees Related Expenses', 'account_type': AccountType.ASSET}
-        )
-        minor, _ = MinorHead.objects.get_or_create(
-            code='A010', 
-            major_head=major, 
-            defaults={'name': 'Basic Pay'}
-        )
-        gh, _ = GlobalHead.objects.get_or_create(
-            code='A01001', 
-            minor_head=minor, 
-            defaults={
-                'name': 'Accounts Receivable', 
-                'account_type': AccountType.ASSET, 
-                'system_code': 'AR'
-            }
-        )
+        # Look up AR by system_code since assign_system_codes already created it
+        gh = GlobalHead.objects.filter(system_code='AR').first()
+        if not gh:
+            # Fallback: create if not exists
+            major, _ = MajorHead.objects.get_or_create(
+                code='A01', 
+                defaults={'name': 'Employees Related Expenses'}
+            )
+            minor, _ = MinorHead.objects.get_or_create(
+                code='A010', 
+                major=major, 
+                defaults={'name': 'Basic Pay'}
+            )
+            gh, _ = GlobalHead.objects.get_or_create(
+                code='A01001', 
+                minor=minor, 
+                defaults={
+                    'name': 'Accounts Receivable', 
+                    'account_type': AccountType.ASSET, 
+                    'system_code': 'AR'
+                }
+            )
         
         ar_head, created = BudgetHead.objects.get_or_create(
             global_head=gh,
             fund=fund,
             defaults={
                 'function': func,
-                'is_system_head': True,
                 'budget_control': False,
                 'posting_allowed': True,
             }
@@ -200,17 +202,17 @@ class Command(BaseCommand):
             
             # Create Master Data
             major, _ = MajorHead.objects.get_or_create(
-                code=major_code, 
-                defaults={'name': f"Major Head {major_code}", 'account_type': AccountType.REVENUE}
+                code=major_code,
+                defaults={'name': f"Major Head {major_code}"}
             )
             minor, _ = MinorHead.objects.get_or_create(
-                code=minor_code, 
-                major_head=major, 
+                code=minor_code,
+                major=major,
                 defaults={'name': data.get('minor_name', f"Minor Head {minor_code}")}
             )
             gh, _ = GlobalHead.objects.get_or_create(
-                code=code, 
-                minor_head=minor, 
+                code=code,
+                minor=minor,
                 defaults={'name': data['name'], 'account_type': AccountType.REVENUE}
             )
             
@@ -219,7 +221,6 @@ class Command(BaseCommand):
                 fund=fund,
                 defaults={
                     'function': func,
-                    'is_system_head': False,
                     'budget_control': False,
                     'posting_allowed': True,
                 }

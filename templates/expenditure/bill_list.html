@@ -96,7 +96,13 @@ Description: Bill List Template with Status Filtering
                         <td>{{ bill.bill_date|date:"d-M-Y" }}</td>
                         <td>{{ bill.payee.name|truncatechars:25 }}</td>
                         <td>
-                            <small class="text-muted">{{ bill.budget_head.code }}</small>
+                            {% if bill.lines.exists %}
+                                <small class="text-muted">{{ bill.lines.first.budget_head.code }}</small>
+                            {% elif bill.budget_head %}
+                                <small class="text-muted">{{ bill.budget_head.code }}</small>
+                            {% else %}
+                                <small class="text-muted">-</small>
+                            {% endif %}
                         </td>
                         <td class="text-end">Rs. {{ bill.gross_amount|currency }}</td>
                         <td class="text-end">Rs. {{ bill.tax_amount|currency }}</td>

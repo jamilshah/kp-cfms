@@ -153,22 +153,25 @@ class Command(BaseCommand):
         
         for data in system_heads_data:
             major, _ = MajorHead.objects.get_or_create(
-                code=data['major'], defaults={'name': data['major_name'], 'account_type': data['type']}
+                code=data['major'], defaults={'name': data['major_name']}
             )
             minor, _ = MinorHead.objects.get_or_create(
-                code=data['minor'], major_head=major, defaults={'name': data['minor_name']}
+                code=data['minor'], major=major, defaults={'name': data['minor_name']}
             )
-            gh, _ = GlobalHead.objects.get_or_create(
-                code=data['code'], minor_head=minor,
-                defaults={'name': data['name'], 'account_type': data['type'], 'system_code': data['sys']}
-            )
+            # Look up by system_code since assign_system_codes already created these
+            gh = GlobalHead.objects.filter(system_code=data['sys']).first()
+            if not gh:
+                gh, _ = GlobalHead.objects.get_or_create(
+                    code=data['code'], minor=minor,
+                    defaults={'name': data['name'], 'account_type': data['type'], 'system_code': data['sys']}
+                )
             
             head, created = BudgetHead.objects.update_or_create(
                 global_head=gh,
                 fund=fund,
+                function=func,
+                sub_code='00',
                 defaults={
-                    'function': func,
-                    'is_system_head': True,
                     'budget_control': False,
                     'posting_allowed': True,
                 }
@@ -177,16 +180,16 @@ class Command(BaseCommand):
             self.stdout.write(f'    {data["sys"]}: {status}')
         
         # Create bank GL head if not exists (A01001)
-        major, _ = MajorHead.objects.get_or_create(code='A01', defaults={'name': 'Employees Related Expenses', 'account_type': AccountType.ASSET})
-        minor, _ = MinorHead.objects.get_or_create(code='A010', major_head=major, defaults={'name': 'Basic Pay'})
-        gh_bank, _ = GlobalHead.objects.get_or_create(code='A01001', minor_head=minor, defaults={'name': 'Cash at Bank', 'account_type': AccountType.ASSET})
+        major, _ = MajorHead.objects.get_or_create(code='A01', defaults={'name': 'Employees Related Expenses'})
+        minor, _ = MinorHead.objects.get_or_create(code='A010', major=major, defaults={'name': 'Basic Pay'})
+        gh_bank, _ = GlobalHead.objects.get_or_create(code='A01001', minor=minor, defaults={'name': 'Cash at Bank', 'account_type': AccountType.ASSET})
 
         bank_head, created = BudgetHead.objects.get_or_create(
             global_head=gh_bank,
             fund=fund,
+            function=func,
+            sub_code='00',
             defaults={
-                'function': func,
-                'is_system_head': False,
                 'budget_control': False,
                 'posting_allowed': True,
             }
@@ -292,18 +295,19 @@ class Command(BaseCommand):
         func = FunctionCode.objects.filter(code='AD').first()
         
         # Create hierarchy for Stationery (A03901)
-        major_a03, _ = MajorHead.objects.get_or_create(code='A03', defaults={'name': 'Operating Expenses', 'account_type': AccountType.EXPENDITURE})
-        minor_a039, _ = MinorHead.objects.get_or_create(code='A039', major_head=major_a03, defaults={'name': 'General - Other'})
+        major_a03, _ = MajorHead.objects.get_or_create(code='A03', defaults={'name': 'Operating Expenses'})
+        minor_a039, _ = MinorHead.objects.get_or_create(code='A039', major=major_a03, defaults={'name': 'General - Other'})
         gh_stationery, _ = GlobalHead.objects.get_or_create(
-            code='A03901', minor_head=minor_a039, 
+            code='A03901', minor=minor_a039, 
             defaults={'name': 'Stationery', 'account_type': AccountType.EXPENDITURE}
         )
         
         stationery_head, _ = BudgetHead.objects.get_or_create(
             global_head=gh_stationery,
             fund=fund,
+            function=func,
+            sub_code='00',
             defaults={
-                'function': func,
                 'budget_control': True,
                 'posting_allowed': True,
             }
@@ -321,19 +325,20 @@ class Command(BaseCommand):
                 minor = data['minor']
             else:
                 minor, _ = MinorHead.objects.get_or_create(
-                    code=data['minor_code'], major_head=major_a03, defaults={'name': data['minor_name']}
+                    code=data['minor_code'], major=major_a03, defaults={'name': data['minor_name']}
                 )
             
             gh, _ = GlobalHead.objects.get_or_create(
-                code=data['code'], minor_head=minor,
+                code=data['code'], minor=minor,
                 defaults={'name': data['name'], 'account_type': AccountType.EXPENDITURE}
             )
             
             BudgetHead.objects.get_or_create(
                 global_head=gh,
                 fund=fund,
+                function=func,
+                sub_code='00',
                 defaults={
-                    'function': func,
                     'budget_control': True,
                     'posting_allowed': True,
                 }
@@ -410,6 +415,7 @@ class Command(BaseCommand):
                     **data,
                     'net_amount': net_amount,
                     'status': BillStatus.DRAFT,
+                    # budget_head removed - now stored in BillLine
                 }
             )
             

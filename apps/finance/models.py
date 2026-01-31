@@ -159,14 +159,24 @@ class SystemCode(models.TextChoices):
     These accounts are used by the system for specific workflows:
     - Suspense: Temporary holding for unclassified transactions
     - Clearing: Intermediate accounts for reconciliation
+    - AP/AR: Accounts Payable/Receivable for accrual accounting
+    - Tax: Tax withholding and remittance accounts
     """
     
+    # Suspense & Clearing Accounts
     SYS_SUSPENSE = 'SYS_SUSPENSE', _('Suspense Account')
     CLEARING_CHQ = 'CLEARING_CHQ', _('Cheque Clearing')
     CLEARING_IT = 'CLEARING_IT', _('Income Tax Withheld')
     CLEARING_GST = 'CLEARING_GST', _('Sales Tax Withheld')
     CLEARING_SEC = 'CLEARING_SEC', _('Security/Retention Money')
+    
+    # Accounts Payable & Receivable
+    AP = 'AP', _('Accounts Payable')
     AR = 'AR', _('Accounts Receivable')
+    
+    # Tax Accounts (for expenditure workflow)
+    TAX_IT = 'TAX_IT', _('Income Tax Payable')
+    TAX_GST = 'TAX_GST', _('GST/Sales Tax Payable')
 
 
 class GlobalHead(TimeStampedMixin):

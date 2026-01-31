@@ -188,8 +188,17 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         related_name='bills',
         verbose_name=_('Payee')
     )
-    # Refactored: Budget Head moved to BillLine
-    # budget_head = models.ForeignKey(...) 
+    # Refactored: Budget Head moved to BillLine, but kept here for backward compatibility
+    # This field is optional - new bills should use BillLine.budget_head instead
+    budget_head = models.ForeignKey(
+        'finance.BudgetHead',
+        on_delete=models.PROTECT,
+        related_name='legacy_bills',
+        verbose_name=_('Budget Head'),
+        help_text=_('Expense head to charge (legacy field, use BillLine for new bills).'),
+        null=True,
+        blank=True
+    )
     
     bill_date = models.DateField(
         verbose_name=_('Bill Date'),
@@ -416,22 +425,39 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         
         # Get system accounts
         try:
-            ap_head = BudgetHead.objects.get(system_code='AP')
+            ap_head = BudgetHead.objects.get(
+                global_head__system_code='AP',
+                is_active=True
+            )
         except BudgetHead.DoesNotExist:
             raise ValidationError(
                 "System account 'Accounts Payable' (AP) not configured. "
-                "Please run the seed_expenditure command or configure manually."
+                "Please run 'python manage.py assign_system_codes' and create BudgetHead for AP."
             )
+        except BudgetHead.MultipleObjectsReturned:
+            # If multiple AP heads exist, get first active one
+            ap_head = BudgetHead.objects.filter(
+                global_head__system_code='AP',
+                is_active=True
+            ).first()
         
         tax_head = None
         if self.tax_amount > Decimal('0.00'):
             try:
-                tax_head = BudgetHead.objects.get(system_code='TAX_IT')
+                tax_head = BudgetHead.objects.get(
+                    global_head__system_code='TAX_IT',
+                    is_active=True
+                )
             except BudgetHead.DoesNotExist:
                 raise ValidationError(
                     "System account 'Income Tax' (TAX_IT) not configured. "
-                    "Please run the seed_expenditure command or configure manually."
+                    "Please run 'python manage.py assign_system_codes' and create BudgetHead for TAX_IT."
                 )
+            except BudgetHead.MultipleObjectsReturned:
+                tax_head = BudgetHead.objects.filter(
+                    global_head__system_code='TAX_IT',
+                    is_active=True
+                ).first()
         
         # Generate voucher number
         voucher_count = Voucher.objects.filter(
@@ -655,11 +681,20 @@ class Payment(AuditLogMixin, TenantAwareMixin):
         
         # Get system accounts
         try:
-            ap_head = BudgetHead.objects.get(system_code='AP')
+            ap_head = BudgetHead.objects.get(
+                global_head__system_code='AP',
+                is_active=True
+            )
         except BudgetHead.DoesNotExist:
             raise ValidationError(
-                "System account 'Accounts Payable' (AP) not configured."
+                "System account 'Accounts Payable' (AP) not configured. "
+                "Please run 'python manage.py assign_system_codes' and create BudgetHead for AP."
             )
+        except BudgetHead.MultipleObjectsReturned:
+            ap_head = BudgetHead.objects.filter(
+                global_head__system_code='AP',
+                is_active=True
+            ).first()
         
         # Get bank GL code
         bank_gl = self.bank_account.gl_code
