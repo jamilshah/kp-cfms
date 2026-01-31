@@ -301,3 +301,22 @@ class AssignRoleForm(forms.Form):
         }),
         help_text='Select roles to assign to this user.'
     )
+
+
+class RoleForm(forms.ModelForm):
+    """Form for editing Roles."""
+    
+    class Meta:
+        model = Role
+        fields = ['name', 'description']
+        widgets = {
+            'name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Role Name'
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 4,
+                'placeholder': 'Role Description'
+            }),
+        }

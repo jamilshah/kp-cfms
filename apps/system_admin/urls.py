@@ -34,7 +34,10 @@ urlpatterns = [
     
     # Role Management
     path('roles/', views.RoleListView.as_view(), name='role_list'),
-    path('roles/<int:pk>/permissions/', views.RolePermissionView.as_view(), name='role_permissions'),
+    path('roles/create/', views.RoleCreateView.as_view(), name='role_create'),
+    path('roles/<int:pk>/edit/', views.RoleUpdateView.as_view(), name='role_edit'),
+    # path('roles/<int:pk>/permissions/', views.RolePermissionView.as_view(), name='role_permissions'), # Removed
+    path('roles/<int:pk>/delete/', views.RoleDeleteView.as_view(), name='role_delete'),
     
     # ==========================================================================
     # Master Data CRUD - Locations

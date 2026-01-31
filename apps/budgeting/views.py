@@ -46,7 +46,7 @@ from apps.budgeting.services import (
 )
 from apps.users.permissions import (
     MakerRequiredMixin, ApproverRequiredMixin, FinanceOfficerRequiredMixin,
-    AdminRequiredMixin
+    AdminRequiredMixin, SuperAdminRequiredMixin
 )
 from apps.core.exceptions import (
     BudgetLockedException, ReserveViolationException, 
@@ -993,7 +993,7 @@ class DepartmentListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
     context_object_name = 'departments'
 
 
-class DepartmentCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
+class DepartmentCreateView(LoginRequiredMixin, SuperAdminRequiredMixin, CreateView):
     """Create new department."""
     model = Department
     fields = ['name', 'code', 'related_functions', 'is_active']
@@ -1015,7 +1015,7 @@ class DepartmentCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
         return context
 
 
-class DepartmentUpdateView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
+class DepartmentUpdateView(LoginRequiredMixin, SuperAdminRequiredMixin, UpdateView):
     """Edit existing department."""
     model = Department
     fields = ['name', 'code', 'related_functions', 'is_active']
@@ -1037,7 +1037,7 @@ class DepartmentUpdateView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
         return context
 
 
-class DepartmentDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
+class DepartmentDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
     """Delete department."""
     model = Department
     template_name = 'budgeting/setup_confirm_delete.html'
@@ -1051,14 +1051,14 @@ class DepartmentDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
         return context
 
 
-class DesignationListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
+class DesignationListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
     """List all designations."""
     model = DesignationMaster
     template_name = 'budgeting/setup_designation_list.html'
     context_object_name = 'designations'
 
 
-class DesignationCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
+class DesignationCreateView(LoginRequiredMixin, SuperAdminRequiredMixin, CreateView):
     """Create new designation."""
     model = DesignationMaster
     fields = ['name', 'bps_scale', 'post_type', 'is_active']
@@ -1080,7 +1080,7 @@ class DesignationCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
         return context
 
 
-class DesignationUpdateView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
+class DesignationUpdateView(LoginRequiredMixin, SuperAdminRequiredMixin, UpdateView):
     """Update designation."""
     model = DesignationMaster
     fields = ['name', 'bps_scale', 'post_type', 'is_active']
@@ -1102,7 +1102,7 @@ class DesignationUpdateView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
         return context
 
 
-class DesignationDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
+class DesignationDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
     """Delete designation."""
     model = DesignationMaster
     template_name = 'budgeting/setup_confirm_delete.html'
@@ -1227,7 +1227,7 @@ class EmployeeDeleteView(LoginRequiredMixin, DeleteView):
         return context
 
 
-class SalaryStructureView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
+class SalaryStructureView(LoginRequiredMixin, SuperAdminRequiredMixin, TemplateView):
     """
     Grid view for editing BPS Salary Structures.
     """

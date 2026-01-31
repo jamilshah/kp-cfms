@@ -26,17 +26,27 @@
                     
                     <h5 class="mb-3 text-muted">Classification</h5>
                     <div class="row g-3 mb-4">
+                        <div class="col-md-12">
+                            <label for="{{ form.department.id_for_label }}" class="form-label">{{ form.department.label }}</label>
+                            {{ form.department }}
+                            <div class="form-text">{{ form.department.help_text }}</div>
+                             {% if form.department.errors %}
+                                <div class="text-danger small">{{ form.department.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
                         <div class="col-md-6">
-                            <label for="{{ form.function.id_for_label }}" class="form-label">Function</label>
+                            <label for="{{ form.function.id_for_label }}" class="form-label">{{ form.function.label }}</label>
                             {{ form.function }}
+                            <div class="form-text">{{ form.function.help_text }}</div>
                             {% if form.function.errors %}
                                 <div class="text-danger small">{{ form.function.errors.0 }}</div>
                             {% endif %}
                         </div>
                         <div class="col-md-6">
-                            <label for="{{ form.fund.id_for_label }}" class="form-label">Fund</label>
+                            <label for="{{ form.fund.id_for_label }}" class="form-label">{{ form.fund.label }}</label>
                             {{ form.fund }}
-                            <div class="form-text">Select the fund this budget head belongs to.</div>
+                            <div class="form-text">{{ form.fund.help_text }}</div>
                             {% if form.fund.errors %}
                                 <div class="text-danger small">{{ form.fund.errors.0 }}</div>
                             {% endif %}
@@ -45,24 +55,16 @@
                     
                     <h5 class="mb-3 text-muted">Object Code</h5>
                     <div class="mb-4">
-                        <label for="{{ form.global_head.id_for_label }}" class="form-label">Global Head (Object Code)</label>
+                        <label for="{{ form.global_head.id_for_label }}" class="form-label">{{ form.global_head.label }}</label>
                         {{ form.global_head }}
-                        <div class="form-text">Select the standardized PIFRA object code.</div>
+                        <div class="form-text">{{ form.global_head.help_text }}</div>
                         {% if form.global_head.errors %}
                             <div class="text-danger small">{{ form.global_head.errors.0 }}</div>
                         {% endif %}
                     </div>
                     
                     <h5 class="mb-3 text-muted">Budget & Settings</h5>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label for="{{ form.current_budget.id_for_label }}" class="form-label">Current Budget</label>
-                            {{ form.current_budget }}
-                            {% if form.current_budget.errors %}
-                                <div class="text-danger small">{{ form.current_budget.errors.0 }}</div>
-                            {% endif %}
-                        </div>
-                    </div>
+
 
                     <div class="row g-3 mb-4">
                         <div class="col-md-3 pt-2">

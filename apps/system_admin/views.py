@@ -17,14 +17,14 @@ from django.db.models import Count
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse_lazy
-from django.views.generic import TemplateView, FormView, ListView, View
+from django.views.generic import TemplateView, FormView, ListView, View, UpdateView, DeleteView, CreateView
 
 from apps.core.models import Organization, District, Division
 from apps.users.models import CustomUser, Role
 from apps.users.permissions import SuperAdminRequiredMixin, TenantAdminRequiredMixin
 from apps.budgeting.models import FiscalYear
 
-from .forms import OrganizationForm, TenantAdminForm, UserForm, AssignRoleForm
+from .forms import OrganizationForm, TenantAdminForm, UserForm, AssignRoleForm, RoleForm
 
 
 class SystemDashboardView(LoginRequiredMixin, SuperAdminRequiredMixin, TemplateView):
@@ -496,64 +496,55 @@ class AssignRoleView(LoginRequiredMixin, TenantAdminRequiredMixin, FormView):
         return context
 
 
-class RolePermissionView(LoginRequiredMixin, SuperAdminRequiredMixin, TemplateView):
-    """
-    View for managing permissions for a specific role (Super Admin only).
+
+
+class RoleCreateView(LoginRequiredMixin, SuperAdminRequiredMixin, CreateView):
+    """Create a new role."""
+    model = Role
+    form_class = RoleForm
+    template_name = 'system_admin/role_form.html'
+    success_url = reverse_lazy('system_admin:role_list')
     
-    Displays a matrix of permissions for the role.
-    """
-    template_name = 'system_admin/role_permissions.html'
+    def form_valid(self, form):
+        form.instance.is_system_role = False
+        # Generate code from name if not provided (though code isn't in form, so we might need to handle this)
+        # For now, let's assume auto-generation or we need to add 'code' to the form for creation only.
+        # Actually RoleForm only has name/description.
+        # Let's auto-generate code from name.
+        import re
+        name = form.cleaned_data['name']
+        code = re.sub(r'[^A-Z0-9]', '_', name.upper())
+        form.instance.code = code
+        
+        messages.success(self.request, f'Role "{form.instance.name}" created successfully.')
+        return super().form_valid(form)
+
+
+class RoleUpdateView(LoginRequiredMixin, SuperAdminRequiredMixin, UpdateView):
+    """Update role details."""
+    model = Role
+    form_class = RoleForm
+    template_name = 'system_admin/role_form.html'
+    success_url = reverse_lazy('system_admin:role_list')
     
-    def get_role(self):
-        return get_object_or_404(Role, pk=self.kwargs['pk'])
+    def form_valid(self, form):
+        messages.success(self.request, f'Role "{form.instance.name}" updated successfully.')
+        return super().form_valid(form)
+
+
+class RoleDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
+    """Delete a role (System roles cannot be deleted)."""
+    model = Role
+    template_name = 'system_admin/role_confirm_delete.html'
+    success_url = reverse_lazy('system_admin:role_list')
     
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        
-        from django.contrib.auth.models import Permission
-        from django.contrib.contenttypes.models import ContentType
-        
-        role = self.get_role()
-        context['role'] = role
-        
-        # Get relevant permissions (filter to our apps)
-        our_apps = ['budgeting', 'finance', 'expenditure', 'revenue', 'core', 'users']
-        content_types = ContentType.objects.filter(app_label__in=our_apps)
-        context['permissions'] = Permission.objects.filter(
-            content_type__in=content_types
-        ).select_related('content_type').order_by('content_type__app_label', 'codename')
-        
-        # Get currently assigned permissions
-        if role.group:
-            context['assigned_permission_ids'] = list(
-                role.group.permissions.values_list('id', flat=True)
-            )
-        else:
-            context['assigned_permission_ids'] = []
-        
-        return context
+    def dispatch(self, request, *args, **kwargs):
+        role = self.get_object()
+        if role.is_system_role:
+            messages.error(request, 'System roles cannot be deleted.')
+            return redirect('system_admin:role_list')
+        return super().dispatch(request, *args, **kwargs)
     
-    def post(self, request, *args, **kwargs):
-        """Handle permission updates."""
-        from django.contrib.auth.models import Permission
-        
-        role = self.get_role()
-        permission_ids = request.POST.getlist('permissions')
-        
-        try:
-            permissions = Permission.objects.filter(id__in=permission_ids)
-            
-            # Ensure role has a group
-            if not role.group:
-                from django.contrib.auth.models import Group
-                role.group = Group.objects.create(name=role.name)
-                role.save()
-            
-            # Update group permissions
-            role.group.permissions.set(permissions)
-            
-            messages.success(request, f'Permissions updated for role: {role.name}')
-        except Exception as e:
-            messages.error(request, f'Error updating permissions: {str(e)}')
-        
-        return redirect('system_admin:role_permissions', pk=role.pk)
+    def delete(self, request, *args, **kwargs):
+        messages.success(request, 'Role deleted successfully.')
+        return super().delete(request, *args, **kwargs)

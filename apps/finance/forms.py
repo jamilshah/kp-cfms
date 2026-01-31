@@ -24,14 +24,13 @@ class BudgetHeadForm(forms.ModelForm):
         model = BudgetHead
         fields = [
             'fund', 'global_head', 'function',
-            'current_budget', 'is_active',
+            'is_active',
             'budget_control', 'posting_allowed', 'project_required'
         ]
         widgets = {
-            'fund': forms.Select(attrs={'class': 'form-select'}),
-            'global_head': forms.Select(attrs={'class': 'form-select searchable-select'}),
-            'function': forms.Select(attrs={'class': 'form-select'}),
-            'current_budget': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'fund': forms.Select(attrs={'class': 'form-select select2-enable'}),
+            'global_head': forms.Select(attrs={'class': 'form-select select2-enable'}),
+            'function': forms.Select(attrs={'class': 'form-select select2-enable'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'budget_control': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'posting_allowed': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -40,10 +39,52 @@ class BudgetHeadForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        
+        # Add Department filter field (not part of model)
+        self.fields['department'] = forms.ModelChoiceField(
+            queryset=Department.objects.filter(is_active=True).order_by('name'),
+            label=_('Department (Filter)'),
+            required=False,
+            widget=forms.Select(attrs={
+                'class': 'form-select select2-enable',
+                'hx-get': reverse_lazy('finance:load_functions'),
+                'hx-target': '#id_function',
+                'hx-trigger': 'change',
+            }),
+            help_text=_('Select your department to filter the function list.')
+        )
+        
+        # Reorder fields to put department first
+        field_order = ['fund', 'department', 'function', 'global_head', 'is_active', 'budget_control', 'posting_allowed', 'project_required']
+        self.fields = {k: self.fields[k] for k in field_order if k in self.fields}
+        
+        # Rename labels for clarity
+        self.fields['function'].label = _('Department Code (Function)')
+        self.fields['function'].help_text = _('The official PIFRA code for your department/shoba.')
+        
+        self.fields['global_head'].label = _('Bill Item / Object')
+        self.fields['global_head'].help_text = _('What is this expense for? (e.g., Electricity, Salary, Petrol)')
+        
         # Order global heads by code for easier selection
         self.fields['global_head'].queryset = self.fields['global_head'].queryset.select_related(
             'minor__major'
         ).order_by('code')
+        
+        # If editing (instance exists), lock the identity fields
+        if self.instance and self.instance.pk:
+            self.fields['fund'].disabled = True
+            
+            # Populate department if function is set
+            if self.instance.function:
+                # Use the first linked department (reverse M2M from Department.related_functions)
+                # Note: FunctionCode.departments is the related_name from Department model
+                dept = self.instance.function.departments.first()
+                if dept:
+                    self.fields['department'].initial = dept
+            
+            self.fields['department'].disabled = True  # Lock filtering too
+            self.fields['function'].disabled = True
+            self.fields['global_head'].disabled = True
 
 
 class ChequeBookForm(forms.ModelForm):

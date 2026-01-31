@@ -15,53 +15,54 @@ from apps.users.models import Role, RoleCode
 
 
 # Standard role definitions
+# Standard role definitions
 STANDARD_ROLES = [
     {
         'code': 'SUPER_ADMIN',
         'name': 'Super Administrator',
-        'description': 'Full system access. Can manage all organizations, users, and system settings.',
+        'description': 'Full System Access. Can manage entire system, including organizations, users, and configuration.',
         'is_system_role': True,
     },
     {
         'code': 'LCB_OFFICER',
         'name': 'LCB Finance Officer',
-        'description': 'Provincial oversight role. Can view all TMAs and approve PUGF posts.',
+        'description': 'Provincial Oversight. APPROVER for PUGF Budgets and Posts. Viewer for all TMA data.',
         'is_system_role': True,
     },
     {
         'code': 'TMO',
         'name': 'Tehsil Municipal Officer',
-        'description': 'TMA Approver. Final approval authority for local posts, bills, and payments.',
+        'description': 'TMA Administrator. APPROVER for Local Budgets, Bills, and Vouchers. Signing Authority.',
         'is_system_role': True,
     },
     {
         'code': 'FINANCE_OFFICER',
         'name': 'Finance Officer (Pre-Audit)',
-        'description': 'Pre-audit and financial verification. Reviews bills before approval.',
+        'description': 'Pre-Audit. CHECKER for Bills and Vouchers. Verifies financial transactions before TMO approval.',
         'is_system_role': True,
     },
     {
         'code': 'ACCOUNTANT',
         'name': 'Accountant (Verifier)',
-        'description': 'Checker role. Verifies transactions and budget entries.',
+        'description': 'Accounts Branch. CHECKER for transactions. Reconciles bank accounts and verifies ledger entries.',
         'is_system_role': True,
     },
     {
         'code': 'CASHIER',
         'name': 'Cashier',
-        'description': 'Records payments and collections. Manages cash book entries.',
+        'description': 'Cash Branch. MAKER for Cash Book entries, Receipts, and Daily Collections.',
         'is_system_role': True,
     },
     {
         'code': 'BUDGET_OFFICER',
         'name': 'Budget Officer',
-        'description': 'Prepares budget estimates and manages budget allocations.',
+        'description': 'Budget Branch. MAKER for Budget Estimates, Allocations, and Re-appropriations.',
         'is_system_role': True,
     },
     {
         'code': 'DEALING_ASSISTANT',
         'name': 'Dealing Assistant (Maker)',
-        'description': 'Maker role. Creates bills, budget entries, and transaction records.',
+        'description': 'General Maker. MAKER for Bills, Vouchers, and general data entry duties.',
         'is_system_role': True,
     },
 ]
@@ -73,6 +74,7 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         self.stdout.write('Seeding system roles...')
+        from django.contrib.auth.models import Permission
         
         created_count = 0
         updated_count = 0
