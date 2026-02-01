@@ -1,0 +1,42 @@
+{% load humanize %}
+<!-- HTMX Widget: Budget Alerts -->
+<div id="budget-alerts-widget">
+    {% if alerts %}
+    <div class="list-group">
+        {% for alert in alerts %}
+        <div class="list-group-item">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <h6 class="mb-1">
+                        {% if alert.utilization >= 90 %}
+                        <i class="bi bi-exclamation-triangle-fill text-danger"></i>
+                        {% else %}
+                        <i class="bi bi-exclamation-triangle text-warning"></i>
+                        {% endif %}
+                        {{ alert.department.name }}
+                    </h6>
+                    <p class="mb-1 small">
+                        <code>{{ alert.account.code }}</code> - {{ alert.account.name }}
+                    </p>
+                    <small class="text-muted">
+                        Available: Rs. {{ alert.available|floatformat:0|intcomma }} 
+                        of Rs. {{ alert.allocated|floatformat:0|intcomma }}
+                    </small>
+                </div>
+                <span class="badge {% if alert.utilization >= 90 %}bg-danger{% else %}bg-warning{% endif %} rounded-pill">
+                    {{ alert.utilization|floatformat:1 }}%
+                </span>
+            </div>
+            <div class="progress mt-2" style="height: 4px;">
+                <div class="progress-bar {% if alert.utilization >= 90 %}bg-danger{% else %}bg-warning{% endif %}"
+                    style="width: {{ alert.utilization }}%"></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-success mb-0">
+        <i class="bi bi-check-circle"></i> All departments within safe limits (< {{ threshold }}%)
+    </div>
+    {% endif %}
+</div>

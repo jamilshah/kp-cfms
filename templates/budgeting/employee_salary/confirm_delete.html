@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete Employee - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Confirm Deletion</h5>
+                </div>
+                <div class="card-body">
+                    <p>Are you sure you want to delete the following employee?</p>
+                    
+                    <div class="alert alert-warning">
+                        <strong>Employee:</strong> {{ object.name }}<br>
+                        <strong>Designation:</strong> {{ object.schedule.designation_name }}<br>
+                        <strong>Department:</strong> {{ object.schedule.department }}<br>
+                        <strong>Personnel No:</strong> {{ object.personnel_number|default:"—" }}
+                    </div>
+                    
+                    <p class="text-danger"><strong>This action cannot be undone!</strong></p>
+                    
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{% url 'budgeting:employee_salary_list' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="bi bi-trash"></i> Delete Employee
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

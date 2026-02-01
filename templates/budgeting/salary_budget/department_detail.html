@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}{{ department.name }} - Budget Detail - KP-CFMS{% endblock %}
+
+{% block extra_css %}
+<style>
+    .account-card {
+        transition: all 0.3s;
+    }
+    .account-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .progress-ring {
+        width: 120px;
+        height: 120px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'budgeting:salary_budget_dashboard' %}">Salary Budget</a></li>
+                    <li class="breadcrumb-item active">{{ department.name }}</li>
+                </ol>
+            </nav>
+            <h2><i class="bi bi-building"></i> {{ department.name }}</h2>
+            <p class="text-muted">Salary budget details for FY {{ fiscal_year.year }}</p>
+        </div>
+        <div class="col-auto">
+            <a href="{% url 'budgeting:salary_budget_dashboard' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">Total Allocated</h6>
+                            <h4 class="mb-0">Rs. {{ total_allocated|floatformat:0|intcomma }}</h4>
+                        </div>
+                        <i class="bi bi-wallet2 fs-1 text-primary opacity-25"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">Consumed</h6>
+                            <h4 class="mb-0">Rs. {{ total_consumed|floatformat:0|intcomma }}</h4>
+                        </div>
+                        <i class="bi bi-cash-coin fs-1 text-danger opacity-25"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">Available</h6>
+                            <h4 class="mb-0 text-success">Rs. {{ total_available|floatformat:0|intcomma }}</h4>
+                        </div>
+                        <i class="bi bi-piggy-bank fs-1 text-success opacity-25"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">Employees</h6>
+                            <h4 class="mb-0">{{ employee_count }}</h4>
+                        </div>
+                        <i class="bi bi-people fs-1 text-info opacity-25"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Account-wise Breakdown -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-list-ul"></i> Account-wise Budget</h5>
+                </div>
+                <div class="card-body">
+                    {% if budgets %}
+                    <div class="row">
+                        {% for budget in budgets %}
+                        <div class="col-md-6 mb-3">
+                            <div class="account-card card h-100">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <div>
+                                            <h6 class="mb-1">
+                                                <code class="text-primary">{{ budget.global_head.code }}</code>
+                                            </h6>
+                                            <small class="text-muted">{{ budget.global_head.name }}</small>
+                                        </div>
+                                        <span class="badge 
+                                            {% if budget.utilization_percentage >= 90 %}bg-danger
+                                            {% elif budget.utilization_percentage >= 80 %}bg-warning
+                                            {% else %}bg-success{% endif %}">
+                                            {{ budget.utilization_percentage|floatformat:1 }}%
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="row text-center mt-3">
+                                        <div class="col-4">
+                                            <small class="text-muted d-block">Allocated</small>
+                                            <strong>{{ budget.allocated_amount|floatformat:0|intcomma }}</strong>
+                                        </div>
+                                        <div class="col-4">
+                                            <small class="text-muted d-block">Consumed</small>
+                                            <strong>{{ budget.consumed_amount|floatformat:0|intcomma }}</strong>
+                                        </div>
+                                        <div class="col-4">
+                                            <small class="text-muted d-block">Available</small>
+                                            <strong class="text-success">{{ budget.available_amount|floatformat:0|intcomma }}</strong>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="progress mt-3" style="height: 6px;">
+                                        <div class="progress-bar 
+                                            {% if budget.utilization_percentage >= 90 %}bg-danger
+                                            {% elif budget.utilization_percentage >= 80 %}bg-warning
+                                            {% else %}bg-success{% endif %}"
+                                            style="width: {{ budget.utilization_percentage }}%">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        No budget allocations found for this department.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Consumptions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> Recent Budget Consumptions</h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_consumptions %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Bill Number</th>
+                                    <th>Account</th>
+                                    <th class="text-end">Amount</th>
+                                    <th class="text-center">Employees</th>
+                                    <th class="text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for consumption in recent_consumptions %}
+                                <tr>
+                                    <td>{{ consumption.created_at|date:"M d, Y" }}</td>
+                                    <td>
+                                        <a href="#">{{ consumption.bill.bill_number }}</a>
+                                    </td>
+                                    <td>
+                                        <code>{{ consumption.department_budget.global_head.code }}</code>
+                                    </td>
+                                    <td class="text-end">Rs. {{ consumption.amount|floatformat:0|intcomma }}</td>
+                                    <td class="text-center">{{ consumption.employee_count }}</td>
+                                    <td class="text-center">
+                                        {% if consumption.is_reversed %}
+                                        <span class="badge bg-secondary">Reversed</span>
+                                        {% else %}
+                                        <span class="badge bg-success">Active</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-center mt-3">
+                        <a href="{% url 'budgeting:budget_consumption_history' %}?department={{ department.id }}" class="btn btn-sm btn-outline-primary">
+                            View All History
+                        </a>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        No budget consumption records yet.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

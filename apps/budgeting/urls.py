@@ -41,6 +41,28 @@ from apps.budgeting.views import (
     # Phase 4: Reporting
     PrintBudgetBookView
 )
+from apps.budgeting.views_salary_budget import (
+    SalaryBudgetDashboardView,
+    SalaryBudgetDistributionView,
+    DepartmentBudgetDetailView,
+    BudgetUtilizationChartView,
+    BudgetAlertsWidgetView,
+    ValidateBillBudgetView,
+    BudgetConsumptionHistoryView,
+    ExportBudgetStatusView
+)
+from apps.budgeting.views_employee_salary import (
+    EmployeeSalaryListView,
+    EmployeeSalaryCreateView,
+    EmployeeSalaryUpdateView,
+    EmployeeSalaryDetailView,
+    EmployeeSalaryDeleteView,
+    EmployeeSalaryCSVImportView,
+    EmployeeSalaryCSVTemplateView,
+    BulkApplyIncrementView,
+    BudgetBookReportView,
+    BudgetBookExportView
+)
 from apps.finance.views import (
     BudgetHeadListView, BudgetHeadCreateView, 
     BudgetHeadUpdateView, BudgetHeadDeleteView,
@@ -160,4 +182,26 @@ urlpatterns = [
     
     # Phase 4: Budget Book Reporting
     path('reports/budget-book/<int:fy_id>/', PrintBudgetBookView.as_view(), name='budget_book_print'),
+    
+    # Salary Budget Management
+    path('salary-budget/', SalaryBudgetDashboardView.as_view(), name='salary_budget_dashboard'),
+    path('salary-budget/distribute/', SalaryBudgetDistributionView.as_view(), name='salary_budget_distribute'),
+    path('salary-budget/department/<int:pk>/', DepartmentBudgetDetailView.as_view(), name='department_budget_detail'),
+    path('salary-budget/chart-data/', BudgetUtilizationChartView.as_view(), name='budget_chart_data'),
+    path('salary-budget/alerts/', BudgetAlertsWidgetView.as_view(), name='budget_alerts_widget'),
+    path('salary-budget/validate-bill/', ValidateBillBudgetView.as_view(), name='validate_bill_budget'),
+    path('salary-budget/consumption-history/', BudgetConsumptionHistoryView.as_view(), name='budget_consumption_history'),
+    path('salary-budget/export/', ExportBudgetStatusView.as_view(), name='export_budget_status'),
+    
+    # Employee Salary Structure Management
+    path('employee-salary/', EmployeeSalaryListView.as_view(), name='employee_salary_list'),
+    path('employee-salary/create/', EmployeeSalaryCreateView.as_view(), name='employee_salary_create'),
+    path('employee-salary/<int:pk>/', EmployeeSalaryDetailView.as_view(), name='employee_salary_detail'),
+    path('employee-salary/<int:pk>/edit/', EmployeeSalaryUpdateView.as_view(), name='employee_salary_edit'),
+    path('employee-salary/<int:pk>/delete/', EmployeeSalaryDeleteView.as_view(), name='employee_salary_delete'),
+    path('employee-salary/csv-import/', EmployeeSalaryCSVImportView.as_view(), name='employee_salary_csv_import'),
+    path('employee-salary/csv-template/', EmployeeSalaryCSVTemplateView.as_view(), name='employee_salary_csv_template'),
+    path('employee-salary/bulk-increment/', BulkApplyIncrementView.as_view(), name='employee_salary_bulk_increment'),
+    path('employee-salary/budget-book/', BudgetBookReportView.as_view(), name='budget_book_report'),
+    path('employee-salary/budget-book/export/', BudgetBookExportView.as_view(), name='budget_book_export'),
 ]

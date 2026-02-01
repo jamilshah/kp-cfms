@@ -29,7 +29,7 @@ class BudgetEmployeeInline(admin.TabularInline):
     """Inline admin for managing employees within ScheduleOfEstablishment."""
     model = BudgetEmployee
     extra = 0
-    fields = ['name', 'personnel_number', 'current_basic_pay', 'monthly_allowances', 'annual_increment_amount', 'is_vacant']
+    fields = ['name', 'father_name', 'designation', 'bps', 'running_basic', 'city_category', 'is_vacant']
     readonly_fields = []
     
     def get_queryset(self, request):
@@ -373,8 +373,9 @@ class BPSSalaryScaleAdmin(admin.ModelAdmin):
         'annual_increment', 
         'conveyance_allowance', 
         'medical_allowance', 
-        'house_rent_percent',
-        'adhoc_relief_total_percent',
+        'house_rent_large_cities',
+        'house_rent_other_cities',
+        'adhoc_relief_percent',
         'estimated_gross_view'  # Calculated field
     )
 
@@ -384,8 +385,9 @@ class BPSSalaryScaleAdmin(admin.ModelAdmin):
         'annual_increment', 
         'conveyance_allowance', 
         'medical_allowance',
-        'house_rent_percent',
-        'adhoc_relief_total_percent'
+        'house_rent_large_cities',
+        'house_rent_other_cities',
+        'adhoc_relief_percent'
     )
 
     # 3. Sorting & Filtering

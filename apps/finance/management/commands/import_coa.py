@@ -149,8 +149,7 @@ class Command(BaseCommand):
         # Summary
         self.stdout.write(self.style.SUCCESS(
             f"\nImport Summary:\n"
-            f"  Created: {created_count}\n"
-            f"  Updated: {updated_count}\n"
+            f"  Regular Heads Created/Updated: {created_count + updated_count}\n"
             f"  Errors: {error_count}"
         ))
 
@@ -158,10 +157,12 @@ class Command(BaseCommand):
                          fund_code: str = 'GEN', skip_budget_heads: bool = False) -> tuple:
         """
         Import from New COA.csv format (6 columns, 2 header rows).
+        Supports sub-heads with hyphenated codes (e.g., C03880-10).
         """
         created_count = 0
         updated_count = 0
         error_count = 0
+        subhead_count = 0
         
         # Caches
         major_cache = {}
@@ -228,10 +229,72 @@ class Command(BaseCommand):
                         minor_cache[minor_code] = minor_obj
                     minor_obj = minor_cache.get(minor_code)
                     
-                    # 3. Global Head
+                    # 3. Global Head and Sub-Head Detection
                     pifra_code = row[4].strip()
                     pifra_desc = row[5].strip()
                     
+                    # Check if this is a sub-head (contains hyphen)
+                    is_subhead = '-' in pifra_code
+                    
+                    if is_subhead:
+                        # Extract parent code and sub-code
+                        parent_code, sub_code_suffix = pifra_code.split('-', 1)
+                        
+                        # Ensure parent GlobalHead exists
+                        if parent_code not in global_cache:
+                            # Look up or create parent GlobalHead
+                            try:
+                                parent_global = GlobalHead.objects.get(code=parent_code)
+                                global_cache[parent_code] = parent_global
+                            except GlobalHead.DoesNotExist:
+                                # If parent doesn't exist, we need to create it
+                                # This should not happen if CSV is properly ordered
+                                self.stdout.write(self.style.WARNING(
+                                    f"Row {row_num}: Parent GlobalHead '{parent_code}' not found for sub-head '{pifra_code}'. "
+                                    f"Sub-head will be skipped. Ensure parent is defined earlier in CSV."
+                                ))
+                                error_count += 1
+                                continue
+                        
+                        parent_global = global_cache[parent_code]
+                        
+                        # Skip creating GlobalHead for sub-heads during master data import
+                        if skip_budget_heads:
+                            # Don't count sub-heads when skipping budget heads
+                            continue
+                        
+                        # Create BudgetHead sub-heads (not GlobalHead)
+                        if dry_run:
+                            subhead_count += 1
+                            self.stdout.write(f"  [DRY RUN] Would create sub-head: {pifra_code} - {pifra_desc}")
+                        else:
+                            for target_function in target_functions:
+                                budget_head, created = BudgetHead.objects.update_or_create(
+                                    fund=target_fund,
+                                    function=target_function,
+                                    global_head=parent_global,
+                                    sub_code=sub_code_suffix,
+                                    defaults={
+                                        'head_type': 'SUB_HEAD',
+                                        'local_description': pifra_desc,
+                                        'budget_control': True,
+                                        'project_required': False,
+                                        'posting_allowed': True,
+                                        'is_active': True 
+                                    }
+                                )
+                                
+                                if created:
+                                    subhead_count += 1
+                                    self.stdout.write(self.style.SUCCESS(
+                                        f"  Created sub-head: {pifra_code} - {pifra_desc}"
+                                    ))
+                                else:
+                                    updated_count += 1
+                        
+                        continue  # Skip regular GlobalHead creation for sub-heads
+                    
+                    # Regular GlobalHead processing (non-sub-head)
                     # Infer account type
                     account_type = AccountType.EXPENDITURE
                     if pifra_code:

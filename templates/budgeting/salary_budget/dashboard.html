@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}Salary Budget Dashboard - KP-CFMS{% endblock %}
+
+{% block extra_css %}
+<style>
+    .budget-card {
+        border-left: 4px solid;
+        transition: all 0.3s;
+    }
+    .budget-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .budget-card.critical {
+        border-left-color: #dc3545;
+    }
+    .budget-card.warning {
+        border-left-color: #ffc107;
+    }
+    .budget-card.good {
+        border-left-color: #28a745;
+    }
+    .utilization-bar {
+        height: 8px;
+        border-radius: 4px;
+        background: #e9ecef;
+        overflow: hidden;
+    }
+    .utilization-fill {
+        height: 100%;
+        transition: width 0.3s;
+    }
+    .stat-box {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="bi bi-cash-stack"></i> Salary Budget Dashboard</h2>
+            <p class="text-muted">Monitor and manage department salary budgets for FY {{ fiscal_year.year }}</p>
+        </div>
+        <div class="col-auto">
+            <a href="{% url 'budgeting:salary_budget_distribute' %}" class="btn btn-primary">
+                <i class="bi bi-distribute-vertical"></i> Distribute New Budget
+            </a>
+            <a href="{% url 'budgeting:export_budget_status' %}" class="btn btn-success">
+                <i class="bi bi-file-earmark-excel"></i> Export
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-box">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1 opacity-75">Total Allocated</h6>
+                        <h3 class="mb-0">Rs. {{ total_allocated|floatformat:0|intcomma }}</h3>
+                    </div>
+                    <i class="bi bi-wallet2 fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-box" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1 opacity-75">Total Consumed</h6>
+                        <h3 class="mb-0">Rs. {{ total_consumed|floatformat:0|intcomma }}</h3>
+                    </div>
+                    <i class="bi bi-cash-coin fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-box" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1 opacity-75">Available</h6>
+                        <h3 class="mb-0">Rs. {{ total_available|floatformat:0|intcomma }}</h3>
+                    </div>
+                    <i class="bi bi-piggy-bank fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-box" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1 opacity-75">Utilization</h6>
+                        <h3 class="mb-0">{{ overall_utilization|floatformat:1 }}%</h3>
+                    </div>
+                    <i class="bi bi-graph-up fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts -->
+    {% if alerts %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                        Budget Alerts
+                        {% if critical_count > 0 %}
+                        <span class="badge bg-danger">{{ critical_count }} Critical</span>
+                        {% endif %}
+                        {% if warning_count > 0 %}
+                        <span class="badge bg-warning">{{ warning_count }} Warning</span>
+                        {% endif %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Department</th>
+                                    <th>Account</th>
+                                    <th class="text-end">Allocated</th>
+                                    <th class="text-end">Available</th>
+                                    <th class="text-end">Utilization</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in alerts %}
+                                <tr>
+                                    <td>
+                                        <a href="{% url 'budgeting:department_budget_detail' alert.department.id %}">
+                                            {{ alert.department.name }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <code>{{ alert.account.code }}</code>
+                                        {{ alert.account.name }}
+                                    </td>
+                                    <td class="text-end">Rs. {{ alert.allocated|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">Rs. {{ alert.available|floatformat:0|intcomma }}</td>
+                                    <td class="text-end">
+                                        {% if alert.utilization >= 90 %}
+                                        <span class="badge bg-danger">{{ alert.utilization|floatformat:1 }}%</span>
+                                        {% else %}
+                                        <span class="badge bg-warning">{{ alert.utilization|floatformat:1 }}%</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Department Budgets -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-building"></i> Department Budget Status</h5>
+                </div>
+                <div class="card-body">
+                    {% for dept_name, data in department_summary.items %}
+                    {% widthratio data.total_consumed 100 data.total_allocated as utilization_pct %}
+                    <div class="budget-card card mb-3 {% if utilization_pct >= 90 %}critical{% elif utilization_pct >= 80 %}warning{% else %}good{% endif %}">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-3">
+                                    <h5 class="mb-0">
+                                        <a href="{% url 'budgeting:department_budget_detail' data.department.id %}" class="text-decoration-none">
+                                            {{ dept_name }}
+                                        </a>
+                                    </h5>
+                                    <small class="text-muted">{{ data.accounts|length }} account(s)</small>
+                                </div>
+                                <div class="col-md-7">
+                                    <div class="row text-center">
+                                        <div class="col-4">
+                                            <small class="text-muted d-block">Allocated</small>
+                                            <strong>Rs. {{ data.total_allocated|floatformat:0|intcomma }}</strong>
+                                        </div>
+                                        <div class="col-4">
+                                            <small class="text-muted d-block">Consumed</small>
+                                            <strong>Rs. {{ data.total_consumed|floatformat:0|intcomma }}</strong>
+                                        </div>
+                                        <div class="col-4">
+                                            <small class="text-muted d-block">Available</small>
+                                            <strong class="text-success">Rs. {{ data.total_available|floatformat:0|intcomma }}</strong>
+                                        </div>
+                                    </div>
+                                    <div class="utilization-bar mt-2">
+                                        {% widthratio data.total_consumed 100 data.total_allocated as utilization_pct %}
+                                        <div class="utilization-fill 
+                                            {% if utilization_pct >= 90 %}bg-danger{% elif utilization_pct >= 80 %}bg-warning{% else %}bg-success{% endif %}"
+                                            style="width: {{ utilization_pct }}%">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2 text-end">
+                                    {% widthratio data.total_consumed 100 data.total_allocated as util_percent %}
+                                    <h3 class="mb-0 
+                                        {% if util_percent >= 90 %}text-danger{% elif util_percent >= 80 %}text-warning{% else %}text-success{% endif %}">
+                                        {{ util_percent }}%
+                                    </h3>
+                                    <small class="text-muted">Used</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        No budget allocations found. 
+                        <a href="{% url 'budgeting:salary_budget_distribute' %}">Distribute budget</a> to get started.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-refresh alerts every 2 minutes
+    setInterval(function() {
+        htmx.trigger('#alerts-widget', 'refresh');
+    }, 120000);
+</script>
+{% endblock %}

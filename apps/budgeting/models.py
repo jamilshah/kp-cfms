@@ -26,6 +26,12 @@ from apps.core.exceptions import (
     WorkflowTransitionException,
 )
 
+# Import salary budget models
+from apps.budgeting.models_salary_budget import (
+    DepartmentSalaryBudget,
+    SalaryBillConsumption
+)
+
 
 class BudgetStatus(models.TextChoices):
     """
@@ -520,25 +526,32 @@ class BPSSalaryScale(AuditLogMixin):
         verbose_name=_("Medical Allowance")
     )
     
-    # --- PART 3: VARIABLE ALLOWANCES (Percentage Based) ---
-    # House Rent: Usually 30% or 45% of the *Initial* Basic Pay
-    house_rent_percent = models.DecimalField(
-        max_digits=5, 
+    # --- PART 3: FIXED HRA & ARA (KP CFMS Compliant) ---
+    # House Rent Allowance: Fixed slab amount (not percentage)
+    # Different for LARGE cities vs OTHER cities/towns
+    house_rent_large_cities = models.DecimalField(
+        max_digits=8, 
         decimal_places=2, 
-        default=Decimal('0.45'), 
-        verbose_name=_("House Rent %"),
-        help_text=_("e.g., 0.45 for 45% of Initial Pay")
+        default=0,
+        verbose_name=_("HRA - Large Cities"),
+        help_text=_("Fixed HRA amount for large cities (e.g., Peshawar, Islamabad)")
+    )
+    
+    house_rent_other_cities = models.DecimalField(
+        max_digits=8, 
+        decimal_places=2, 
+        default=0,
+        verbose_name=_("HRA - Other Cities"),
+        help_text=_("Fixed HRA amount for other cities/towns")
     )
 
-    # Adhoc Reliefs: The sum of all active reliefs (2022, 2023, 2024)
-    # Usually calculated on *Running* Basic Pay. 
-    # For budgeting new posts, we apply this to Initial Basic Pay.
-    adhoc_relief_total_percent = models.DecimalField(
+    # Adhoc Relief Allowance: Percentage of Running Basic (22% by default, adjustable per notification)
+    adhoc_relief_percent = models.DecimalField(
         max_digits=5, 
         decimal_places=2, 
-        default=Decimal('0.35'),
-        verbose_name=_("Total Adhoc Relief %"),
-        help_text=_("Sum of all active Adhoc Reliefs (e.g., 0.35 for 35%)")
+        default=Decimal('0.22'),
+        verbose_name=_("ARA % (Adhoc Relief)"),
+        help_text=_("Percentage applied to Running Basic Pay (default 0.22 = 22%)")
     )
 
     class Meta:
@@ -553,20 +566,23 @@ class BPSSalaryScale(AuditLogMixin):
     def estimated_gross_salary(self):
         """
         Calculates the gross salary for a fresh entrant (Stage 0).
-        Formula: (Min Pay * (1 + Adhoc%)) + (Min Pay * HRA%) + Fixed Allowances
+        Uses fixed HRA slab for LARGE cities (Peshawar, Islamabad, etc.).
+        Formula: Basic + ARA(%) + HRA(fixed) + Conveyance + Medical
         """
         # 1. Basic Pay
         basic = self.basic_pay_min
 
-        # 2. Variable Allowances
-        adhoc_amount = basic * self.adhoc_relief_total_percent
-        hra_amount = basic * self.house_rent_percent
+        # 2. Variable Allowances (percentage-based)
+        ara_amount = basic * self.adhoc_relief_percent
 
-        # 3. Fixed Allowances
+        # 3. Fixed HRA (using large cities slab - represents most employees)
+        hra_amount = self.house_rent_large_cities
+
+        # 4. Fixed Allowances
         fixed_total = self.conveyance_allowance + self.medical_allowance
 
         # Total
-        return basic + adhoc_amount + hra_amount + fixed_total
+        return basic + ara_amount + hra_amount + fixed_total
     
     def get_annual_salary(self) -> Decimal:
         """

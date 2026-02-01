@@ -1138,7 +1138,7 @@ class EmployeeListView(LoginRequiredMixin, ListView):
 class EmployeeCreateView(LoginRequiredMixin, CreateView):
     """Add new employee to schedule."""
     model = BudgetEmployee
-    fields = ['name', 'cnic', 'personnel_number', 'current_basic_pay', 'monthly_allowances', 'annual_increment_amount']
+    fields = ['name', 'father_name', 'designation', 'date_of_birth', 'qualification', 'bps', 'running_basic', 'city_category', 'is_govt_accommodation', 'is_house_hiring', 'frozen_ara_2022_input', 'dra_amount']
     template_name = 'budgeting/setup_form.html'
     
     def get_schedule(self):
@@ -1175,7 +1175,7 @@ class EmployeeCreateView(LoginRequiredMixin, CreateView):
 class EmployeeUpdateView(LoginRequiredMixin, UpdateView):
     """Edit employee details."""
     model = BudgetEmployee
-    fields = ['name', 'cnic', 'personnel_number', 'current_basic_pay', 'monthly_allowances', 'annual_increment_amount']
+    fields = ['name', 'father_name', 'designation', 'date_of_birth', 'qualification', 'bps', 'running_basic', 'city_category', 'is_govt_accommodation', 'is_house_hiring', 'frozen_ara_2022_input', 'dra_amount']
     template_name = 'budgeting/setup_form.html'
     
     def get_success_url(self):

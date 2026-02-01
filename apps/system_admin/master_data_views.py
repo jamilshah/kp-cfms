@@ -330,6 +330,16 @@ class TehsilListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
             'district', 'district__division'
         ).order_by('district__division__name', 'district__name', 'name')
 
+    def get_paginate_by(self, queryset):
+        """Allow disabling pagination by passing `?all=1` in the query string.
+
+        This is useful for admins who want to view/export the full list in one
+        shot without changing the class-level `paginate_by` value.
+        """
+        if self.request.GET.get('all') == '1':
+            return None
+        return self.paginate_by
+
 
 class TehsilCreateView(LoginRequiredMixin, SuperAdminRequiredMixin, CreateView):
     """Create a new tehsil."""

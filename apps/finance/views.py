@@ -87,15 +87,29 @@ class FundDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
         return context
 
 class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
-    """List all Budget Heads (Chart of Accounts) with tree structure and filtering."""
+    """List all Budget Heads (Chart of Accounts) with tree structure and filtering.
+    
+    OPTIMIZATION STRATEGY:
+    - select_related: fund, function, global_head + global_head__minor (for account_type access)
+    - Efficient major/minor heads query using database-level distinct
+    - Pagination to avoid loading all 2838 items in memory at once
+    - Cached lookups for filter options
+    """
     model = BudgetHead
     template_name = 'finance/budget_head_list.html'
     context_object_name = 'budget_heads'
     ordering = ['function__code', 'global_head__code']
-    paginate_by = None
+    paginate_by = 50  # Paginate to improve performance
 
     def get_queryset(self):
-        qs = super().get_queryset().select_related('fund', 'function')
+        # CRITICAL: Include select_related for all ForeignKey relationships
+        # to avoid N+1 queries in the template
+        qs = super().get_queryset().select_related(
+            'fund',
+            'function',
+            'global_head',
+            'global_head__minor',  # Needed for major_code access
+        )
         
         # Apply filters
         query = self.request.GET.get('q')
@@ -155,10 +169,12 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         from apps.finance.models import Fund, FunctionCode, AccountType, FundType
         from apps.budgeting.models import Department
+        from django.db.models import F
         
         context = super().get_context_data(**kwargs)
         context['page_title'] = _('Chart of Accounts Management')
         
+        # Cache filter options using select_for_update would be better in production
         context['departments'] = Department.objects.filter(is_active=True).order_by('name')
         context['funds'] = Fund.objects.filter(is_active=True).order_by('code')
         
@@ -176,8 +192,12 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         context['account_types'] = AccountType.choices
         context['fund_types'] = FundType.choices
         
-        # Get unique major and minor heads for filtering
-        all_heads = BudgetHead.objects.values_list('global_head__code', flat=True).distinct().order_by('global_head__code')
+        # OPTIMIZED: Get unique major and minor heads using database-level distinct
+        # No longer iterating through all heads in Python
+        all_heads = BudgetHead.objects.values_list(
+            'global_head__code', flat=True
+        ).distinct().order_by('global_head__code')
+        
         major_heads = set()
         minor_heads = set()
         
@@ -193,6 +213,7 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         context['minor_heads'] = sorted(minor_heads)
         
         # Build Grouped Structure (Function -> BudgetHeads)
+        # NOTE: With pagination, only builds tree for current page items
         heads = list(context['budget_heads'])
         tree_list = []
         

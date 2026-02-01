@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Budget Book - Salary Structure Report - KP-CFMS{% endblock %}
+
+{% block extra_css %}
+<style>
+    @media print {
+        .no-print { display: none !important; }
+        .table { font-size: 10px; }
+    }
+    .dept-section {
+        page-break-inside: avoid;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4 no-print">
+        <div class="col">
+            <h2><i class="bi bi-book"></i> Budget Book - Salary Structure Report</h2>
+            <p class="text-muted">Comprehensive employee salary details for Budget Book</p>
+        </div>
+        <div class="col-auto">
+            <button onclick="window.print()" class="btn btn-primary">
+                <i class="bi bi-printer"></i> Print
+            </button>
+            <a href="{% url 'budgeting:budget_book_export' %}?fiscal_year={{ fiscal_year.id }}" 
+               class="btn btn-success">
+                <i class="bi bi-file-earmark-excel"></i> Export CSV
+            </a>
+            <a href="{% url 'budgeting:employee_salary_list' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Fiscal Year Selector -->
+    <div class="card border-0 shadow-sm mb-4 no-print">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-center">
+                <div class="col-auto">
+                    <label class="form-label">Select Fiscal Year:</label>
+                </div>
+                <div class="col-auto">
+                    <select name="fiscal_year" class="form-select" onchange="this.form.submit()">
+                        {% for fy in fiscal_years %}
+                        <option value="{{ fy.id }}" {% if fiscal_year.id == fy.id %}selected{% endif %}>
+                            {{ fy.year_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if fiscal_year %}
+    <!-- Report Header -->
+    <div class="text-center mb-4">
+        <h3>Government of Khyber Pakhtunkhwa</h3>
+        <h4>Local Government Department</h4>
+        <h5>{{ organization.name|default:"TMA" }}</h5>
+        <h6>Budget Book - Salary Structure</h6>
+        <p class="mb-0"><strong>Fiscal Year: {{ fiscal_year.year_name }}</strong></p>
+    </div>
+
+    <!-- Grand Summary -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Summary</h5>
+        </div>
+        <div class="card-body">
+            <div class="row text-center">
+                <div class="col-md-3">
+                    <h6 class="text-muted">Total Employees</h6>
+                    <h3>{{ grand_totals.employees }}</h3>
+                </div>
+                <div class="col-md-3">
+                    <h6 class="text-muted">Monthly Basic Pay</h6>
+                    <h4>Rs. {{ grand_totals.basic|floatformat:0|intcomma }}</h4>
+                </div>
+                <div class="col-md-3">
+                    <h6 class="text-muted">Monthly Gross</h6>
+                    <h4>Rs. {{ grand_totals.gross|floatformat:0|intcomma }}</h4>
+                </div>
+                <div class="col-md-3">
+                    <h6 class="text-muted">Annual Cost</h6>
+                    <h4>Rs. {{ grand_totals.annual|floatformat:0|intcomma }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Department-wise Summary -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-secondary text-white">
+            <h5 class="mb-0">Department-wise Summary</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Department</th>
+                            <th class="text-center">Employees</th>
+                            <th class="text-end">Basic Pay</th>
+                            <th class="text-end">Allowances</th>
+                            <th class="text-end">Monthly Gross</th>
+                            <th class="text-end">Annual Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dept, data in dept_summary.items %}
+                        <tr>
+                            <td><strong>{{ dept }}</strong></td>
+                            <td class="text-center">{{ data.count }}</td>
+                            <td class="text-end">Rs. {{ data.basic_total|floatformat:0|intcomma }}</td>
+                            <td class="text-end">Rs. {{ data.allowances_total|floatformat:0|intcomma }}</td>
+                            <td class="text-end">Rs. {{ data.gross_total|floatformat:0|intcomma }}</td>
+                            <td class="text-end"><strong>Rs. {{ data.annual_total|floatformat:0|intcomma }}</strong></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-dark">
+                        <tr>
+                            <th>TOTAL</th>
+                            <th class="text-center">{{ grand_totals.employees }}</th>
+                            <th class="text-end">Rs. {{ grand_totals.basic|floatformat:0|intcomma }}</th>
+                            <th class="text-end">Rs. {{ grand_totals.allowances|floatformat:0|intcomma }}</th>
+                            <th class="text-end">Rs. {{ grand_totals.gross|floatformat:0|intcomma }}</th>
+                            <th class="text-end">Rs. {{ grand_totals.annual|floatformat:0|intcomma }}</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Employee List -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">Detailed Employee List</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th rowspan="2">Dept</th>
+                            <th rowspan="2">Designation</th>
+                            <th rowspan="2">BPS</th>
+                            <th rowspan="2">Name</th>
+                            <th rowspan="2">Pers. No</th>
+                            <th colspan="8" class="text-center">Pay & Allowances (Monthly)</th>
+                            <th rowspan="2" class="text-end">Gross</th>
+                            <th rowspan="2" class="text-end">Annual</th>
+                        </tr>
+                        <tr>
+                            <th class="text-end">Basic</th>
+                            <th class="text-end">HRA</th>
+                            <th class="text-end">Conv</th>
+                            <th class="text-end">Med</th>
+                            <th class="text-end">Adhoc</th>
+                            <th class="text-end">Special</th>
+                            <th class="text-end">Util</th>
+                            <th class="text-end">Ent</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% regroup employees by schedule.department as dept_list %}
+                        {% for dept_group in dept_list %}
+                        <tr class="table-active">
+                            <td colspan="14"><strong>{{ dept_group.grouper }}</strong></td>
+                        </tr>
+                        {% for emp in dept_group.list %}
+                        <tr class="dept-section">
+                            <td>{{ emp.schedule.department|truncatechars:15 }}</td>
+                            <td>{{ emp.schedule.designation_name|truncatechars:20 }}</td>
+                            <td class="text-center">{{ emp.schedule.bps_scale }}</td>
+                            <td>{{ emp.name }}</td>
+                            <td><small>{{ emp.personnel_number|default:"—" }}</small></td>
+                            <td class="text-end">{{ emp.current_basic_pay|floatformat:0|intcomma }}</td>
+                            <td class="text-end">{{ emp.house_rent_allowance|floatformat:0|intcomma }}</td>
+                            <td class="text-end">{{ emp.conveyance_allowance|floatformat:0|intcomma }}</td>
+                            <td class="text-end">{{ emp.medical_allowance|floatformat:0|intcomma }}</td>
+                            <td class="text-end">{{ emp.adhoc_relief_2024|floatformat:0|intcomma }}</td>
+                            <td class="text-end">{{ emp.special_allowance|floatformat:0|intcomma }}</td>
+                            <td class="text-end">{{ emp.utility_allowance|floatformat:0|intcomma }}</td>
+                            <td class="text-end">{{ emp.entertainment_allowance|floatformat:0|intcomma }}</td>
+                            <td class="text-end"><strong>{{ emp.monthly_gross|floatformat:0|intcomma }}</strong></td>
+                            <td class="text-end"><strong>{{ emp.annual_cost|floatformat:0|intcomma }}</strong></td>
+                        </tr>
+                        {% endfor %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4 text-end">
+        <p class="mb-0"><small>Generated: {% now "d-M-Y H:i" %}</small></p>
+    </div>
+    {% else %}
+    <div class="alert alert-warning">
+        No fiscal year selected or no data available.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

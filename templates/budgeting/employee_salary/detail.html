@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ employee.name }} - Salary Details - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'budgeting:employee_salary_list' %}">Employee Salary</a></li>
+                    <li class="breadcrumb-item active">{{ employee.name }}</li>
+                </ol>
+            </nav>
+            <h2>{{ employee.name }}</h2>
+            <p class="text-muted">{{ employee.schedule.designation_name }} - {{ employee.schedule.department }}</p>
+        </div>
+        <div class="col-auto">
+            <a href="{% url 'budgeting:employee_salary_edit' employee.id %}" class="btn btn-warning">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            <a href="{% url 'budgeting:employee_salary_list' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Personal Info -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Personal Information</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless">
+                        <tr>
+                            <th>Personnel Number:</th>
+                            <td>{{ employee.personnel_number|default:"—" }}</td>
+                        </tr>
+                        <tr>
+                            <th>CNIC:</th>
+                            <td>{{ employee.cnic|default:"—" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Joining Date:</th>
+                            <td>{{ employee.joining_date|default:"—" }}</td>
+                        </tr>
+                        <tr>
+                            <th>BPS Grade:</th>
+                            <td><span class="badge bg-secondary">BPS-{{ employee.schedule.bps_scale }}</span></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Salary Breakdown -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">Monthly Salary Breakdown</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <tr>
+                            <th>Basic Pay</th>
+                            <td class="text-end">Rs. {{ employee.current_basic_pay|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr class="table-light">
+                            <th>House Rent Allowance</th>
+                            <td class="text-end">Rs. {{ employee.house_rent_allowance|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr class="table-light">
+                            <th>Conveyance Allowance</th>
+                            <td class="text-end">Rs. {{ employee.conveyance_allowance|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr class="table-light">
+                            <th>Medical Allowance</th>
+                            <td class="text-end">Rs. {{ employee.medical_allowance|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr class="table-light">
+                            <th>Adhoc Relief 2024</th>
+                            <td class="text-end">Rs. {{ employee.adhoc_relief_2024|floatformat:2|intcomma }}</td>
+                        </tr>
+                        {% if employee.special_allowance > 0 %}
+                        <tr class="table-light">
+                            <th>Special Allowance</th>
+                            <td class="text-end">Rs. {{ employee.special_allowance|floatformat:2|intcomma }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if employee.utility_allowance > 0 %}
+                        <tr class="table-light">
+                            <th>Utility Allowance</th>
+                            <td class="text-end">Rs. {{ employee.utility_allowance|floatformat:2|intcomma }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if employee.entertainment_allowance > 0 %}
+                        <tr class="table-light">
+                            <th>Entertainment Allowance</th>
+                            <td class="text-end">Rs. {{ employee.entertainment_allowance|floatformat:2|intcomma }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr class="table-success fw-bold">
+                            <th>TOTAL ALLOWANCES</th>
+                            <td class="text-end">Rs. {{ employee.total_monthly_allowances|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr class="table-primary fw-bold">
+                            <th>MONTHLY GROSS</th>
+                            <td class="text-end">Rs. {{ employee.monthly_gross|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr class="table-warning">
+                            <th>GPF Contribution</th>
+                            <td class="text-end">Rs. {{ employee.gpf_contribution|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr class="table-warning">
+                            <th>Income Tax</th>
+                            <td class="text-end">Rs. {{ employee.income_tax|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr class="table-warning fw-bold">
+                            <th>TOTAL DEDUCTIONS</th>
+                            <td class="text-end">Rs. {{ employee.total_monthly_deductions|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr class="table-success fw-bold fs-5">
+                            <th>MONTHLY NET</th>
+                            <td class="text-end">Rs. {{ employee.monthly_net|floatformat:2|intcomma }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            {% if employee.remarks %}
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                    <h6>Remarks:</h6>
+                    <p>{{ employee.remarks }}</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-md-4">
+            <!-- Quick Stats -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">Quick Stats</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Annual Cost</small>
+                        <h4>Rs. {{ employee.annual_cost|floatformat:0|intcomma }}</h4>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Annual Increment</small>
+                        <h5>Rs. {{ employee.annual_increment_amount|floatformat:0|intcomma }}</h5>
+                    </div>
+                    {% if employee.last_increment_date %}
+                    <div>
+                        <small class="text-muted d-block">Last Increment</small>
+                        <p>{{ employee.last_increment_date }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

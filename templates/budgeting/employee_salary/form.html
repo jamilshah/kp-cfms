@@ -1,0 +1,499 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ object|yesno:"Edit,Add" }} Employee Salary - KP-CFMS{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-section {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-left: 4px solid #0d6efd;
+        margin-bottom: 1.5rem;
+    }
+    .salary-preview {
+        background: #e7f3ff;
+        padding: 1rem;
+        border-radius: 4px;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'budgeting:employee_salary_list' %}">Employee Salary</a></li>
+                    <li class="breadcrumb-item active">{{ object|yesno:"Edit,Add" }} Employee</li>
+                </ol>
+            </nav>
+            <h2><i class="bi bi-person-badge"></i> {{ object|yesno:"Edit,Add" }} Employee Salary (KP CFMS)</h2>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-10">
+            <form method="post" id="employee-salary-form">
+                {% csrf_token %}
+                
+                <!-- Personal Information -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-person"></i> Personal Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.name.id_for_label }}" class="form-label">{{ form.name.label }} *</label>
+                                {{ form.name }}
+                                {% if form.name.errors %}
+                                <div class="invalid-feedback d-block">{{ form.name.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.father_name.id_for_label }}" class="form-label">{{ form.father_name.label }}</label>
+                                {{ form.father_name }}
+                                {% if form.father_name.errors %}
+                                <div class="invalid-feedback d-block">{{ form.father_name.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.designation.id_for_label }}" class="form-label">{{ form.designation.label }}</label>
+                                {{ form.designation }}
+                                {% if form.designation.errors %}
+                                <div class="invalid-feedback d-block">{{ form.designation.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.qualification.id_for_label }}" class="form-label">{{ form.qualification.label }}</label>
+                                {{ form.qualification }}
+                                {% if form.qualification.errors %}
+                                <div class="invalid-feedback d-block">{{ form.qualification.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.date_of_birth.id_for_label }}" class="form-label">{{ form.date_of_birth.label }}</label>
+                                {{ form.date_of_birth }}
+                                {% if form.date_of_birth.errors %}
+                                <div class="invalid-feedback d-block">{{ form.date_of_birth.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.joining_date.id_for_label }}" class="form-label">{{ form.joining_date.label }}</label>
+                                {{ form.joining_date }}
+                                {% if form.joining_date.errors %}
+                                <div class="invalid-feedback d-block">{{ form.joining_date.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pay Structure (KP CFMS Opening Balance Snapshot) -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-cash-coin"></i> Pay Structure (Opening Balance Snapshot)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <small><strong>Opening Balance Approach:</strong> Current financial data from employee's last pay slip is used as the baseline. Year-by-year relief announcements are applied as percentage increases on Running Basic.</small>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="{{ form.bps.id_for_label }}" class="form-label">{{ form.bps.label }} *</label>
+                                {{ form.bps }}
+                                <small class="form-text text-muted">BPS Grade (1-22) for HRA & Conveyance slabs</small>
+                                {% if form.bps.errors %}
+                                <div class="invalid-feedback d-block">{{ form.bps.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="{{ form.running_basic.id_for_label }}" class="form-label">{{ form.running_basic.label }} *</label>
+                                {{ form.running_basic }}
+                                <small class="form-text text-muted">From last pay slip. Basis for all ARA calculations.</small>
+                                {% if form.running_basic.errors %}
+                                <div class="invalid-feedback d-block">{{ form.running_basic.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="{{ form.city_category.id_for_label }}" class="form-label">{{ form.city_category.label }} *</label>
+                                {{ form.city_category }}
+                                <small class="form-text text-muted">For HRA Slab Selection</small>
+                                {% if form.city_category.errors %}
+                                <div class="invalid-feedback d-block">{{ form.city_category.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ARA Snapshot (From Last Pay Slip) -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0"><i class="bi bi-file-earmark"></i> ARA 2022 Snapshot (From Last Pay Slip)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-warning">
+                            <small><strong>Important:</strong> Enter the ARA 2022 amount from the employee's last pay slip. If blank, system will auto-calculate as 15% of minimum basic for this BPS (assumes new entrant). Auto-calculated records will be flagged for verification.</small>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.frozen_ara_2022_input.id_for_label }}" class="form-label">{{ form.frozen_ara_2022_input.label }}</label>
+                                {{ form.frozen_ara_2022_input }}
+                                {% if form.frozen_ara_2022_input.errors %}
+                                <div class="invalid-feedback d-block">{{ form.frozen_ara_2022_input.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- HRA Eligibility -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0"><i class="bi bi-house"></i> Housing Eligibility (HRA)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div class="form-check">
+                                    {{ form.is_govt_accommodation }}
+                                    <label class="form-check-label" for="{{ form.is_govt_accommodation.id_for_label }}">
+                                        {{ form.is_govt_accommodation.label }}
+                                    </label>
+                                    <small class="form-text text-muted d-block">If checked, HRA = Rs. 0</small>
+                                    {% if form.is_govt_accommodation.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.is_govt_accommodation.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div class="form-check">
+                                    {{ form.is_house_hiring }}
+                                    <label class="form-check-label" for="{{ form.is_house_hiring.id_for_label }}">
+                                        {{ form.is_house_hiring.label }}
+                                    </label>
+                                    <small class="form-text text-muted d-block">If checked, HRA = Rs. 0</small>
+                                    {% if form.is_house_hiring.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.is_house_hiring.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fixed Allowances -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="bi bi-wallet2"></i> Fixed Allowances & Adjustments</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.dra_amount.id_for_label }}" class="form-label">{{ form.dra_amount.label }}</label>
+                                {{ form.dra_amount }}
+                                <small class="form-text text-muted">DRA: Fixed amount (2017 scale, non-increasing)</small>
+                                {% if form.dra_amount.errors %}
+                                <div class="invalid-feedback d-block">{{ form.dra_amount.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.expected_salary_increase_percentage.id_for_label }}" class="form-label">{{ form.expected_salary_increase_percentage.label }}</label>
+                                {{ form.expected_salary_increase_percentage }}
+                                <small class="form-text text-muted">Expected increase for next year budget projection</small>
+                                {% if form.expected_salary_increase_percentage.errors %}
+                                <div class="invalid-feedback d-block">{{ form.expected_salary_increase_percentage.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Calculated Salary Breakdown -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0"><i class="bi bi-calculator-fill"></i> Salary Breakdown (Calculated)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label class="form-label">Running Basic</label>
+                                <div class="salary-preview" id="calc-basic">Rs. 0.00</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">HRA (Per BPS & City)</label>
+                                <div class="salary-preview" id="calc-hra">Rs. 0.00</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Conveyance (Per BPS)</label>
+                                <div class="salary-preview" id="calc-conv">Rs. 0.00</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Medical (Per BPS)</label>
+                                <div class="salary-preview" id="calc-med">Rs. 0.00</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">DRA (Fixed)</label>
+                                <div class="salary-preview" id="calc-dra">Rs. 0.00</div>
+                            </div>
+                        </div>
+
+                        <!-- ARA Breakdown (Year by Year) -->
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <hr>
+                                <h6><i class="bi bi-diagram-3"></i> ARA (Annual Relief & Adjustment) Breakdown</h6>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">ARA 2022 (Snapshot)</label>
+                                <div class="salary-preview" id="calc-ara-2022">Rs. 0.00</div>
+                                <small id="ara-2022-note" class="form-text text-danger"></small>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">ARA 2023 (35%/30%)</label>
+                                <div class="salary-preview" id="calc-ara-2023">Rs. 0.00</div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">ARA 2024 (25%/20%)</label>
+                                <div class="salary-preview" id="calc-ara-2024">Rs. 0.00</div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">ARA 2025 (10%)</label>
+                                <div class="salary-preview" id="calc-ara-2025">Rs. 0.00</div>
+                            </div>
+                            <div class="col-md-12 mt-2">
+                                <label class="form-label"><strong>Total ARA (2022-2025)</strong></label>
+                                <div class="salary-preview" id="calc-ara-total">Rs. 0.00</div>
+                            </div>
+                        </div>
+
+                        <!-- Monthly Gross -->
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <hr>
+                                <label class="form-label"><strong>Monthly Gross Salary</strong></label>
+                                <div class="salary-preview" id="calc-gross" style="font-size: 1.2em; color: #28a745;">Rs. 0.00</div>
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label"><strong>Annual Cost</strong></label>
+                                <div class="salary-preview" id="calc-annual" style="font-size: 1.2em; color: #007bff;">Rs. 0.00</div>
+                            </div>
+                        </div>
+
+                        <!-- Next Year Projection -->
+                        <div class="row mt-3">
+                            <div class="col-md-12">
+                                <hr>
+                                <h6><i class="bi bi-graph-up"></i> Next Year Budget Projection</h6>
+                                <small class="text-muted">Based on expected salary increase percentage</small>
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label"><strong>Projected Monthly Gross (with % increase)</strong></label>
+                                <div class="salary-preview" id="calc-projected-gross" style="font-size: 1.2em; color: #fd7e14;">Rs. 0.00</div>
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label"><strong>Projected Annual Cost</strong></label>
+                                <div class="salary-preview" id="calc-projected-annual" style="font-size: 1.2em; color: #6f42c1;">Rs. 0.00</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Remarks -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-body">
+                        <label for="{{ form.remarks.id_for_label }}" class="form-label">{{ form.remarks.label }}</label>
+                        {{ form.remarks }}
+                        {% if form.remarks.errors %}
+                        <div class="invalid-feedback d-block">{{ form.remarks.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                    <a href="{% url 'budgeting:employee_salary_list' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle"></i> Save Employee
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="col-lg-2">
+            <div class="card border-0 shadow-sm sticky-top" style="top: 80px;">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">KP CFMS Opening Balance Approach</h6>
+                </div>
+                <div class="card-body">
+                    <small class="d-block mb-3"><strong>Monthly Gross = </strong><br>Running Basic + HRA + Conveyance + Medical + Total ARA + DRA</small>
+                    
+                    <hr class="my-2">
+                    
+                    <small class="d-block mb-2"><strong>Running Basic:</strong><br>From last pay slip (snapshot)</small>
+                    
+                    <small class="d-block mb-2"><strong>HRA (House Rent):</strong><br>Fixed slab by BPS & City<br>Large Cities: Higher amount<br>Other Cities: Lower amount<br><em>= 0 if Govt Accommodation or House Hiring</em></small>
+                    
+                    <small class="d-block mb-2"><strong>Conveyance:</strong><br>Fixed per BPS grade (1500-7000)</small>
+                    
+                    <small class="d-block mb-2"><strong>Medical:</strong><br>Fixed per BPS grade (1500-5000)</small>
+                    
+                    <small class="d-block mb-2"><strong>ARA Breakdown:</strong></small>
+                    <small class="d-block mb-2"><em>ARA 2022:</em> From last pay slip (or auto-calc 15% of min basic)</small>
+                    <small class="d-block mb-2"><em>ARA 2023:</em> 35% (BPS 1-16) or 30% (BPS 17-22) of Running Basic</small>
+                    <small class="d-block mb-2"><em>ARA 2024:</em> 25% (BPS 1-16) or 20% (BPS 17-22) of Running Basic</small>
+                    <small class="d-block mb-2"><em>ARA 2025:</em> 10% (all BPS) of Running Basic</small>
+                    
+                    <small class="d-block mb-2"><strong>DRA (Disparity Reduction):</strong><br>Fixed amount from 2017 scale<br>(Non-increasing with increments)</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// HRA, Conveyance, Medical slabs per BPS
+const HRA_SLABS = {
+    'LARGE': {
+        1: 2000, 2: 2000, 3: 2000, 4: 2000, 5: 2000,
+        6: 3000, 7: 3000, 8: 3000, 9: 3000, 10: 3000,
+        11: 4500, 12: 4500, 13: 4500, 14: 4500, 15: 4500,
+        16: 6500, 17: 6500,
+        18: 9000, 19: 9000,
+        20: 12000, 21: 12000, 22: 12000
+    },
+    'OTHER': {
+        1: 1500, 2: 1500, 3: 1500, 4: 1500, 5: 1500,
+        6: 2000, 7: 2000, 8: 2000, 9: 2000, 10: 2000,
+        11: 3000, 12: 3000, 13: 3000, 14: 3000, 15: 3000,
+        16: 4500, 17: 4500,
+        18: 6000, 19: 6000,
+        20: 8000, 21: 8000, 22: 8000
+    }
+};
+
+const CONVEYANCE_SLABS = {
+    1: 1000, 2: 1000, 3: 1000, 4: 1000,
+    5: 1500, 6: 1500, 7: 1500, 8: 1500, 9: 1500, 10: 1500,
+    11: 3000, 12: 3000, 13: 3000, 14: 3000, 15: 3000,
+    16: 5000, 17: 5000,
+    18: 7000, 19: 7000, 20: 7000, 21: 7000, 22: 7000
+};
+
+const MEDICAL_SLABS = {
+    1: 1500, 2: 1500, 3: 1500, 4: 1500, 5: 1500, 6: 1500, 7: 1500, 8: 1500, 9: 1500, 10: 1500,
+    11: 1500, 12: 1500, 13: 1500, 14: 1500, 15: 1500,
+    16: 3000, 17: 3000,
+    18: 5000, 19: 5000, 20: 5000, 21: 5000, 22: 5000
+};
+
+function formatCurrency(amount) {
+    return 'Rs. ' + parseFloat(amount).toLocaleString('en-PK', {minimumFractionDigits: 2});
+}
+
+function calculateARA2023(runningBasic, bps) {
+    // ARA 2023: 35% (BPS 1-16) or 30% (BPS 17-22) of Running Basic
+    const percentage = (bps >= 1 && bps <= 16) ? 0.35 : 0.30;
+    return runningBasic * percentage;
+}
+
+function calculateARA2024(runningBasic, bps) {
+    // ARA 2024: 25% (BPS 1-16) or 20% (BPS 17-22) of Running Basic
+    const percentage = (bps >= 1 && bps <= 16) ? 0.25 : 0.20;
+    return runningBasic * percentage;
+}
+
+function calculateARA2025(runningBasic) {
+    // ARA 2025: 10% for all BPS of Running Basic
+    return runningBasic * 0.10;
+}
+
+function calculateSalary() {
+    const bps = parseInt($('#id_bps').val()) || 0;
+    const runningBasic = parseFloat($('#id_running_basic').val()) || 0;
+    const frozenARA2022 = parseFloat($('#id_frozen_ara_2022_input').val()) || 0;
+    const cityCategory = $('#id_city_category').val() || 'OTHER';
+    const isGovtAccom = $('#id_is_govt_accommodation').is(':checked');
+    const isHouseHiring = $('#id_is_house_hiring').is(':checked');
+    const draAmount = parseFloat($('#id_dra_amount').val()) || 0;
+    
+    // Calculate HRA (0 if govt accommodation or house hiring)
+    let hra = 0;
+    if (!isGovtAccom && !isHouseHiring && bps > 0) {
+        hra = HRA_SLABS[cityCategory][bps] || 0;
+    }
+    
+    // Calculate Conveyance
+    const conveyance = CONVEYANCE_SLABS[bps] || 0;
+    
+    // Calculate Medical
+    const medical = MEDICAL_SLABS[bps] || 0;
+    
+    // Calculate ARA components
+    const ara2022 = frozenARA2022; // Frozen from last pay slip
+    const ara2023 = calculateARA2023(runningBasic, bps);
+    const ara2024 = calculateARA2024(runningBasic, bps);
+    const ara2025 = calculateARA2025(runningBasic);
+    const araTotal = ara2022 + ara2023 + ara2024 + ara2025;
+    
+    // Show note if ARA 2022 is empty (would be auto-calculated as 15% of min basic)
+    const ara2022Note = frozenARA2022 === 0 ? '<span style="color: red;"><i class="bi bi-exclamation-circle"></i> Will auto-calculate as 15% of minimum basic (new entrant)</span>' : '';
+    
+    // Calculate Totals
+    const monthlyGross = runningBasic + hra + conveyance + medical + araTotal + draAmount;
+    const annualCost = monthlyGross * 12;
+    
+    // Calculate Projected Salary (with increase percentage)
+    const increasePercentage = parseFloat($('#id_expected_salary_increase_percentage').val()) || 0;
+    let projectedGross = monthlyGross;
+    let projectedAnnual = annualCost;
+    
+    if (increasePercentage > 0) {
+        // Projected basic increases by percentage
+        const multiplier = 1 + (increasePercentage / 100);
+        const projectedBasic = runningBasic * multiplier;
+        
+        // Recalculate ARA components with projected basic (ARA 2022 stays same)
+        const projectedARA2023 = calculateARA2023(projectedBasic, bps);
+        const projectedARA2024 = calculateARA2024(projectedBasic, bps);
+        const projectedARA2025 = calculateARA2025(projectedBasic);
+        const projectedARATotal = ara2022 + projectedARA2023 + projectedARA2024 + projectedARA2025;
+        
+        // Other components stay the same (they're fixed)
+        projectedGross = projectedBasic + hra + conveyance + medical + projectedARATotal + draAmount;
+        projectedAnnual = projectedGross * 12;
+    }
+    
+    // Update display
+    $('#calc-basic').text(formatCurrency(runningBasic));
+    $('#calc-hra').text(formatCurrency(hra));
+    $('#calc-conv').text(formatCurrency(conveyance));
+    $('#calc-med').text(formatCurrency(medical));
+    $('#calc-dra').text(formatCurrency(draAmount));
+    $('#calc-ara-2022').text(formatCurrency(ara2022));
+    $('#calc-ara-2023').text(formatCurrency(ara2023));
+    $('#calc-ara-2024').text(formatCurrency(ara2024));
+    $('#calc-ara-2025').text(formatCurrency(ara2025));
+    $('#calc-ara-total').text(formatCurrency(araTotal));
+    $('#ara-2022-note').html(ara2022Note);
+    $('#calc-gross').text(formatCurrency(monthlyGross));
+    $('#calc-annual').text(formatCurrency(annualCost));
+    $('#calc-projected-gross').text(formatCurrency(projectedGross));
+    $('#calc-projected-annual').text(formatCurrency(projectedAnnual));
+}
+
+// Bind calculation to all relevant inputs
+$(document).ready(function() {
+    $('#id_bps, #id_running_basic, #id_frozen_ara_2022_input, #id_city_category, #id_is_govt_accommodation, #id_is_house_hiring, #id_dra_amount, #id_expected_salary_increase_percentage').on('input change', calculateSalary);
+    calculateSalary(); // Initial calculation
+});
+</script>
+{% endblock %}

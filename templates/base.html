@@ -304,11 +304,14 @@ Description: Base template with Bootstrap 5 and navigation.
                         <i class="bi bi-calendar3 me-2"></i> Budget Planning
                     </button>
                 </h2>
-                <div id="collapseBudgetPlanning" class="accordion-collapse collapse {% if 'fiscal_year' in request.resolver_match.url_name or 'allocation' in request.resolver_match.url_name %}show{% endif %}" aria-labelledby="headingBudgetPlanning" data-bs-parent="#sidebarAccordion">
+                <div id="collapseBudgetPlanning" class="accordion-collapse collapse {% if 'fiscal_year' in request.resolver_match.url_name or 'allocation' in request.resolver_match.url_name or 'salary' in request.resolver_match.url_name or 'employee_salary' in request.resolver_match.url_name %}show{% endif %}" aria-labelledby="headingBudgetPlanning" data-bs-parent="#sidebarAccordion">
                     <div class="accordion-body p-2">
                         <ul class="nav flex-column">
                             <li class="nav-item"><a class="nav-link {% if 'fiscal_year' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:fiscal_year_list' %}"><i class="bi bi-calendar2 me-2"></i> Fiscal Years</a></li>
                             <li class="nav-item"><a class="nav-link {% if 'allocation' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:allocation_list' %}"><i class="bi bi-list-ul me-2"></i> Budget Allocations</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'salary_budget' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:salary_budget_dashboard' %}"><i class="bi bi-cash-stack me-2"></i> Salary Budget</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'salary_budget_distribute' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:salary_budget_distribute' %}"><i class="bi bi-distribute-vertical me-2"></i> Distribute Salary</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'employee_salary' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:employee_salary_list' %}"><i class="bi bi-people-fill me-2"></i> Employee Salaries</a></li>
                         </ul>
                     </div>
                 </div>

@@ -557,13 +557,15 @@ class BudgetSearchForm(forms.Form):
 class BPSSalaryScaleForm(forms.ModelForm):
     """
     Form for editing BPS Salary Scale grid row.
+    Reflects KP CFMS standards: Fixed HRA slabs (per city), ARA as percentage.
     """
     class Meta:
         model = BPSSalaryScale
         fields = [
             'basic_pay_min', 'annual_increment', 'basic_pay_max',
             'conveyance_allowance', 'medical_allowance',
-            'house_rent_percent', 'adhoc_relief_total_percent'
+            'house_rent_large_cities', 'house_rent_other_cities',
+            'adhoc_relief_percent'
         ]
         widgets = {
             'basic_pay_min': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '1'}),
@@ -571,8 +573,9 @@ class BPSSalaryScaleForm(forms.ModelForm):
             'basic_pay_max': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '1'}),
             'conveyance_allowance': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '1'}),
             'medical_allowance': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '1'}),
-            'house_rent_percent': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '0.01'}),
-            'adhoc_relief_total_percent': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '0.01'}),
+            'house_rent_large_cities': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '1'}),
+            'house_rent_other_cities': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '1'}),
+            'adhoc_relief_percent': forms.NumberInput(attrs={'class': 'form-control form-control-sm text-end', 'step': '0.01'}),
         }
 
 
