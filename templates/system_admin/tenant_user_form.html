@@ -74,6 +74,15 @@
                                 {% endif %}
                             </div>
                         </div>
+
+                        <div class="mb-3">
+                            <label for="id_department" class="form-label">Department / Wing</label>
+                            {{ form.department }}
+                            {% if form.department.errors %}
+                            <div class="invalid-feedback d-block">{{ form.department.errors.0 }}</div>
+                            {% endif %}
+                            <small class="text-muted">Select the administrative wing for this user (enables Smart Filter in Bill form).</small>
+                        </div>
                         
                         {% if not is_edit %}
                         <hr>

@@ -26,6 +26,7 @@ def bill_status_change_notification(sender, instance: Bill, created: bool, **kwa
     Triggers on:
     - SUBMITTED: Notify Finance Officers/Accountants
     - MARKED_FOR_AUDIT: Notify Audit Officers
+    - VERIFIED: Notify TMO/Approvers
     - AUDITED: Notify TMO/Approvers
     - APPROVED: Notify Cashier and Bill Creator
     - RETURNED: Notify Bill Creator
@@ -41,6 +42,9 @@ def bill_status_change_notification(sender, instance: Bill, created: bool, **kwa
     # Route notifications based on status
     if instance.status == BillStatus.SUBMITTED:
         _notify_on_submit(instance, bill_url)
+    
+    elif instance.status == BillStatus.VERIFIED:
+        _notify_on_verified(instance, bill_url)
     
     elif instance.status == BillStatus.MARKED_FOR_AUDIT:
         _notify_on_marked_for_audit(instance, bill_url)
@@ -71,15 +75,49 @@ def _notify_on_submit(bill: Bill, bill_url: str) -> None:
         roles__code__in=['FINANCE_OFFICER', 'ACCOUNTANT', 'AC', 'TOF']
     ).distinct()
     
+    # Handle legacy budget_head vs new bill lines
+    head_name = "Unknown Head"
+    if bill.budget_head:
+        head_name = bill.budget_head.name
+    elif bill.lines.exists():
+        head_name = bill.lines.first().budget_head.name
+        if bill.lines.count() > 1:
+            head_name += f" (+{bill.lines.count() - 1} others)"
+    
     for officer in finance_officers:
         NotificationService.send_notification(
             recipient=officer,
             title=f"Bill #{bill.bill_number} Pending Review",
-            message=f"Bill from {bill.payee.name} for {bill.budget_head.name} "
+            message=f"Bill from {bill.payee.name} for {head_name} "
                     f"(Amount: Rs. {bill.net_amount:,.2f}) requires your review.",
             link=bill_url,
             category=NotificationCategory.WORKFLOW,
             icon='bi-file-earmark-text'
+        )
+
+
+def _notify_on_verified(bill: Bill, bill_url: str) -> None:
+    """
+    Notify TMO/Approvers when bill is verified by Accountant.
+    
+    Args:
+        bill: The Bill instance that was verified.
+        bill_url: URL to the bill detail page.
+    """
+    # Get all TMOs in the organization
+    tmos = bill.organization.users.filter(
+        roles__code__in=['TMO']
+    ).distinct()
+    
+    for tmo in tmos:
+        NotificationService.send_notification(
+            recipient=tmo,
+            title=f"Bill #{bill.bill_number} Ready for Approval",
+            message=f"Bill from {bill.payee.name} has been verified by Accountant. "
+                    f"Amount: Rs. {bill.net_amount:,.2f}. Please approve.",
+            link=bill_url,
+            category=NotificationCategory.WORKFLOW,
+            icon='bi-check-circle'
         )
 
 

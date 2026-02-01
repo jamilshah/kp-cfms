@@ -38,6 +38,8 @@ Description: Bill Detail Template with Workflow Actions
                     <span class="badge bg-secondary badge-status">Draft</span>
                     {% elif bill.status == 'SUBMITTED' %}
                     <span class="badge bg-warning text-dark badge-status">Submitted</span>
+                    {% elif bill.status == 'VERIFIED' %}
+                    <span class="badge bg-info text-white badge-status">Verified</span>
                     {% elif bill.status == 'APPROVED' %}
                     <span class="badge bg-success badge-status">Approved</span>
                     {% elif bill.status == 'PAID' %}
@@ -271,10 +273,44 @@ Description: Bill Detail Template with Workflow Actions
                 </form>
                 {% endif %}
                 
+                {% if can_verify %}
+                <div class="card bg-light mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title">Verification (Accountant)</h6>
+                        <form method="post" action="{% url 'expenditure:bill_verify' bill.pk %}">
+                            {% csrf_token %}
+                            <p class="small text-muted mb-3">
+                                Verify bill details and budget availability before forwarding to TMO.
+                            </p>
+                            <button type="submit" class="btn btn-info text-white w-100 mb-2" 
+                                    onclick="return confirm('Verify and forward to TMO?');">
+                                <i class="bi bi-check-all"></i> Verify & Forward
+                            </button>
+                        </form>
+                        
+                        <!-- Rejection Option for Accountant -->
+                        <button class="btn btn-outline-danger w-100" type="button" data-bs-toggle="collapse" data-bs-target="#rejectCollapse">
+                            <i class="bi bi-x-circle"></i> Reject Bill
+                        </button>
+                        
+                        <div class="collapse mt-2" id="rejectCollapse">
+                            <form method="post" action="{% url 'expenditure:bill_approve' bill.pk %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="reject">
+                                <div class="mb-2">
+                                    <textarea name="rejection_reason" class="form-control" rows="2" placeholder="Reason for rejection..." required></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-danger btn-sm w-100">Confirm Rejection</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
                 {% if can_approve %}
                 <div class="card bg-light mb-3">
                     <div class="card-body">
-                        <h6 class="card-title">Approval Decision</h6>
+                        <h6 class="card-title">Final Approval (TMO)</h6>
                         <form method="post" action="{% url 'expenditure:bill_approve' bill.pk %}">
                             {% csrf_token %}
                             <div class="mb-3">

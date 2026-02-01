@@ -7,6 +7,7 @@ This replaces the target div and uses a script to update all budget head selects
         (function() {
             // Get all budget head selects in the formset
             const selects = document.querySelectorAll('select[name$="-budget_head"]');
+            console.log("DEBUG: Updating budget heads for " + selects.length + " selects");
             
             // The new options HTML
             const newOptions = `
@@ -47,7 +48,7 @@ This replaces the target div and uses a script to update all budget head selects
             });
             
             // Also update the hidden empty form template so new rows get the filtered options
-            const emptySelect = document.querySelector('#emptyFormTemplate select[name$="-budget_head"]');
+            const emptySelect = document.querySelector('#emptyRowTemplate select[name$="-budget_head"]');
             if (emptySelect) {
                 emptySelect.innerHTML = newOptions;
             }

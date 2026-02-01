@@ -253,6 +253,21 @@ class BankStatementForm(forms.ModelForm):
             self.fields['year'].queryset = FiscalYear.objects.filter(
                 organization=organization
             ).order_by('-start_date')
+            
+            # Set default to current fiscal year
+            from django.utils import timezone
+            today = timezone.now().date()
+            try:
+                current_fy = FiscalYear.objects.filter(
+                    organization=organization,
+                    start_date__lte=today,
+                    end_date__gte=today
+                ).first()
+                
+                if current_fy:
+                    self.initial['year'] = current_fy
+            except Exception:
+                pass
     
     def clean(self):
         """Validate uniqueness of bank_account + month + year."""
@@ -475,23 +490,24 @@ class VoucherForm(forms.ModelForm):
             pass
     
     def clean_date(self):
-        """Validate that date is not in a locked fiscal year."""
+        """Validate that date falls within a fiscal year."""
         date = self.cleaned_data['date']
         
-        # Check if fiscal year is locked
-        try:
-            fiscal_year = FiscalYear.objects.get(
-                start_date__lte=date,
-                end_date__gte=date
-            )
-            if hasattr(fiscal_year, 'is_locked') and fiscal_year.is_locked:
-                raise ValidationError(
-                    _('Cannot create voucher in a locked fiscal year.')
-                )
-        except FiscalYear.DoesNotExist:
+        # Check if fiscal year exists for the date
+        fiscal_year = FiscalYear.objects.filter(
+            organization=self.organization,
+            start_date__lte=date,
+            end_date__gte=date
+        ).first()
+        
+        if not fiscal_year:
             raise ValidationError(
-                _('No fiscal year found for the selected date.')
+                _('No fiscal year found for the selected date. Please select a date within an active fiscal year.')
             )
+        
+        # Note: We do NOT check is_locked here because:
+        # - Locked FY = Budget modifications blocked
+        # - Transactions (vouchers, bills, payments) should still be allowed
         
         return date
 

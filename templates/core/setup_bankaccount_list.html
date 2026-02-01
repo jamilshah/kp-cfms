@@ -45,8 +45,8 @@
                     </td>
                     <td>
                         {% if acc.gl_code %}
-                            <span class="badge bg-light text-dark border" title="{{ acc.gl_code.tma_description }}">
-                                {{ acc.gl_code.tma_sub_object }}
+                            <span class="badge bg-light text-dark border" title="{{ acc.gl_code.name }}">
+                                {{ acc.gl_code.code }}
                             </span>
                         {% else %}
                             <span class="text-muted fst-italic">Not Linked</span>

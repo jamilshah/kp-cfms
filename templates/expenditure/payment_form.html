@@ -163,29 +163,39 @@ Description: Payment Form Template for Cheque Issuance
 {% block extra_js %}
 {% if not bill %}
 <script>
-    // Load bill details when bill is selected
-    document.getElementById('{{ form.bill.id_for_label }}').addEventListener('change', function() {
-        const billId = this.value;
-        const detailsDiv = document.getElementById('bill_details');
-        
-        if (billId) {
-            fetch(`/expenditure/api/bills/${billId}/amount/`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        document.getElementById('payee_name').textContent = data.payee_name;
-                        document.getElementById('bill_description').textContent = data.description;
-                        document.getElementById('bill_net_amount').textContent = data.net_amount;
-                        document.getElementById('{{ form.amount.id_for_label }}').value = data.net_amount;
-                        detailsDiv.style.display = 'block';
+    $(document).ready(function() {
+        // Load bill details when bill is selected
+        $('#{{ form.bill.id_for_label }}').on('change', function() {
+            const billId = $(this).val();
+            const detailsDiv = $('#bill_details');
+            
+            if (billId) {
+                // Show loading state?
+                
+                $.ajax({
+                    url: `/expenditure/api/bills/${billId}/amount/`,
+                    type: 'GET',
+                    success: function(data) {
+                        if (data.success) {
+                            $('#payee_name').text(data.payee_name);
+                            $('#bill_description').text(data.description);
+                            $('#bill_net_amount').text(data.net_amount);
+                            
+                            // Set the payment amount field
+                            $('#{{ form.amount.id_for_label }}').val(data.net_amount);
+                            
+                            detailsDiv.slideDown();
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error fetching bill details:', error);
                     }
-                })
-                .catch(error => {
-                    console.error('Error fetching bill details:', error);
                 });
-        } else {
-            detailsDiv.style.display = 'none';
-        }
+            } else {
+                detailsDiv.slideUp();
+                $('#{{ form.amount.id_for_label }}').val('');
+            }
+        });
     });
 </script>
 {% endif %}

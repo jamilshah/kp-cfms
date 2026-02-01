@@ -52,6 +52,14 @@ Description: Expenditure Dashboard Template
         <div class="card stat-card warning">
             <div class="card-body">
                 <div class="stat-value text-warning">{{ submitted_bills|default:0 }}</div>
+                <div class="stat-label">Pending Verification</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card info">
+            <div class="card-body">
+                <div class="stat-value text-info">{{ verified_bills|default:0 }}</div>
                 <div class="stat-label">Pending Approval</div>
             </div>
         </div>
@@ -64,14 +72,6 @@ Description: Expenditure Dashboard Template
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card stat-card">
-            <div class="card-body">
-                <div class="stat-value text-primary">{{ paid_bills|default:0 }}</div>
-                <div class="stat-label">Paid Bills</div>
-            </div>
-        </div>
-    </div>
 </div>
 
 <div class="row">
@@ -79,8 +79,8 @@ Description: Expenditure Dashboard Template
     <div class="col-md-6">
         <div class="card mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-hourglass-split"></i> Pending Approvals</span>
-                <a href="{% url 'expenditure:bill_list' %}?status=SUBMITTED" class="btn btn-sm btn-outline-primary">
+                <span><i class="bi bi-hourglass-split"></i> Workflow Queue</span>
+                <a href="{% url 'expenditure:bill_list' %}?status=PENDING" class="btn btn-sm btn-outline-primary">
                     View All
                 </a>
             </div>
@@ -92,6 +92,7 @@ Description: Expenditure Dashboard Template
                             <tr>
                                 <th>Bill #</th>
                                 <th>Payee</th>
+                                <th>Status</th>
                                 <th>Amount</th>
                                 <th>Action</th>
                             </tr>
@@ -101,6 +102,13 @@ Description: Expenditure Dashboard Template
                             <tr>
                                 <td>{{ bill.id }}</td>
                                 <td>{{ bill.payee.name|truncatechars:20 }}</td>
+                                <td>
+                                    {% if bill.status == 'SUBMITTED' %}
+                                    <span class="badge bg-warning text-dark">Need Verification</span>
+                                    {% elif bill.status == 'VERIFIED' %}
+                                    <span class="badge bg-info text-white">Need Approval</span>
+                                    {% endif %}
+                                </td>
                                 <td>Rs. {{ bill.gross_amount|currency }}</td>
                                 <td>
                                     <a href="{% url 'expenditure:bill_detail' bill.pk %}" 

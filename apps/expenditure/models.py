@@ -39,6 +39,7 @@ class BillStatus(models.TextChoices):
     """
     DRAFT = 'DRAFT', _('Draft')
     SUBMITTED = 'SUBMITTED', _('Submitted for Approval')
+    VERIFIED = 'VERIFIED', _('Verified by Accountant')
     MARKED_FOR_AUDIT = 'MARKED_FOR_AUDIT', _('Marked for Audit')
     AUDITED = 'AUDITED', _('Audited')
     APPROVED = 'APPROVED', _('Approved')
@@ -356,6 +357,29 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         self.submitted_at = timezone.now()
         self.submitted_by = user
         self.save(update_fields=['status', 'submitted_at', 'submitted_by', 'updated_at'])
+
+    @transaction.atomic
+    def verify(self, user: 'CustomUser') -> None:
+        """
+        Verify the bill (Accountant Step).
+        
+        Args:
+            user: The accountant verifying the bill.
+            
+        Raises:
+            WorkflowTransitionException: If bill is not in SUBMITTED status.
+        """
+        if self.status != BillStatus.SUBMITTED:
+            raise WorkflowTransitionException(
+                f"Cannot verify bill. Current status is '{self.get_status_display()}'. "
+                "Only SUBMITTED bills can be verified."
+            )
+        
+        previous_status = self.status
+        self.status = BillStatus.VERIFIED
+        # We can store verified_by in updated_by for now (or add a dedicated field if needed)
+        self.updated_by = user
+        self.save(update_fields=['status', 'updated_at', 'updated_by'])
     
     @transaction.atomic
     def approve(self, user: 'CustomUser') -> None:
@@ -376,17 +400,17 @@ class Bill(AuditLogMixin, TenantAwareMixin):
             user: The user approving the bill.
             
         Raises:
-            WorkflowTransitionException: If bill is not in SUBMITTED status.
+            WorkflowTransitionException: If bill is not in VERIFIED status.
             BudgetExceededException: If budget is insufficient.
         """
         from apps.finance.models import Voucher, VoucherType, JournalEntry, BudgetHead
         from apps.budgeting.models import BudgetAllocation
         
-        # Validate workflow
-        if self.status != BillStatus.SUBMITTED:
+        # Validate workflow: Must be VERIFIED first
+        if self.status != BillStatus.VERIFIED:
             raise WorkflowTransitionException(
                 f"Cannot approve bill. Current status is '{self.get_status_display()}'. "
-                "Only SUBMITTED bills can be approved."
+                "Only VERIFIED bills can be approved. Please verify first."
             )
         
         # Verify lines exist

@@ -612,7 +612,7 @@ class PAOWorkspaceView(LoginRequiredMixin, TemplateView):
         approval_queue = Bill.objects.filter(
             organization=organization,
             fiscal_year=fiscal_year,
-            status=BillStatus.SUBMITTED  # Will add AUDITED status
+            status=BillStatus.VERIFIED 
         ).select_related('payee', 'budget_head', 'submitted_by').order_by('-bill_date')[:10]
         
         context['approval_queue'] = approval_queue

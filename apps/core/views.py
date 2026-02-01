@@ -21,6 +21,7 @@ from django.template.loader import render_to_string
 from apps.users.permissions import AdminRequiredMixin
 from apps.core.models import BankAccount, Notification, NotificationCategory
 from apps.core.services import NotificationService
+from apps.finance.models import BudgetHead, AccountType
 
 
 # =====================================================================
@@ -178,6 +179,12 @@ class BankAccountCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
     
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
+
+        # Filter GL Codes to Assets only (Bank accounts are assets)
+        if 'gl_code' in form.fields:
+            form.fields['gl_code'].queryset = BudgetHead.objects.filter(
+                global_head__account_type=AccountType.ASSET
+            ).select_related('global_head', 'function', 'fund')
         
         # Restrict Organization for TMA users
         if self.request.user.organization:
@@ -211,6 +218,12 @@ class BankAccountUpdateView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
     
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
+
+        # Filter GL Codes to Assets only (Bank accounts are assets)
+        if 'gl_code' in form.fields:
+            form.fields['gl_code'].queryset = BudgetHead.objects.filter(
+                global_head__account_type=AccountType.ASSET
+            ).select_related('global_head', 'function', 'fund')
         
         # Restrict Organization for TMA users
         if self.request.user.organization:

@@ -13,7 +13,7 @@ from apps.expenditure.views import (
     ExpenditureDashboardView,
     PayeeListView, PayeeCreateView, PayeeUpdateView,
     BillListView, BillCreateView, BillDetailView,
-    BillSubmitView, BillApproveView,
+    BillSubmitView, BillVerifyView, BillApproveView,
     PaymentCreateView, PaymentListView,
     BillAmountAPIView, load_budget_heads, load_functions
 )
@@ -34,6 +34,7 @@ urlpatterns = [
     path('bills/create/', BillCreateView.as_view(), name='bill_create'),
     path('bills/<int:pk>/', BillDetailView.as_view(), name='bill_detail'),
     path('bills/<int:pk>/submit/', BillSubmitView.as_view(), name='bill_submit'),
+    path('bills/<int:pk>/verify/', BillVerifyView.as_view(), name='bill_verify'),
     path('bills/<int:pk>/approve/', BillApproveView.as_view(), name='bill_approve'),
     
     # Payment Management

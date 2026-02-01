@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% load custom_filters %}
+
+{% block title %}SAE Detail - {{ sae.sae_number }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>
+        <i class="bi bi-file-earmark-lock"></i> 
+        Schedule of Authorized Expenditure ({{ sae.fiscal_year.year_name }})
+    </h2>
+    <div>
+        {% if sae.pdf_file %}
+            <a href="{{ sae.pdf_file.url }}" class="btn btn-danger" target="_blank">
+                <i class="bi bi-file-pdf"></i> Download PDF
+            </a>
+        {% else %}
+            <button class="btn btn-secondary" disabled>No PDF Available</button>
+        {% endif %}
+        <a href="{% url 'budgeting:sae_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to List
+        </a>
+    </div>
+</div>
+
+<!-- Summary Card -->
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Budget Summary: {{ sae.sae_number }}</h5>
+    </div>
+    <div class="card-body">
+        <div class="row text-center">
+            <div class="col-md-3">
+                <h6 class="text-muted">Total Receipts</h6>
+                <h3 class="text-success">Rs {{ sae.total_receipts|currency }}</h3>
+            </div>
+            <div class="col-md-3">
+                <h6 class="text-muted">Total Expenditure</h6>
+                <h3 class="text-danger">Rs {{ sae.total_expenditure|currency }}</h3>
+            </div>
+            <div class="col-md-3">
+                <h6 class="text-muted">Contingency Reserve</h6>
+                <h3>Rs {{ sae.contingency_reserve|currency }}</h3>
+            </div>
+            <div class="col-md-3">
+                <h6 class="text-muted">Surplus/Deficit</h6>
+                {% with diff=sae.get_surplus_deficit %}
+                    <h3 class="{% if diff >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        Rs {{ diff|currency }}
+                    </h3>
+                {% endwith %}
+            </div>
+        </div>
+        <hr>
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <strong>Approved By:</strong> {{ sae.approved_by.get_full_name }}
+            </div>
+            <div class="col-md-6 text-end">
+                <strong>Approval Date:</strong> {{ sae.approval_date|date:"F d, Y h:i A" }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Expenditure Detail -->
+<ul class="nav nav-tabs mb-3" id="saeTabs" role="tablist">
+    <li class="nav-item">
+        <button class="nav-link active" id="exp-tab" data-bs-toggle="tab" data-bs-target="#exp" type="button">
+            Authorized Expenditure
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" id="receipt-tab" data-bs-toggle="tab" data-bs-target="#receipt" type="button">
+            Estimated Receipts
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link" id="est-tab" data-bs-toggle="tab" data-bs-target="#est" type="button">
+            Establishment Schedule
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="saeTabsContent">
+    <!-- Expenditure Tab -->
+    <div class="tab-pane fade show active" id="exp" role="tabpanel">
+        <div class="card">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Code</th>
+                            <th>Head Description</th>
+                            <th class="text-end">Authorized Allocation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for alloc in expenditure_allocations %}
+                        <tr>
+                            <td><code>{{ alloc.budget_head.code }}</code></td>
+                            <td>{{ alloc.budget_head.name }}</td>
+                            <td class="text-end">Rs {{ alloc.original_allocation|currency }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-center text-muted">No expenditure allocations.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <th colspan="2" class="text-end">Total Authorized Expenditure:</th>
+                            <th class="text-end">Rs {{ sae.total_expenditure|currency }}</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receipts Tab -->
+    <div class="tab-pane fade" id="receipt" role="tabpanel">
+        <div class="card">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Code</th>
+                            <th>Head Description</th>
+                            <th class="text-end">Estimated Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for alloc in receipt_allocations %}
+                        <tr>
+                            <td><code>{{ alloc.budget_head.code }}</code></td>
+                            <td>{{ alloc.budget_head.name }}</td>
+                            <td class="text-end">Rs {{ alloc.original_allocation|currency }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-center text-muted">No receipt allocations.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <th colspan="2" class="text-end">Total Estimated Receipts:</th>
+                            <th class="text-end">Rs {{ sae.total_receipts|currency }}</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Establishment Tab -->
+    <div class="tab-pane fade" id="est" role="tabpanel">
+        <div class="card">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Department</th>
+                            <th>Designation</th>
+                            <th>BPS</th>
+                            <th class="text-center">Sanctioned</th>
+                            <th class="text-end">Annual Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for est in establishment %}
+                        <tr>
+                            <td>{{ est.department }}</td>
+                            <td>{{ est.designation_name }}</td>
+                            <td>{{ est.bps_scale }}</td>
+                            <td class="text-center">{{ est.sanctioned_posts }}</td>
+                            <td class="text-end">Rs {{ est.total_annual_cost|currency }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-center text-muted">No establishment records.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

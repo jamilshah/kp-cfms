@@ -58,9 +58,10 @@ class ExpenditureDashboardView(LoginRequiredMixin, TemplateView):
                 'total_bills': bills_qs.count(),
                 'draft_bills': bills_qs.filter(status=BillStatus.DRAFT).count(),
                 'submitted_bills': bills_qs.filter(status=BillStatus.SUBMITTED).count(),
+                'verified_bills': bills_qs.filter(status=BillStatus.VERIFIED).count(),
                 'approved_bills': bills_qs.filter(status=BillStatus.APPROVED).count(),
                 'paid_bills': bills_qs.filter(status=BillStatus.PAID).count(),
-                'pending_approval': bills_qs.filter(status=BillStatus.SUBMITTED),
+                'pending_approval': bills_qs.filter(status__in=[BillStatus.SUBMITTED, BillStatus.VERIFIED]),
                 'recent_bills': bills_qs.order_by('-created_at')[:5],
             })
         
@@ -202,12 +203,7 @@ class BillCreateView(LoginRequiredMixin, CreateView):
                 )
                 return redirect('expenditure:dashboard')
             
-            if active_fy.is_locked:
-                messages.error(
-                    request,
-                    _('The current fiscal year is locked. No new bills can be created.')
-                )
-                return redirect('expenditure:dashboard')
+
         
         return super().dispatch(request, *args, **kwargs)
     
@@ -215,6 +211,7 @@ class BillCreateView(LoginRequiredMixin, CreateView):
         kwargs = super().get_form_kwargs()
         user = self.request.user
         kwargs['organization'] = getattr(user, 'organization', None)
+        kwargs['user'] = user
         return kwargs
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
@@ -224,10 +221,20 @@ class BillCreateView(LoginRequiredMixin, CreateView):
         if org:
             context['current_fiscal_year'] = FiscalYear.get_current_operating_year(org)
             
+        # Get fiscal year for formset
+        fy = FiscalYear.get_current_operating_year(org) if org else None
+            
         if self.request.POST:
-            context['lines'] = BillLineFormSet(self.request.POST)
+            context['lines'] = BillLineFormSet(
+                self.request.POST,
+                organization=org,
+                fiscal_year=fy
+            )
         else:
-            context['lines'] = BillLineFormSet()
+            context['lines'] = BillLineFormSet(
+                organization=org,
+                fiscal_year=fy
+            )
         return context
     
     @transaction.atomic
@@ -317,11 +324,19 @@ class BillDetailView(LoginRequiredMixin, DetailView):
         
         # Check user permissions for workflow actions
         context['can_submit'] = bill.status == BillStatus.DRAFT
-        context['can_approve'] = (
+        
+        # Accountant can verify submitted bills
+        context['can_verify'] = (
             bill.status == BillStatus.SUBMITTED and
-            hasattr(user, 'role') and
-            user.role in ['TMO', 'TOF', 'AC', 'ADM']
+            (user.is_checker() or user.is_superuser)
         )
+        
+        # TMO can approve only verified bills
+        context['can_approve'] = (
+            bill.status == BillStatus.VERIFIED and
+            (user.is_approver() or user.is_superuser)
+        )
+        
         context['can_pay'] = bill.status == BillStatus.APPROVED
         
         # Get budget allocation info for each line
@@ -369,6 +384,28 @@ class BillSubmitView(LoginRequiredMixin, View):
         return redirect('expenditure:bill_detail', pk=pk)
 
 
+class BillVerifyView(LoginRequiredMixin, View):
+    """View to verify a bill (Accountant step)."""
+    
+    def post(self, request: HttpRequest, pk: int) -> HttpResponse:
+        user = request.user
+        org = getattr(user, 'organization', None)
+        
+        bill = get_object_or_404(Bill, pk=pk, organization=org)
+        
+        if not (user.is_checker() or user.is_superuser):
+            messages.error(request, _('Permission denied. Only Accountants can verify bills.'))
+            return redirect('expenditure:bill_detail', pk=pk)
+            
+        try:
+            bill.verify(user)
+            messages.success(request, _('Bill verified successfully. Forwarded to TMO for approval.'))
+        except WorkflowTransitionException as e:
+            messages.error(request, str(e))
+        
+        return redirect('expenditure:bill_detail', pk=pk)
+
+
 class BillApproveView(LoginRequiredMixin, View):
     """View to approve or reject a bill."""
     
@@ -377,6 +414,12 @@ class BillApproveView(LoginRequiredMixin, View):
         org = getattr(user, 'organization', None)
         
         bill = get_object_or_404(Bill, pk=pk, organization=org)
+        
+        # Check permission (TMO)
+        if not (user.is_approver() or user.is_superuser):
+             messages.error(request, _('Permission denied. Only TMO can approve bills.'))
+             return redirect('expenditure:bill_detail', pk=pk)
+        
         form = BillApprovalForm(request.POST)
         
         if form.is_valid():

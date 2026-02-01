@@ -969,19 +969,25 @@ class VoucherCreateView(LoginRequiredMixin, CreateView):
             
             # Determine fiscal year from date
             try:
-                fiscal_year = FiscalYear.objects.get(
+                fiscal_year = FiscalYear.objects.filter(
+                    organization=org,
                     start_date__lte=form.instance.date,
                     end_date__gte=form.instance.date
-                )
+                ).first()
+                
+                if not fiscal_year:
+                    messages.error(self.request, _('No fiscal year found for the selected date.'))
+                    return self.form_invalid(form)
+                    
                 form.instance.fiscal_year = fiscal_year
-            except FiscalYear.DoesNotExist:
-                messages.error(self.request, _('No fiscal year found for the selected date.'))
+            except Exception as e:
+                messages.error(self.request, _('Error determining fiscal year: ') + str(e))
                 return self.form_invalid(form)
             
             # Generate voucher number based on voucher type
             # Format: JV-YYYY-NNN or CV-YYYY-NNN
             voucher_type = form.instance.voucher_type
-            year = fiscal_year.year
+            year = fiscal_year.start_date.year
             last_voucher = Voucher.objects.filter(
                 organization=org,
                 fiscal_year=fiscal_year,
@@ -1146,10 +1152,40 @@ def load_budget_heads_options(request):
     budget_heads = BudgetHead.objects.filter(
         posting_allowed=True,
         is_active=True
-    ).select_related('global_head', 'function').order_by('global_head__name', 'global_head__code')
+    ).select_related('global_head', 'function').order_by('global_head__code')
     
     if account_type:
         budget_heads = budget_heads.filter(global_head__account_type=account_type)
+    
+    # Filter by allocation (Scenario 1: only show heads with budget)
+    try:
+        user = request.user
+        org = getattr(user, 'organization', None)
+        if org:
+            from django.apps import apps
+            from django.db.models import Exists, OuterRef
+            
+            FiscalYear = apps.get_model('budgeting', 'FiscalYear')
+            BudgetAllocation = apps.get_model('budgeting', 'BudgetAllocation')
+            
+            # Get current operating fiscal year
+            fy = FiscalYear.get_current_operating_year(org)
+            if fy:
+                has_allocation = BudgetAllocation.objects.filter(
+                    organization=org,
+                    fiscal_year=fy,
+                    budget_head=OuterRef('pk')
+                )
+                
+                budget_heads = budget_heads.annotate(
+                    has_allocation=Exists(has_allocation)
+                ).filter(has_allocation=True)
+    except Exception as e:
+        print(f"ERROR in load_budget_heads_options: {e}")
+        # Fallback: don't filter by allocation if error occurs, to avoid 500
+        pass
+    
+    print(f"DEBUG: load_budget_heads_options params - Dept: {department_id}, Func: {function_id}, Type: {account_type}")
     
     if function_id:
         budget_heads = budget_heads.filter(function_id=function_id)
@@ -1160,4 +1196,5 @@ def load_budget_heads_options(request):
         except (ValueError, TypeError, Department.DoesNotExist):
             pass
             
+    print(f"DEBUG: Returning {budget_heads.count()} budget heads")
     return render(request, 'finance/partials/budget_head_formset_options.html', {'budget_heads': budget_heads})

@@ -196,6 +196,8 @@ class TenantAdminForm(forms.Form):
         return user
 
 
+from apps.budgeting.models import Department
+
 class UserForm(forms.ModelForm):
     """Form for creating/editing users within a TMA."""
     
@@ -217,6 +219,14 @@ class UserForm(forms.ModelForm):
         })
     )
     
+    department = forms.ChoiceField(
+        required=False,
+        widget=forms.Select(attrs={
+            'class': 'form-select'
+        }),
+        help_text='Select the administrative wing (Department) for this user.'
+    )
+    
     roles = forms.ModelMultipleChoiceField(
         queryset=Role.objects.all(),
         required=True,
@@ -230,7 +240,7 @@ class UserForm(forms.ModelForm):
     class Meta:
         model = CustomUser
         fields = [
-            'cnic', 'email', 'first_name', 'last_name', 'is_active'
+            'cnic', 'email', 'first_name', 'last_name', 'department', 'is_active'
         ]
         widgets = {
             'cnic': forms.TextInput(attrs={
@@ -254,6 +264,12 @@ class UserForm(forms.ModelForm):
     def __init__(self, *args, is_edit=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.is_edit = is_edit
+        
+        # Populate department choices
+        dept_choices = [('', '---------')] + [
+            (d.name, str(d)) for d in Department.objects.filter(is_active=True).order_by('name')
+        ]
+        self.fields['department'].choices = dept_choices
         
         if not is_edit:
             # Password required for new users

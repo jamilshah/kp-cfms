@@ -141,15 +141,29 @@ class BillForm(forms.ModelForm):
         })
     )
 
-    def __init__(self, *args, organization=None, **kwargs) -> None:
+    def __init__(self, *args, organization=None, user=None, **kwargs) -> None:
         """
         Initialize the form with organization-scoped querysets.
         
         Args:
             organization: The organization to filter related objects.
+            user: The logged-in user for default department selection.
         """
         super().__init__(*args, **kwargs)
         self._current_fiscal_year = None
+        
+        # Auto-select department based on user profile
+        if not self.initial.get('department') and user and getattr(user, 'department', None):
+            try:
+                # Find department matching the user's wing name
+                dept_match = Department.objects.filter(
+                    name__icontains=user.department, 
+                    is_active=True
+                ).first()
+                if dept_match:
+                    self.initial['department'] = dept_match.id
+            except Exception:
+                pass
         
         # Filter budget heads to expenditure accounts only
         # Filter budget heads removed from parent form
@@ -242,20 +256,92 @@ class BillLineForm(forms.ModelForm):
             'amount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, organization=None, fiscal_year=None, **kwargs):
         super().__init__(*args, **kwargs)
-        # Filter budget heads to expenditure accounts only, allowing A01 (salary)
-        self.fields['budget_head'].queryset = BudgetHead.objects.filter(
+        
+        # Base queryset: Expenditure heads only
+        base_queryset = BudgetHead.objects.filter(
             global_head__account_type=AccountType.EXPENDITURE,
             posting_allowed=True,
             is_active=True
-        ).select_related('global_head', 'function').order_by('global_head__name', 'global_head__code')
+        ).select_related('global_head', 'function', 'fund')
+        
+        # If organization and fiscal_year provided, filter to only allocated heads
+        if organization and fiscal_year:
+            # Get budget heads that have allocations using a subquery
+            from django.db.models import Exists, OuterRef
+            
+            has_allocation = BudgetAllocation.objects.filter(
+                organization=organization,
+                fiscal_year=fiscal_year,
+                budget_head=OuterRef('pk')
+            )
+            
+            base_queryset = base_queryset.annotate(
+                has_allocation=Exists(has_allocation)
+            ).filter(has_allocation=True)
+        
+        self.fields['budget_head'].queryset = base_queryset.order_by('global_head__code')
+        self._organization = organization
+        self._fiscal_year = fiscal_year
+    
+    def clean_budget_head(self):
+        """Validate that the selected budget head has available funds."""
+        budget_head = self.cleaned_data.get('budget_head')
+        
+        if not budget_head:
+            return budget_head
+        
+        # If we have organization and fiscal year context, validate allocation
+        if self._organization and self._fiscal_year:
+            try:
+                allocation = BudgetAllocation.objects.get(
+                    organization=self._organization,
+                    fiscal_year=self._fiscal_year,
+                    budget_head=budget_head
+                )
+                
+                # Check if budget is exhausted
+                available = allocation.get_available_budget()
+                if available <= 0:
+                    raise forms.ValidationError(
+                        f"Budget exhausted for {budget_head.name} ({budget_head.code}). "
+                        f"Available: Rs 0.00. Please request re-appropriation from TO Finance."
+                    )
+                    
+            except BudgetAllocation.DoesNotExist:
+                # This should not happen due to queryset filtering, but defensive check
+                raise forms.ValidationError(
+                    f"No budget allocation found for {budget_head.name} ({budget_head.code}) "
+                    f"in fiscal year {self._fiscal_year.year_name}."
+                )
+        
+        return budget_head
+
+
+
+
+class BillLineFormSetBase(forms.BaseInlineFormSet):
+    """Custom formset to pass organization and fiscal_year to each form."""
+    
+    def __init__(self, *args, organization=None, fiscal_year=None, **kwargs):
+        self.organization = organization
+        self.fiscal_year = fiscal_year
+        super().__init__(*args, **kwargs)
+    
+    def get_form_kwargs(self, index):
+        """Pass organization and fiscal_year to each form instance."""
+        kwargs = super().get_form_kwargs(index)
+        kwargs['organization'] = self.organization
+        kwargs['fiscal_year'] = self.fiscal_year
+        return kwargs
 
 
 BillLineFormSet = inlineformset_factory(
     Bill,
     BillLine,
     form=BillLineForm,
+    formset=BillLineFormSetBase,
     extra=1,
     can_delete=True
 )
@@ -341,6 +427,7 @@ class PaymentForm(forms.ModelForm):
         """
         super().__init__(*args, **kwargs)
         self.organization = organization
+        self._bank_balances = {}  # Cache balances for validation
         
         if organization:
             # Filter bills to approved ones for this organization
@@ -350,10 +437,24 @@ class PaymentForm(forms.ModelForm):
             ).select_related('payee')
             
             # Filter bank accounts to active ones for this organization
-            self.fields['bank_account'].queryset = BankAccount.objects.filter(
+            bank_accounts = BankAccount.objects.filter(
                 organization=organization,
                 is_active=True
             )
+            
+            self.fields['bank_account'].queryset = bank_accounts
+            
+            # Cache balances and customize labels
+            for account in bank_accounts:
+                balance = account.get_balance()
+                self._bank_balances[account.id] = balance
+            
+            # Override label_from_instance to show balance
+            def label_with_balance(obj):
+                balance = self._bank_balances.get(obj.id, Decimal('0.00'))
+                return f"{obj.bank_name} - {obj.masked_account_number} (Balance: Rs. {balance:,.2f})"
+            
+            self.fields['bank_account'].label_from_instance = label_with_balance
         
         # If a bill is pre-selected, set the amount
         if 'initial' in kwargs and 'bill' in kwargs['initial']:
@@ -365,6 +466,7 @@ class PaymentForm(forms.ModelForm):
         cleaned_data = super().clean()
         bill = cleaned_data.get('bill')
         amount = cleaned_data.get('amount')
+        bank_account = cleaned_data.get('bank_account')
         
         if bill:
             if bill.status != BillStatus.APPROVED:
@@ -383,6 +485,22 @@ class PaymentForm(forms.ModelForm):
                 raise forms.ValidationError({
                     'amount': _(
                         f'Payment amount must equal bill net amount (Rs. {bill.net_amount}).'
+                    )
+                })
+        
+        # Validate bank account has sufficient balance
+        if bank_account and amount:
+            balance = self._bank_balances.get(bank_account.id)
+            if balance is None:
+                # Recalculate if not cached
+                balance = bank_account.get_balance()
+            
+            if balance < amount:
+                raise forms.ValidationError({
+                    'bank_account': _(
+                        f'Insufficient funds. Available balance: Rs. {balance:,.2f}. '
+                        f'Required: Rs. {amount:,.2f}. '
+                        f'Please deposit funds or select a different account.'
                     )
                 })
         

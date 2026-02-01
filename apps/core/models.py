@@ -8,6 +8,7 @@ Description: Geographic and organizational models for TMAs including
              Division, District, Tehsil (Geography) and Organization (Tenant).
 -------------------------------------------------------------------------
 """
+from decimal import Decimal
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -316,6 +317,29 @@ class BankAccount(AuditLogMixin, StatusMixin):
         if len(self.account_number) > 4:
             return f"****{self.account_number[-4:]}"
         return self.account_number
+
+    def get_balance(self) -> Decimal:
+        """
+        Calculate current balance from General Ledger.
+        
+        Balance = Total Debits (Deposits) - Total Credits (Payments)
+        """
+        from django.db.models import Sum
+        from apps.finance.models import JournalEntry
+        
+        result = JournalEntry.objects.filter(
+            budget_head=self.gl_code,
+            voucher__organization=self.organization,
+            voucher__is_posted=True
+        ).aggregate(
+            total_debit=Sum('debit'),
+            total_credit=Sum('credit')
+        )
+        
+        debits = result['total_debit'] or Decimal('0.00')
+        credits = result['total_credit'] or Decimal('0.00')
+        
+        return debits - credits
 
 
 # Backward compatibility alias - DEPRECATED, use Organization instead
