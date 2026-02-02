@@ -50,11 +50,12 @@ class MinorHeadAdmin(admin.ModelAdmin):
 class GlobalHeadAdmin(admin.ModelAdmin):
     """Admin configuration for GlobalHead model (Master Data)."""
     
-    list_display = ('code', 'name', 'minor', 'account_type', 'system_code')
-    list_filter = ('account_type', 'system_code', 'minor__major')
+    list_display = ('code', 'name', 'minor', 'account_type', 'scope', 'get_dept_display', 'system_code')
+    list_filter = ('account_type', 'scope', 'system_code', 'minor__major', 'applicable_departments')
     search_fields = ('code', 'name')
     ordering = ('code',)
-    readonly_fields = ('is_officer_related', 'major_code', 'major_name')
+    readonly_fields = ('is_officer_related', 'major_code', 'major_name', 'get_applicable_departments_display')
+    filter_horizontal = ('applicable_departments',)
     
     fieldsets = (
         (_('Identification'), {
@@ -63,11 +64,29 @@ class GlobalHeadAdmin(admin.ModelAdmin):
         (_('Classification'), {
             'fields': ('account_type', 'system_code')
         }),
+        (_('Department Access Control'), {
+            'fields': ('scope', 'applicable_departments'),
+            'description': _('Control which departments can see this head. Universal heads appear for all departments.')
+        }),
         (_('Hierarchy (Read-Only)'), {
-            'fields': ('major_code', 'major_name', 'is_officer_related'),
+            'fields': ('major_code', 'major_name', 'is_officer_related', 'get_applicable_departments_display'),
             'classes': ('collapse',)
         }),
     )
+    
+    def get_dept_display(self, obj):
+        """Display applicable departments in list view."""
+        if obj.scope == 'UNIVERSAL':
+            return 'All'
+        count = obj.applicable_departments.count()
+        if count == 0:
+            return '-'
+        elif count <= 2:
+            return ', '.join(obj.applicable_departments.values_list('code', flat=True))
+        else:
+            return f'{count} depts'
+    get_dept_display.short_description = 'Departments'
+
 
 
 @admin.register(BudgetHead)

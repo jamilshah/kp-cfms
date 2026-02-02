@@ -228,6 +228,25 @@ class GlobalHead(TimeStampedMixin):
         help_text=_('System code for automated workflows (Suspense, Clearing, etc.).')
     )
     
+    # Department-based access control
+    scope = models.CharField(
+        max_length=20,
+        choices=[
+            ('UNIVERSAL', _('Universal - All Departments')),
+            ('DEPARTMENTAL', _('Department-Specific'))
+        ],
+        default='UNIVERSAL',
+        verbose_name=_('Scope'),
+        help_text=_('Universal heads appear for all departments. Departmental heads only for selected departments.')
+    )
+    applicable_departments = models.ManyToManyField(
+        'budgeting.Department',
+        blank=True,
+        related_name='applicable_global_heads',
+        verbose_name=_('Applicable Departments'),
+        help_text=_('Select departments where this head is relevant. Leave empty for Universal scope.')
+    )
+    
     class Meta:
         verbose_name = _('Global Head')
         verbose_name_plural = _('Global Heads')
@@ -268,6 +287,32 @@ class GlobalHead(TimeStampedMixin):
     def major_code(self) -> str:
         """Get the major code via the hierarchy."""
         return self.minor.major.code
+    
+    def is_applicable_to_department(self, department) -> bool:
+        """
+        Check if this GlobalHead is applicable to the given department.
+        
+        Args:
+            department: Department instance or None
+            
+        Returns:
+            True if applicable, False otherwise
+        """
+        if self.scope == 'UNIVERSAL':
+            return True
+        
+        if not department:
+            return False
+        
+        return self.applicable_departments.filter(pk=department.pk).exists()
+    
+    def get_applicable_departments_display(self) -> str:
+        """Get comma-separated list of applicable department names."""
+        if self.scope == 'UNIVERSAL':
+            return 'All Departments'
+        
+        dept_names = list(self.applicable_departments.values_list('name', flat=True))
+        return ', '.join(dept_names) if dept_names else 'None'
     
     @property
     def major_name(self) -> str:

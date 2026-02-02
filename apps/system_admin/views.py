@@ -268,6 +268,7 @@ class CreateTenantAdminView(LoginRequiredMixin, SuperAdminRequiredMixin, FormVie
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['organization'] = self.get_organization()
+        kwargs['request_user'] = self.request.user
         return kwargs
     
     def form_valid(self, form):
@@ -275,9 +276,15 @@ class CreateTenantAdminView(LoginRequiredMixin, SuperAdminRequiredMixin, FormVie
         user.organization = self.get_organization()
         user.save()
         
-        # Assign roles
+        # Assign roles with server-side validation
         roles = form.cleaned_data.get('roles', [])
         if roles:
+            # Additional server-side check for SUPER_ADMIN
+            if not self.request.user.is_superuser:
+                super_admin_role = Role.objects.filter(code='SUPER_ADMIN').first()
+                if super_admin_role in roles:
+                    from django.core.exceptions import PermissionDenied
+                    raise PermissionDenied('Only Super Administrators can assign the Super Admin role.')
             user.roles.set(roles)
         
         messages.success(
@@ -383,6 +390,11 @@ class TenantUserCreateView(LoginRequiredMixin, TenantAdminRequiredMixin, FormVie
     def get_organization(self):
         return get_object_or_404(Organization, pk=self.kwargs['org_pk'])
     
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['request_user'] = self.request.user
+        return kwargs
+    
     def form_valid(self, form):
         user = form.save(commit=False)
         user.organization = self.get_organization()
@@ -394,9 +406,15 @@ class TenantUserCreateView(LoginRequiredMixin, TenantAdminRequiredMixin, FormVie
         
         user.save()
         
-        # Assign roles
+        # Assign roles with server-side validation
         roles = form.cleaned_data.get('roles', [])
         if roles:
+            # Additional server-side check for SUPER_ADMIN
+            if not self.request.user.is_superuser:
+                super_admin_role = Role.objects.filter(code='SUPER_ADMIN').first()
+                if super_admin_role in roles:
+                    from django.core.exceptions import PermissionDenied
+                    raise PermissionDenied('Only Super Administrators can assign the Super Admin role.')
             user.roles.set(roles)
         
         messages.success(self.request, f'User "{user.get_full_name()}" created.')
@@ -432,14 +450,21 @@ class TenantUserEditView(LoginRequiredMixin, TenantAdminRequiredMixin, FormView)
         kwargs = super().get_form_kwargs()
         kwargs['instance'] = self.get_user_instance()
         kwargs['is_edit'] = True
+        kwargs['request_user'] = self.request.user
         return kwargs
     
     def form_valid(self, form):
         user = form.save()
         
-        # Update roles
+        # Update roles with server-side validation
         roles = form.cleaned_data.get('roles', [])
         if roles:
+            # Additional server-side check for SUPER_ADMIN
+            if not self.request.user.is_superuser:
+                super_admin_role = Role.objects.filter(code='SUPER_ADMIN').first()
+                if super_admin_role in roles:
+                    from django.core.exceptions import PermissionDenied
+                    raise PermissionDenied('Only Super Administrators can assign the Super Admin role.')
             user.roles.set(roles)
         
         messages.success(self.request, f'User "{user.get_full_name()}" updated.')
@@ -473,11 +498,19 @@ class AssignRoleView(LoginRequiredMixin, TenantAdminRequiredMixin, FormView):
         kwargs = super().get_form_kwargs()
         target_user = self.get_target_user()
         kwargs['initial'] = {'roles': target_user.roles.all()}
+        kwargs['request_user'] = self.request.user
         return kwargs
     
     def form_valid(self, form):
         target_user = self.get_target_user()
         roles = form.cleaned_data['roles']
+        
+        # Server-side validation for SUPER_ADMIN
+        if not self.request.user.is_superuser:
+            super_admin_role = Role.objects.filter(code='SUPER_ADMIN').first()
+            if super_admin_role and super_admin_role in roles:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied('Only Super Administrators can assign the Super Admin role.')
         
         # Clear existing roles and assign new ones
         target_user.roles.clear()

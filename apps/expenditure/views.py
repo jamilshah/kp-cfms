@@ -21,6 +21,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 
+from apps.users.permissions import MakerRequiredMixin, CheckerRequiredMixin, ApproverRequiredMixin
 from apps.expenditure.models import Payee, Bill, Payment, BillStatus
 from apps.expenditure.forms import (
     PayeeForm, BillForm, BillSubmitForm, BillApprovalForm, PaymentForm,
@@ -84,8 +85,11 @@ class PayeeListView(LoginRequiredMixin, ListView):
         return Payee.objects.none()
 
 
-class PayeeCreateView(LoginRequiredMixin, CreateView):
-    """Create view for payees/vendors."""
+class PayeeCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
+    """Create view for payees/vendors.
+    
+    Requires Dealing Assistant (Maker) role.
+    """
     
     model = Payee
     form_class = PayeeForm
@@ -175,10 +179,11 @@ class BillListView(LoginRequiredMixin, ListView):
         return context
 
 
-class BillCreateView(LoginRequiredMixin, CreateView):
+class BillCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
     """
     Create view for new bills.
     
+    Requires Dealing Assistant (Maker) role.
     Automatically assigns organization and calculates net_amount.
     Requires an active (current operating) fiscal year.
     """

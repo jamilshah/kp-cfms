@@ -259,29 +259,11 @@ class BillLineForm(forms.ModelForm):
     def __init__(self, *args, organization=None, fiscal_year=None, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Base queryset: Expenditure heads only
-        base_queryset = BudgetHead.objects.filter(
-            global_head__account_type=AccountType.EXPENDITURE,
-            posting_allowed=True,
-            is_active=True
-        ).select_related('global_head', 'function', 'fund')
+        # Start with empty queryset - force user to select department/function
+        # This prevents showing all 2000+ budget heads on page load
+        self.fields['budget_head'].queryset = BudgetHead.objects.none()
+        self.fields['budget_head'].help_text = 'Select Department and Function above to filter budget heads'
         
-        # If organization and fiscal_year provided, filter to only allocated heads
-        if organization and fiscal_year:
-            # Get budget heads that have allocations using a subquery
-            from django.db.models import Exists, OuterRef
-            
-            has_allocation = BudgetAllocation.objects.filter(
-                organization=organization,
-                fiscal_year=fiscal_year,
-                budget_head=OuterRef('pk')
-            )
-            
-            base_queryset = base_queryset.annotate(
-                has_allocation=Exists(has_allocation)
-            ).filter(has_allocation=True)
-        
-        self.fields['budget_head'].queryset = base_queryset.order_by('global_head__code')
         self._organization = organization
         self._fiscal_year = fiscal_year
     

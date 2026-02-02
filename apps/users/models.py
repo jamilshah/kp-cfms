@@ -26,6 +26,7 @@ class RoleCode(models.TextChoices):
     SUPER_ADMIN = 'SUPER_ADMIN', _('Super Administrator')
     LCB_OFFICER = 'LCB_OFFICER', _('LCB Finance Officer')
     TMO = 'TMO', _('Tehsil Municipal Officer')
+    TMA_ADMIN = 'TMA_ADMIN', _('TMA Administrator')
     FINANCE_OFFICER = 'FINANCE_OFFICER', _('Finance Officer (Pre-Audit)')
     ACCOUNTANT = 'ACCOUNTANT', _('Accountant (Verifier)')
     CASHIER = 'CASHIER', _('Cashier')
@@ -372,8 +373,6 @@ class CustomUser(AbstractUser):
         Returns:
             True if user has the role, False otherwise.
         """
-        if self.is_superuser:
-            return True
         return self.roles.filter(code=role_code).exists()
     
     def has_any_role(self, role_codes: List[str]) -> bool:
@@ -422,6 +421,10 @@ class CustomUser(AbstractUser):
     def is_budget_officer(self) -> bool:
         """Check if user has Budget Officer role."""
         return self.has_any_role(['BUDGET_OFFICER'])
+    
+    def is_tma_admin(self) -> bool:
+        """Check if user has TMA Administrator role."""
+        return self.has_role('TMA_ADMIN')
     
     def is_super_admin(self) -> bool:
         """Check if user is Provincial Super Admin (superuser with no org)."""

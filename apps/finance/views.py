@@ -11,7 +11,7 @@ from django.http import HttpResponseRedirect
 from django.db import models
 from typing import Dict, Any
 
-from apps.users.permissions import AdminRequiredMixin
+from apps.users.permissions import AdminRequiredMixin, MakerRequiredMixin
 from apps.finance.models import (
     BudgetHead, Fund, ChequeBook, ChequeLeaf, LeafStatus,
     Voucher, JournalEntry
@@ -916,10 +916,11 @@ class VoucherListView(LoginRequiredMixin, ListView):
         return context
 
 
-class VoucherCreateView(LoginRequiredMixin, CreateView):
+class VoucherCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
     """
     Create a manual Journal Voucher with multiple lines.
     
+    Requires Dealing Assistant (Maker) role.
     Uses formset for journal entries with dynamic add/remove.
     Validates that Sum(Debit) == Sum(Credit).
     """
@@ -1178,6 +1179,19 @@ def load_budget_heads_options(request):
     if account_type:
         budget_heads = budget_heads.filter(global_head__account_type=account_type)
     
+    # Filter by GlobalHead department scope
+    if department_id:
+        try:
+            dept = Department.objects.get(id=department_id)
+            # Only show budget heads whose GlobalHead is applicable to this department
+            from django.db.models import Q
+            budget_heads = budget_heads.filter(
+                Q(global_head__scope='UNIVERSAL') |
+                Q(global_head__applicable_departments=dept)
+            )
+        except (ValueError, TypeError, Department.DoesNotExist):
+            pass
+    
     # Filter by allocation (Scenario 1: only show heads with budget)
     try:
         user = request.user
@@ -1219,3 +1233,4 @@ def load_budget_heads_options(request):
             
     print(f"DEBUG: Returning {budget_heads.count()} budget heads")
     return render(request, 'finance/partials/budget_head_formset_options.html', {'budget_heads': budget_heads})
+

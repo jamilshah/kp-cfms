@@ -41,12 +41,19 @@ from apps.finance.views import (
     load_budget_heads_options,
 )
 
+from apps.finance.views_coa_mapping import (
+    CoADepartmentMappingView,
+)
+
 app_name = 'finance'
 
 urlpatterns = [
     # Master Data
     path('funds/', FundListView.as_view(), name='fund_list'),
     path('budget-heads/', BudgetHeadListView.as_view(), name='budget_head_list'),
+    
+    # CoA Department Mapping (Super Admin)
+    path('coa-department-mapping/', CoADepartmentMappingView.as_view(), name='coa_department_mapping'),
     
     # Bank Statement Management
     path('statements/', BankStatementListView.as_view(), name='statement_list'),

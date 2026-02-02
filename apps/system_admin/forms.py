@@ -101,7 +101,7 @@ class TenantAdminForm(forms.Form):
             'class': 'form-select',
             'size': '6'
         }),
-        help_text='Select roles for this user. TMO role is recommended for TMA Admins.',
+        help_text='Select roles for this user. TMA Admin role is recommended for system configuration, TMO for transaction approvals.',
         initial=None  # Will be set in __init__
     )
     
@@ -129,16 +129,26 @@ class TenantAdminForm(forms.Form):
         })
     )
     
-    def __init__(self, organization=None, *args, **kwargs):
+    def __init__(self, organization=None, request_user=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.organization = organization
+        self.request_user = request_user
         
-        # Default to TMO role for TMA Admins
+        # Filter roles: only superusers can assign SUPER_ADMIN
+        if request_user and not request_user.is_superuser:
+            self.fields['roles'].queryset = Role.objects.exclude(code='SUPER_ADMIN')
+        
+        # Default to TMA_ADMIN role for TMA Admins
         try:
-            tmo_role = Role.objects.get(code='TMO')
-            self.fields['roles'].initial = [tmo_role.pk]
+            tma_admin_role = Role.objects.get(code='TMA_ADMIN')
+            self.fields['roles'].initial = [tma_admin_role.pk]
         except Role.DoesNotExist:
-            pass
+            # Fallback to TMO if TMA_ADMIN doesn't exist
+            try:
+                tmo_role = Role.objects.get(code='TMO')
+                self.fields['roles'].initial = [tmo_role.pk]
+            except Role.DoesNotExist:
+                pass
     
     def clean_cnic(self):
         """Validate CNIC is unique."""
@@ -155,13 +165,22 @@ class TenantAdminForm(forms.Form):
         return email
     
     def clean(self):
-        """Validate passwords match."""
+        """Validate passwords match and role assignment restrictions."""
         cleaned_data = super().clean()
         password1 = cleaned_data.get('password1')
         password2 = cleaned_data.get('password2')
         
         if password1 and password2 and password1 != password2:
             raise forms.ValidationError('Passwords do not match.')
+        
+        # Validate SUPER_ADMIN assignment
+        roles = cleaned_data.get('roles', [])
+        if roles and self.request_user and not self.request_user.is_superuser:
+            super_admin_role = Role.objects.filter(code='SUPER_ADMIN').first()
+            if super_admin_role and super_admin_role in roles:
+                raise forms.ValidationError(
+                    'Only Super Administrators can assign the Super Admin role.'
+                )
         
         return cleaned_data
     
@@ -261,9 +280,14 @@ class UserForm(forms.ModelForm):
             }),
         }
     
-    def __init__(self, *args, is_edit=False, **kwargs):
+    def __init__(self, *args, is_edit=False, request_user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.is_edit = is_edit
+        self.request_user = request_user
+        
+        # Filter roles: only superusers can assign SUPER_ADMIN
+        if request_user and not request_user.is_superuser:
+            self.fields['roles'].queryset = Role.objects.exclude(code='SUPER_ADMIN')
         
         # Populate department choices
         dept_choices = [('', '---------')] + [
@@ -294,7 +318,7 @@ class UserForm(forms.ModelForm):
         return cnic
     
     def clean(self):
-        """Validate passwords match."""
+        """Validate passwords match and role assignment restrictions."""
         cleaned_data = super().clean()
         password1 = cleaned_data.get('password1')
         password2 = cleaned_data.get('password2')
@@ -302,6 +326,15 @@ class UserForm(forms.ModelForm):
         if password1 or password2:
             if password1 != password2:
                 raise forms.ValidationError('Passwords do not match.')
+        
+        # Validate SUPER_ADMIN assignment
+        roles = cleaned_data.get('roles', [])
+        if roles and self.request_user and not self.request_user.is_superuser:
+            super_admin_role = Role.objects.filter(code='SUPER_ADMIN').first()
+            if super_admin_role and super_admin_role in roles:
+                raise forms.ValidationError(
+                    'Only Super Administrators can assign the Super Admin role.'
+                )
         
         return cleaned_data
 
@@ -317,6 +350,25 @@ class AssignRoleForm(forms.Form):
         }),
         help_text='Select roles to assign to this user.'
     )
+    
+    def __init__(self, *args, request_user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request_user = request_user
+        
+        # Filter roles: only superusers can assign SUPER_ADMIN
+        if request_user and not request_user.is_superuser:
+            self.fields['roles'].queryset = Role.objects.exclude(code='SUPER_ADMIN')
+    
+    def clean_roles(self):
+        """Validate SUPER_ADMIN assignment."""
+        roles = self.cleaned_data.get('roles', [])
+        if roles and self.request_user and not self.request_user.is_superuser:
+            super_admin_role = Role.objects.filter(code='SUPER_ADMIN').first()
+            if super_admin_role and super_admin_role in roles:
+                raise forms.ValidationError(
+                    'Only Super Administrators can assign the Super Admin role.'
+                )
+        return roles
 
 
 class RoleForm(forms.ModelForm):

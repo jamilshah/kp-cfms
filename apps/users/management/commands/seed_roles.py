@@ -36,6 +36,12 @@ STANDARD_ROLES = [
         'is_system_role': True,
     },
     {
+        'code': 'TMA_ADMIN',
+        'name': 'TMA Administrator',
+        'description': 'TMA System Administrator. Can configure TMA settings, manage users, and system setup. Cannot approve transactions.',
+        'is_system_role': True,
+    },
+    {
         'code': 'FINANCE_OFFICER',
         'name': 'Finance Officer (Pre-Audit)',
         'description': 'Pre-Audit. CHECKER for Bills and Vouchers. Verifies financial transactions before TMO approval.',

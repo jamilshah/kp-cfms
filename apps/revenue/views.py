@@ -23,6 +23,7 @@ from django.db.models import Sum, Count, Q
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 
+from apps.users.permissions import MakerRequiredMixin, CashierRequiredMixin, CheckerRequiredMixin
 from apps.revenue.models import (
     Payer, RevenueDemand, RevenueCollection, 
     DemandStatus, CollectionStatus
@@ -129,8 +130,11 @@ class PayerListView(LoginRequiredMixin, ListView):
         return context
 
 
-class PayerCreateView(LoginRequiredMixin, CreateView):
-    """Create view for payers."""
+class PayerCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
+    """Create view for payers.
+    
+    Requires Dealing Assistant (Maker) role.
+    """
     
     model = Payer
     form_class = PayerForm
@@ -251,8 +255,11 @@ class DemandListView(LoginRequiredMixin, ListView):
         return context
 
 
-class DemandCreateView(LoginRequiredMixin, CreateView):
-    """Create view for revenue demands."""
+class DemandCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
+    """Create view for revenue demands.
+    
+    Requires Dealing Assistant (Maker) role.
+    """
     
     model = RevenueDemand
     form_class = DemandForm
@@ -458,8 +465,11 @@ class CollectionListView(LoginRequiredMixin, ListView):
         return context
 
 
-class CollectionCreateView(LoginRequiredMixin, CreateView):
-    """Create view for revenue collections."""
+class CollectionCreateView(LoginRequiredMixin, CashierRequiredMixin, CreateView):
+    """Create view for revenue collections.
+    
+    Requires Cashier role to record cash/bank receipts.
+    """
     
     model = RevenueCollection
     form_class = CollectionForm

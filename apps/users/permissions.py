@@ -293,20 +293,20 @@ class CanApprovePUGFMixin(UserPassesTestMixin):
 
 class AdminRequiredMixin(RoleRequiredMixin):
     """
-    Mixin that restricts access to System Admin or TMA Admin (TMO) roles.
+    Mixin that restricts access to System Admin or TMA Admin roles.
     
     Used for configuration and setup views.
-    Provincial Super Admin (is_superuser=True) OR TMA Admin (TMO role).
+    Provincial Super Admin (is_superuser=True) OR TMA Admin (TMA_ADMIN or TMO role).
     """
     
-    required_roles = ['SUPER_ADMIN', 'ADM', 'TMO']
+    required_roles = ['SUPER_ADMIN', 'ADM', 'TMA_ADMIN', 'TMO']
 
 
 class TenantAdminRequiredMixin(UserPassesTestMixin):
     """
     Mixin that restricts access to:
     - Provincial Super Admin (is_superuser=True, organization=None)
-    - TMA Admin (TMO role with assigned organization)
+    - TMA Admin (TMA_ADMIN or TMO role with assigned organization)
     
     TMA Admins can only manage users within their own organization.
     Provincial Super Admin can manage all organizations.
@@ -321,9 +321,9 @@ class TenantAdminRequiredMixin(UserPassesTestMixin):
         if self.request.user.is_superuser and self.request.user.organization is None:
             return True
         
-        # TMA Admin: TMO with assigned organization
+        # TMA Admin: TMA_ADMIN or TMO with assigned organization
         if self.request.user.organization is not None:
-            return self.request.user.has_any_role(['TMO'])
+            return self.request.user.has_any_role(['TMA_ADMIN', 'TMO'])
         
         return False
     
