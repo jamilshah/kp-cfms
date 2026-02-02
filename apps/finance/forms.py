@@ -524,8 +524,8 @@ class JournalEntryForm(forms.ModelForm):
         fields = ['budget_head', 'description', 'debit', 'credit']
         widgets = {
             'budget_head': forms.Select(attrs={
-                'class': 'form-select searchable-select',
-                'data-placeholder': 'Select Budget Head'
+                'class': 'form-select searchable-select-ajax',
+                'data-placeholder': 'Type to search budget heads...'
             }),
             'description': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -549,16 +549,41 @@ class JournalEntryForm(forms.ModelForm):
         self.organization = kwargs.pop('organization', None)
         super().__init__(*args, **kwargs)
         
-        # Filter budget heads that allow posting
-        self.fields['budget_head'].queryset = BudgetHead.objects.filter(
-            posting_allowed=True,
-            is_active=True
-        ).select_related('function', 'global_head').order_by('global_head__name', 'global_head__code')
-        
-        # If organization-specific filtering is needed
-        if self.organization:
-            # Add organization filter if BudgetHead has organization field
-            pass
+        # For AJAX Select2, we need to handle both display and validation
+        if self.instance and self.instance.pk and self.instance.budget_head:
+            # Editing existing entry - include the current budget head
+            self.fields['budget_head'].queryset = BudgetHead.objects.filter(
+                id=self.instance.budget_head.id
+            ).select_related('global_head', 'function')
+        elif self.data:
+            # Form submitted (POST) - include the submitted budget head for validation
+            # In a formset, the field name has a prefix like 'entries-0-budget_head'
+            budget_head_id = None
+            
+            # Try to get the budget_head value from data
+            # First try without prefix (for standalone forms)
+            if 'budget_head' in self.data:
+                budget_head_id = self.data.get('budget_head')
+            # Then try with prefix (for formsets)
+            elif self.prefix and f'{self.prefix}-budget_head' in self.data:
+                budget_head_id = self.data.get(f'{self.prefix}-budget_head')
+            
+            if budget_head_id:
+                try:
+                    budget_head_id = int(budget_head_id)
+                    self.fields['budget_head'].queryset = BudgetHead.objects.filter(
+                        id=budget_head_id,
+                        posting_allowed=True,
+                        is_active=True
+                    ).select_related('global_head', 'function')
+                except (ValueError, TypeError):
+                    # Invalid ID submitted
+                    self.fields['budget_head'].queryset = BudgetHead.objects.none()
+            else:
+                self.fields['budget_head'].queryset = BudgetHead.objects.none()
+        else:
+            # New entry - empty queryset, Select2 will load via AJAX
+            self.fields['budget_head'].queryset = BudgetHead.objects.none()
     
     def clean(self):
         """Validate that either debit or credit is entered, but not both."""

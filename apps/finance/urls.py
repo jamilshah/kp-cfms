@@ -39,6 +39,7 @@ from apps.finance.views import (
     # AJAX Views
     load_functions,
     load_budget_heads_options,
+    budget_head_search_api,
 )
 
 from apps.finance.views_coa_mapping import (
@@ -79,4 +80,5 @@ urlpatterns = [
     # AJAX
     path('ajax/load-functions/', load_functions, name='load_functions'),
     path('ajax/load-budget-heads-options/', load_budget_heads_options, name='load_budget_heads_options'),
+    path('ajax/budget-head-search/', budget_head_search_api, name='budget_head_search_api'),
 ]

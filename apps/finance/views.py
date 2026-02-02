@@ -947,7 +947,7 @@ class VoucherCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
             Voucher,
             JournalEntry,
             form=JournalEntryForm,
-            extra=2,
+            extra=0,
             can_delete=True,
             min_num=2,
             validate_min=True
@@ -1246,5 +1246,73 @@ def load_budget_heads_options(request):
     return render(request, 'finance/partials/budget_head_formset_options.html', {
         'budget_heads': budget_heads,
         'department': department
+    })
+
+
+def budget_head_search_api(request):
+    """
+    AJAX API endpoint for Select2 to search budget heads dynamically.
+    
+    Returns JSON with results paginated for efficient loading of large datasets.
+    Supports search by code, name, and filtering by account_type and function.
+    """
+    search_term = request.GET.get('q', '').strip()
+    account_type = request.GET.get('account_type', '').strip()
+    function_id = request.GET.get('function_id', '').strip()
+    page = int(request.GET.get('page', 1))
+    page_size = 30  # Results per page
+    
+    # Base queryset - only postable, active budget heads
+    budget_heads = BudgetHead.objects.filter(
+        posting_allowed=True,
+        is_active=True
+    ).select_related('global_head', 'function')
+    
+    # Filter by function if specified (most important filter to avoid duplicates)
+    if function_id:
+        budget_heads = budget_heads.filter(function_id=function_id)
+    
+    # Filter by account type if specified
+    if account_type:
+        budget_heads = budget_heads.filter(global_head__account_type=account_type)
+    
+    # Search by code or name
+    if search_term:
+        budget_heads = budget_heads.filter(
+            models.Q(global_head__code__icontains=search_term) |
+            models.Q(global_head__name__icontains=search_term) |
+            models.Q(function__code__icontains=search_term)
+        )
+    
+    # Order by code for consistent results
+    budget_heads = budget_heads.order_by('global_head__code', 'function__code')
+    
+    # Pagination
+    total_count = budget_heads.count()
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    page_results = budget_heads[start_idx:end_idx]
+    
+    # Format results for Select2
+    results = []
+    for bh in page_results:
+        # Format display text: "CODE - Name (Function)"
+        display_text = f"{bh.global_head.code} - {bh.global_head.name}"
+        if bh.function:
+            display_text += f" ({bh.function.code})"
+        
+        results.append({
+            'id': bh.id,
+            'text': display_text,
+            'code': bh.global_head.code,
+            'account_type': bh.global_head.account_type
+        })
+    
+    # Return Select2 format
+    return JsonResponse({
+        'results': results,
+        'pagination': {
+            'more': end_idx < total_count
+        }
     })
 

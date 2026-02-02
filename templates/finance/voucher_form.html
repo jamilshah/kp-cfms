@@ -187,6 +187,11 @@
                     {{ formset.non_form_errors }}
                 </div>
                 {% endif %}
+                
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Note:</strong> Click "Add Line" to add journal entry rows. At least 2 entries are required.
+                </div>
 
                 <div class="table-responsive">
                     <table class="table table-bordered" id="formsetTable">
@@ -201,6 +206,7 @@
                         </thead>
                         <tbody id="formsetBody">
                             {% for form in formset %}
+                            {% if not form.instance.pk or not form.DELETE.value %}
                             <tr class="formset-row" data-form-index="{{ forloop.counter0 }}">
                                 <td>
                                     {% for hidden in form.hidden_fields %}
@@ -235,6 +241,7 @@
                                     </button>
                                 </td>
                             </tr>
+                            {% endif %}
                             {% endfor %}
                         </tbody>
                         <tfoot class="table-secondary">
@@ -283,11 +290,8 @@
     <tbody id="emptyFormTemplate">
         <tr class="formset-row">
             <td>
-                <select name="entries-__prefix__-budget_head" class="form-select searchable-select" id="id_entries-__prefix__-budget_head">
+                <select name="entries-__prefix__-budget_head" class="form-select searchable-select-ajax" id="id_entries-__prefix__-budget_head" data-placeholder="Type to search budget heads...">
                     <option value="">---------</option>
-                    {% for choice in formset.empty_form.budget_head.field.queryset %}
-                    <option value="{{ choice.pk }}">{{ choice }}</option>
-                    {% endfor %}
                 </select>
             </td>
             <td>
@@ -317,6 +321,59 @@ document.addEventListener('DOMContentLoaded', function() {
     const addLineBtn = document.getElementById('addLineBtn');
     const submitBtn = document.getElementById('submitBtn');
     const balanceAlert = document.getElementById('balanceAlert');
+    
+    // Initialize AJAX Select2 for budget heads
+    function initBudgetHeadSelect2(element) {
+        const functionSelect = document.querySelector('#id_function');
+        
+        $(element).select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            placeholder: "Type to search budget heads...",
+            allowClear: true,
+            ajax: {
+                url: "{% url 'finance:budget_head_search_api' %}",
+                dataType: 'json',
+                delay: 250,
+                data: function (params) {
+                    return {
+                        q: params.term || '',
+                        page: params.page || 1,
+                        function_id: functionSelect ? functionSelect.value : ''
+                    };
+                },
+                processResults: function (data, params) {
+                    params.page = params.page || 1;
+                    return {
+                        results: data.results,
+                        pagination: {
+                            more: data.pagination.more
+                        }
+                    };
+                },
+                cache: true
+            },
+            minimumInputLength: 0
+        });
+    }
+    
+    // Initialize all existing budget head selects
+    $('.searchable-select, .searchable-select-ajax').each(function() {
+        initBudgetHeadSelect2(this);
+    });
+    
+    // Reinitialize budget head dropdowns when function changes
+    const functionSelect = document.querySelector('#id_function');
+    if (functionSelect) {
+        functionSelect.addEventListener('change', function() {
+            // Reinitialize all budget head selects with new function filter
+            $('.searchable-select-ajax').each(function() {
+                $(this).val(null).trigger('change'); // Clear selection
+                $(this).select2('destroy'); // Destroy old instance
+                initBudgetHeadSelect2(this); // Reinitialize with new function
+            });
+        });
+    }
     
     // Calculate totals and update display
     function calculateTotals() {
@@ -398,6 +455,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         calculateTotals();
+        
+        // Check if we still have minimum required rows (visible)
+        const visibleRows = document.querySelectorAll('.formset-row:not([style*="display: none"])');
+        if (visibleRows.length < 2) {
+            alert('At least 2 journal entries are required. Please add more lines.');
+        }
     }
     
     // Add new line
@@ -409,6 +472,12 @@ document.addEventListener('DOMContentLoaded', function() {
         formsetBody.insertAdjacentHTML('beforeend', newRow);
         totalFormInput.value = currentFormCount + 1;
         
+        // Initialize Select2 on the new select element
+        const newSelect = formsetBody.querySelector(`#id_entries-${currentFormCount}-budget_head`);
+        if (newSelect) {
+            initBudgetHeadSelect2(newSelect);
+        }
+        
         attachListeners();
         calculateTotals();
     });
@@ -416,6 +485,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initial setup
     attachListeners();
     calculateTotals();
+    
+    // If no rows exist, add 2 initial rows
+    if (formsetBody.querySelectorAll('.formset-row').length === 0) {
+        addLineBtn.click();
+        addLineBtn.click();
+    }
 });
 </script>
 {% endblock %}
