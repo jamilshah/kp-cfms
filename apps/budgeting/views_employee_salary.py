@@ -24,6 +24,7 @@ from apps.budgeting.forms_employee_salary import (
     BulkIncrementForm,
     AutoCalculateAllowancesForm
 )
+from apps.finance.models import FunctionCode
 from apps.users.permissions import MakerRequiredMixin, AdminRequiredMixin
 
 
@@ -36,27 +37,25 @@ class EmployeeSalaryListView(LoginRequiredMixin, ListView):
     
     def get_queryset(self):
         qs = BudgetEmployee.objects.select_related(
-            'schedule', 'schedule__fiscal_year'
+            'fiscal_year', 'department', 'function'
         ).filter(is_vacant=False).order_by(
-            'schedule__department', 'schedule__designation_name', 'name'
+            'department__name', 'designation', 'name'
         )
         
         # Filter by department
         dept = self.request.GET.get('department')
         if dept:
-            qs = qs.filter(schedule__department=dept)
+            qs = qs.filter(department_id=dept)
         
         # Filter by fiscal year
         fy = self.request.GET.get('fiscal_year')
         if fy:
-            qs = qs.filter(schedule__fiscal_year_id=fy)
+            qs = qs.filter(fiscal_year_id=fy)
         
-        # Search by name or personnel number
+        # Search by name
         search = self.request.GET.get('search')
         if search:
-            qs = qs.filter(
-                Q(name__icontains=search) | Q(personnel_number__icontains=search)
-            )
+            qs = qs.filter(name__icontains=search)
         
         return qs
     
@@ -93,6 +92,14 @@ class EmployeeSalaryCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateVie
     template_name = 'budgeting/employee_salary/form.html'
     success_url = reverse_lazy('budgeting:employee_salary_list')
     
+    def get_initial(self):
+        """Set default fiscal year"""
+        initial = super().get_initial()
+        active_fy = FiscalYear.objects.filter(is_active=True).first()
+        if active_fy:
+            initial['fiscal_year'] = active_fy
+        return initial
+    
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         schedule_id = self.request.GET.get('schedule')
@@ -101,6 +108,11 @@ class EmployeeSalaryCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateVie
         return context
     
     def form_valid(self, form):
+        # Set fiscal year if not provided
+        if not form.instance.fiscal_year:
+            form.instance.fiscal_year = FiscalYear.objects.filter(is_active=True).first()
+        
+        # Optional: Link to schedule if provided
         schedule_id = self.request.GET.get('schedule') or self.request.POST.get('schedule')
         if schedule_id:
             form.instance.schedule = get_object_or_404(ScheduleOfEstablishment, id=schedule_id)
@@ -428,3 +440,32 @@ class BudgetBookExportView(LoginRequiredMixin, TemplateView):
             ])
         
         return response
+
+
+def load_department_functions(request):
+    """AJAX endpoint to load functions for selected department"""
+    department_id = request.GET.get('department_id')
+    
+    if not department_id:
+        return JsonResponse({'functions': []})
+    
+    try:
+        department = Department.objects.get(id=department_id)
+        functions = department.related_functions.all().order_by('code')
+        default_id = department.default_function_id if department.default_function else None
+        
+        function_list = [
+            {
+                'id': func.id,
+                'code': func.code,
+                'name': func.name,
+                'is_default': func.id == default_id,
+                'usage_notes': func.usage_notes or ''
+            }
+            for func in functions
+        ]
+        
+        return JsonResponse({'functions': function_list})
+    
+    except Department.DoesNotExist:
+        return JsonResponse({'functions': []})

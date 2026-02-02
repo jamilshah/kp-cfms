@@ -580,43 +580,74 @@ class BillAmountAPIView(LoginRequiredMixin, View):
 def load_functions(request):
     """
     AJAX view to load functions filtered by department.
+    Returns HTML with function options including default and usage notes.
     """
     department_id = request.GET.get('department')
     functions = FunctionCode.objects.none()
+    default_id = None
     
     if department_id:
         try:
             dept = Department.objects.get(id=department_id)
             functions = dept.related_functions.all().order_by('code')
+            default_id = dept.default_function_id if dept.default_function else None
         except (ValueError, TypeError, Department.DoesNotExist):
             pass
             
-    return render(request, 'expenditure/partials/function_options.html', {'functions': functions})
+    return render(request, 'expenditure/partials/function_options.html', {
+        'functions': functions,
+        'default_id': default_id
+    })
 
 
 def load_budget_heads(request):
     """
-    AJAX view to load budget heads filtered by department and/or function.
-    """
-    department_id = request.GET.get('department')
-    function_id = request.GET.get('function')
+    AJAX view to load budget heads filtered by function.
     
-    # Base queryset (same as BillForm)
+    All budget heads are now UNIVERSAL scope.
+    Filtering is done by the selected function.
+    Excludes salary heads (A01*) as they have separate salary bill workflow.
+    """
+    function_id = request.GET.get('function')
+    department_id = request.GET.get('department')  # Keep for backward compatibility
+    department = None
+    
+    # Base queryset - Expenditure heads only (Bills are for expenses, not revenue)
+    # Exclude salary heads (A01*) as they have their own workflow
     budget_heads = BudgetHead.objects.filter(
         global_head__account_type=AccountType.EXPENDITURE,
         posting_allowed=True,
         is_active=True
     ).exclude(
         global_head__code__startswith='A01'
-    ).order_by('global_head__name', 'global_head__code')
+    ).select_related('global_head', 'function').order_by('global_head__code', 'function__code')
     
+    # Filter by function (primary method)
     if function_id:
-        budget_heads = budget_heads.filter(function_id=function_id)
+        try:
+            budget_heads = budget_heads.filter(function_id=function_id)
+            # Get department for display purposes
+            function = FunctionCode.objects.get(id=function_id)
+            # Try to find which department this function belongs to
+            dept_with_function = Department.objects.filter(related_functions=function).first()
+            if dept_with_function:
+                department = dept_with_function
+        except (ValueError, TypeError, FunctionCode.DoesNotExist):
+            pass
+    # Fallback to department filtering (for backward compatibility)
     elif department_id:
         try:
-            dept = Department.objects.get(id=department_id)
-            budget_heads = budget_heads.filter(function__in=dept.related_functions.all())
+            department = Department.objects.get(id=department_id)
+            
+            # Only show budget heads for functions assigned to this department
+            budget_heads = budget_heads.filter(
+                function__in=department.related_functions.all()
+            )
+            
         except (ValueError, TypeError, Department.DoesNotExist):
             pass
             
-    return render(request, 'expenditure/partials/budget_head_options.html', {'budget_heads': budget_heads})
+    return render(request, 'expenditure/partials/budget_head_options.html', {
+        'budget_heads': budget_heads,
+        'department': department
+    })

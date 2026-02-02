@@ -13,7 +13,7 @@ This replaces the target div and uses a script to update all budget head selects
             const newOptions = `
                 <option value="">---------</option>
                 {% for head in budget_heads %}
-                <option value="{{ head.pk }}">{{ head|escapejs }}</option>
+                <option value="{{ head.pk }}">{{ head.global_head.code|escapejs }} - {{ head.name|escapejs }}</option>
                 {% endfor %}
             `;
             

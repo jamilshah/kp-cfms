@@ -39,6 +39,42 @@
             <form method="post" id="employee-salary-form">
                 {% csrf_token %}
                 
+                <!-- Assignment Section -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="bi bi-building"></i> Assignment (Department & Function)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <small><strong>Important:</strong> Department and Function determine budget allocation. Function-wise salary bills are generated based on this assignment.</small>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="{{ form.fiscal_year.id_for_label }}" class="form-label">{{ form.fiscal_year.label }} *</label>
+                                {{ form.fiscal_year }}
+                                {% if form.fiscal_year.errors %}
+                                <div class="invalid-feedback d-block">{{ form.fiscal_year.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="{{ form.department.id_for_label }}" class="form-label">{{ form.department.label }} *</label>
+                                {{ form.department }}
+                                {% if form.department.errors %}
+                                <div class="invalid-feedback d-block">{{ form.department.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="{{ form.function.id_for_label }}" class="form-label">{{ form.function.label }} *</label>
+                                {{ form.function }}
+                                <small class="form-text text-muted">Function code for budget allocation</small>
+                                {% if form.function.errors %}
+                                <div class="invalid-feedback d-block">{{ form.function.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Personal Information -->
                 <div class="card border-0 shadow-sm mb-4">
                     <div class="card-header bg-primary text-white">
@@ -490,10 +526,64 @@ function calculateSalary() {
     $('#calc-projected-annual').text(formatCurrency(projectedAnnual));
 }
 
+// Dynamic function filtering based on department
+function loadDepartmentFunctions() {
+    const departmentId = $('#id_department').val();
+    const functionSelect = $('#id_function');
+    
+    if (!departmentId) {
+        functionSelect.html('<option value="">Select Department First</option>');
+        return;
+    }
+    
+    // Show loading
+    functionSelect.html('<option value="">Loading...</option>');
+    
+    // Fetch functions for selected department
+    $.ajax({
+        url: '{% url "budgeting:employee_salary_load_functions" %}',
+        data: {
+            'department_id': departmentId
+        },
+        dataType: 'json',
+        success: function(data) {
+            functionSelect.html('<option value="">---------</option>');
+            $.each(data.functions, function(index, func) {
+                const option = $('<option></option>')
+                    .attr('value', func.id)
+                    .text(func.code + ' - ' + func.name);
+                
+                // Add tooltip with usage notes
+                if (func.usage_notes) {
+                    option.attr('title', func.usage_notes);
+                }
+                
+                // Auto-select default function
+                if (func.is_default) {
+                    option.attr('selected', 'selected');
+                }
+                
+                functionSelect.append(option);
+            });
+        },
+        error: function() {
+            functionSelect.html('<option value="">Error loading functions</option>');
+        }
+    });
+}
+
 // Bind calculation to all relevant inputs
 $(document).ready(function() {
     $('#id_bps, #id_running_basic, #id_frozen_ara_2022_input, #id_city_category, #id_is_govt_accommodation, #id_is_house_hiring, #id_dra_amount, #id_expected_salary_increase_percentage').on('input change', calculateSalary);
     calculateSalary(); // Initial calculation
+    
+    // Bind department change to load functions
+    $('#id_department').on('change', loadDepartmentFunctions);
+    
+    // Load functions on page load if department is already selected
+    if ($('#id_department').val()) {
+        loadDepartmentFunctions();
+    }
 });
 </script>
 {% endblock %}

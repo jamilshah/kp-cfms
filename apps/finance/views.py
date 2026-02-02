@@ -1147,18 +1147,24 @@ def load_functions(request):
     """
     AJAX view to load functions filtered by department.
     Used by VoucherForm header filters.
+    Returns HTML with function options including default and usage notes.
     """
     department_id = request.GET.get('department')
     functions = FunctionCode.objects.none()
+    default_id = None
     
     if department_id:
         try:
             dept = Department.objects.get(id=department_id)
             functions = dept.related_functions.all().order_by('code')
+            default_id = dept.default_function_id if dept.default_function else None
         except (ValueError, TypeError, Department.DoesNotExist):
             pass
             
-    return render(request, 'expenditure/partials/function_options.html', {'functions': functions})
+    return render(request, 'expenditure/partials/function_options.html', {
+        'functions': functions,
+        'default_id': default_id
+    })
 
 
 def load_budget_heads_options(request):
@@ -1169,25 +1175,39 @@ def load_budget_heads_options(request):
     department_id = request.GET.get('department')
     function_id = request.GET.get('function')
     account_type = request.GET.get('account_type')
+    department = None
     
     # Base queryset - all posting-allowed heads
+    # Exclude salary heads (A01*) as they have separate salary bill workflow
     budget_heads = BudgetHead.objects.filter(
         posting_allowed=True,
         is_active=True
+    ).exclude(
+        global_head__code__startswith='A01'
     ).select_related('global_head', 'function').order_by('global_head__code')
     
     if account_type:
         budget_heads = budget_heads.filter(global_head__account_type=account_type)
     
-    # Filter by GlobalHead department scope
-    if department_id:
+    # Filter by function (primary method)
+    if function_id:
         try:
-            dept = Department.objects.get(id=department_id)
-            # Only show budget heads whose GlobalHead is applicable to this department
-            from django.db.models import Q
+            budget_heads = budget_heads.filter(function_id=function_id)
+            # Get department for display purposes
+            function = FunctionCode.objects.get(id=function_id)
+            # Try to find which department this function belongs to
+            dept_with_function = Department.objects.filter(related_functions=function).first()
+            if dept_with_function:
+                department = dept_with_function
+        except (ValueError, TypeError, FunctionCode.DoesNotExist):
+            pass
+    # Fallback: Filter by department's assigned functions
+    elif department_id:
+        try:
+            department = Department.objects.get(id=department_id)
+            # Only show budget heads for functions assigned to this department
             budget_heads = budget_heads.filter(
-                Q(global_head__scope='UNIVERSAL') |
-                Q(global_head__applicable_departments=dept)
+                function__in=department.related_functions.all()
             )
         except (ValueError, TypeError, Department.DoesNotExist):
             pass
@@ -1220,17 +1240,11 @@ def load_budget_heads_options(request):
         # Fallback: don't filter by allocation if error occurs, to avoid 500
         pass
     
-    print(f"DEBUG: load_budget_heads_options params - Dept: {department_id}, Func: {function_id}, Type: {account_type}")
-    
-    if function_id:
-        budget_heads = budget_heads.filter(function_id=function_id)
-    elif department_id:
-        try:
-            dept = Department.objects.get(id=department_id)
-            budget_heads = budget_heads.filter(function__in=dept.related_functions.all())
-        except (ValueError, TypeError, Department.DoesNotExist):
-            pass
+    print(f"DEBUG: load_budget_heads_options params - Dept: {department_id}, Function: {function_id}, Type: {account_type}")
             
     print(f"DEBUG: Returning {budget_heads.count()} budget heads")
-    return render(request, 'finance/partials/budget_head_formset_options.html', {'budget_heads': budget_heads})
+    return render(request, 'finance/partials/budget_head_formset_options.html', {
+        'budget_heads': budget_heads,
+        'department': department
+    })
 

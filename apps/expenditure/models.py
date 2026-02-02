@@ -388,13 +388,14 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         
         This method:
         1. Validates the workflow transition
-        2. Checks budget availability for EACH line (Hard Budget Constraint)
-        3. Creates a Journal Voucher with:
-           - Multiple Debits: Expense Head (line.amount)
+        2. For SALARY bills: Deducts budgets from all function/component allocations
+        3. For REGULAR bills: Checks budget availability for EACH line
+        4. Creates a Journal Voucher with:
+           - Multiple Debits: Expense Head (line.amount) OR Single Debit for Salary
            - Credit: Accounts Payable (net_amount)
            - Credit: Tax Payable (tax_amount)
-        4. Updates the BudgetAllocation spent_amount for all heads
-        5. Updates bill status to APPROVED
+        5. Updates the BudgetAllocation spent_amount for all heads
+        6. Updates bill status to APPROVED
         
         Args:
             user: The user approving the bill.
@@ -413,6 +414,12 @@ class Bill(AuditLogMixin, TenantAwareMixin):
                 "Only VERIFIED bills can be approved. Please verify first."
             )
         
+        # Handle SALARY bills differently
+        if hasattr(self, 'bill_type') and self.bill_type == 'SALARY':
+            self._approve_salary_bill(user)
+            return
+        
+        # Regular bill processing continues below...
         # Verify lines exist
         lines = self.lines.all()
         if not lines:
@@ -552,6 +559,156 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         self.liability_voucher = voucher
         self.save(update_fields=[
             'status', 'approved_at', 'approved_by', 
+            'liability_voucher', 'updated_at'
+        ])
+    
+    def _approve_salary_bill(self, user: 'CustomUser') -> None:
+        """
+        Approve a salary bill with automatic budget deductions.
+        
+        For salary bills, we:
+        1. Deduct budgets from all function/component combinations
+        2. Create a simple GL voucher (single debit to Salary Expense)
+        3. Update bill status to APPROVED
+        
+        Args:
+            user: The user approving the bill
+        """
+        from apps.expenditure.services_salary import deduct_salary_bill_budgets
+        from apps.finance.models import Voucher, VoucherType, JournalEntry, BudgetHead
+        
+        # Deduct budgets across all functions and components
+        try:
+            deduction_count = deduct_salary_bill_budgets(self, user)
+        except Exception as e:
+            raise BudgetExceededException(f"Salary bill budget validation failed: {str(e)}")
+        
+        # Get the salary breakdown for GL entries
+        from apps.expenditure.services_salary import SalaryBillGenerator, SALARY_COMPONENT_MAPPING
+        from apps.finance.models import FunctionCode
+        
+        generator = SalaryBillGenerator(
+            self.organization,
+            self.fiscal_year,
+            self.salary_month,
+            self.salary_year
+        )
+        breakdown = generator.calculate_breakdown()
+        
+        # Get system accounts
+        try:
+            ap_head = BudgetHead.objects.get(
+                global_head__system_code='AP',
+                is_active=True
+            )
+        except BudgetHead.DoesNotExist:
+            raise ValidationError(
+                "System account 'Accounts Payable' (AP) not configured."
+            )
+        except BudgetHead.MultipleObjectsReturned:
+            ap_head = BudgetHead.objects.filter(
+                global_head__system_code='AP',
+                is_active=True
+            ).first()
+        
+        # Generate voucher number
+        voucher_count = Voucher.objects.filter(
+            organization=self.organization,
+            fiscal_year=self.fiscal_year,
+            voucher_type=VoucherType.JOURNAL
+        ).count() + 1
+        voucher_no = f"JV-{self.fiscal_year.year_name}-{voucher_count:04d}"
+        
+        # Create liability voucher
+        voucher = Voucher.objects.create(
+            organization=self.organization,
+            voucher_no=voucher_no,
+            fiscal_year=self.fiscal_year,
+            date=timezone.now().date(),
+            voucher_type=VoucherType.JOURNAL,
+            fund=self.fund,
+            description=f"Salary Bill - {self.description}",
+            created_by=user
+        )
+        
+        # Create FUNCTION-WISE GL entries for each salary component
+        # This ensures the ledger shows function-wise breakdown for NAM reporting
+        total_debited = Decimal('0.00')
+        
+        for func_code, func_data in breakdown['by_function'].items():
+            function = FunctionCode.objects.filter(code=func_code).first()
+            if not function:
+                continue
+            
+            for comp_name, amount in func_data['components'].items():
+                if amount <= 0:
+                    continue
+                
+                account_code = SALARY_COMPONENT_MAPPING.get(comp_name)
+                if not account_code:
+                    continue
+                
+                # Find the budget head for this function + component
+                budget_head = BudgetHead.objects.filter(
+                    fund=self.fund,
+                    function=function,
+                    global_head__code=account_code,
+                    is_active=True
+                ).first()
+                
+                if budget_head:
+                    # Create GL entry for this specific function + component
+                    JournalEntry.objects.create(
+                        voucher=voucher,
+                        budget_head=budget_head,
+                        description=f"{function.name} - {comp_name.replace('_', ' ').title()}",
+                        debit=amount,
+                        credit=Decimal('0.00')
+                    )
+                    total_debited += amount
+        
+        # Credit: Accounts Payable (net_amount)
+        JournalEntry.objects.create(
+            voucher=voucher,
+            budget_head=ap_head,
+            description=f"Salary payable: {self.description}",
+            debit=Decimal('0.00'),
+            credit=self.net_amount
+        )
+        
+        # Credit: Tax (if any)
+        if self.tax_amount > Decimal('0.00'):
+            try:
+                tax_head = BudgetHead.objects.get(
+                    global_head__system_code='TAX_IT',
+                    is_active=True
+                )
+            except BudgetHead.DoesNotExist:
+                raise ValidationError("Income Tax account (TAX_IT) not configured.")
+            except BudgetHead.MultipleObjectsReturned:
+                tax_head = BudgetHead.objects.filter(
+                    global_head__system_code='TAX_IT',
+                    is_active=True
+                ).first()
+            
+            JournalEntry.objects.create(
+                voucher=voucher,
+                budget_head=tax_head,
+                description=f"Tax withheld: {self.description}",
+                debit=Decimal('0.00'),
+                credit=self.tax_amount
+            )
+        
+        # Post the voucher
+        voucher.post_voucher(user)
+        
+        # Update bill status
+        self.status = BillStatus.APPROVED
+        self.approved_at = timezone.now()
+        self.approved_by = user
+        self.liability_voucher = voucher
+        self.save(update_fields=[
+            'status', 'approved_at', 'approved_by',
             'liability_voucher', 'updated_at'
         ])
     

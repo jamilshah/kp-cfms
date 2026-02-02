@@ -238,15 +238,19 @@ def get_ara_2022_fallback(bps: int) -> Decimal:
 
 class BudgetEmployee(TimeStampedMixin):
     """
-    Individual employee record linked to a ScheduleOfEstablishment entry.
+    Individual employee record with direct department and function assignment.
     
     KP Government CFMS Compliant Salary Structure:
     - Stores configuration and eligibility data only
     - All calculations are derived from configuration
     - Supports Running Basic, HRA, Conveyance, Medical, ARA, and DRA
+    - Direct function assignment for simplified workflow
     
     Attributes:
-        schedule: Parent ScheduleOfEstablishment entry
+        fiscal_year: Fiscal year for this employee record
+        department: Department where employee works
+        function: Function code (determines budget allocation)
+        schedule: Optional link to ScheduleOfEstablishment (for reporting)
         name: Employee name
         father_name: Father's name (for official records)
         is_vacant: Whether this is a vacant post placeholder
@@ -259,11 +263,44 @@ class BudgetEmployee(TimeStampedMixin):
         ara_percentage: ARA percentage (configurable per notification)
     """
     
+    fiscal_year = models.ForeignKey(
+        'budgeting.FiscalYear',
+        on_delete=models.PROTECT,
+        related_name='budget_employees',
+        verbose_name=_('Fiscal Year'),
+        help_text=_('Fiscal year for this employee record'),
+        null=True,
+        blank=True
+    )
+    
+    department = models.ForeignKey(
+        'budgeting.Department',
+        on_delete=models.PROTECT,
+        related_name='budget_employees',
+        verbose_name=_('Department'),
+        help_text=_('Department where employee works'),
+        null=True,
+        blank=True
+    )
+    
+    function = models.ForeignKey(
+        'finance.FunctionCode',
+        on_delete=models.PROTECT,
+        related_name='budget_employees',
+        verbose_name=_('Function'),
+        help_text=_('Function code for this employee (determines budget allocation)'),
+        null=True,
+        blank=True
+    )
+    
     schedule = models.ForeignKey(
         'budgeting.ScheduleOfEstablishment',
         on_delete=models.CASCADE,
         related_name='employees',
-        verbose_name=_('Schedule Entry')
+        verbose_name=_('Schedule Entry'),
+        help_text=_('Optional: Link to establishment entry (for reporting only)'),
+        null=True,
+        blank=True
     )
     
     # ========== PERSONAL DATA ==========

@@ -644,19 +644,25 @@ class DemandOutstandingAPIView(LoginRequiredMixin, View):
 def load_functions(request):
     """
     AJAX view to load functions filtered by department.
+    Returns HTML with function options including default and usage notes.
     """
     department_id = request.GET.get('department')
     functions = FunctionCode.objects.none()
+    default_id = None
     
     if department_id:
         try:
             dept = Department.objects.get(id=department_id)
             functions = dept.related_functions.all().order_by('code')
+            default_id = dept.default_function_id if dept.default_function else None
         except (ValueError, TypeError, Department.DoesNotExist):
             pass
             
     # Reuse expenditure partial as it is generic and compatible
-    return render(request, 'expenditure/partials/function_options.html', {'functions': functions})
+    return render(request, 'expenditure/partials/function_options.html', {
+        'functions': functions,
+        'default_id': default_id
+    })
 
 
 def load_revenue_heads(request):

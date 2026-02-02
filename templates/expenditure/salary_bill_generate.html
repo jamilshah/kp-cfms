@@ -1,0 +1,208 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Generate Monthly Salary Bill{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="bi bi-cash-coin"></i> Generate Monthly Salary Bill</h2>
+                <a href="{% url 'expenditure:bill_list' %}" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Bills
+                </a>
+            </div>
+
+            {% if fiscal_year %}
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Fiscal Year: {{ fiscal_year.year_name }}</h5>
+                </div>
+                <div class="card-body">
+                    <form method="get" id="previewForm">
+                        <div class="row">
+                            <div class="col-md-3">
+                                {{ form.month.label_tag }}
+                                {{ form.month }}
+                            </div>
+                            <div class="col-md-3">
+                                {{ form.year.label_tag }}
+                                {{ form.year }}
+                            </div>
+                            <div class="col-md-6 d-flex align-items-end">
+                                <button type="submit" name="preview" value="1" class="btn btn-info me-2">
+                                    <i class="bi bi-eye"></i> Preview
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {% if preview_data %}
+            <div class="card mb-4">
+                <div class="card-header {% if is_valid %}bg-success{% else %}bg-danger{% endif %} text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-file-earmark-text"></i> {{ bill_description }}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Summary -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted">Total Employees</h6>
+                                    <h3>{{ preview_data.total_employees }}</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted">Total Amount</h6>
+                                    <h3>Rs {{ preview_data.total_amount|floatformat:2|intcomma }}</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card {% if is_valid %}bg-success{% else %}bg-danger{% endif %} text-white">
+                                <div class="card-body text-center">
+                                    <h6>Budget Status</h6>
+                                    <h3>
+                                        {% if is_valid %}
+                                        <i class="bi bi-check-circle"></i> Available
+                                        {% else %}
+                                        <i class="bi bi-x-circle"></i> Insufficient
+                                        {% endif %}
+                                    </h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Validation Errors -->
+                    {% if validation_errors %}
+                    <div class="alert alert-danger">
+                        <h5><i class="bi bi-exclamation-triangle"></i> Budget Validation Errors:</h5>
+                        <ul>
+                            {% for error in validation_errors %}
+                            <li>{{ error }}</li>
+                            {% endfor %}
+                        </ul>
+                        <p class="mb-0"><strong>Action Required:</strong> Request re-appropriation or adjust budget allocations before proceeding.</p>
+                    </div>
+                    {% endif %}
+
+                    <!-- Breakdown by Function -->
+                    <h5 class="mt-4 mb-3"><i class="bi bi-diagram-3"></i> Breakdown by Function</h5>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Function Code</th>
+                                    <th>Function Name</th>
+                                    <th class="text-end">Employees</th>
+                                    <th class="text-end">Amount (Rs.)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for func_code, data in preview_data.by_function.items %}
+                                <tr>
+                                    <td>{{ func_code }}</td>
+                                    <td>{{ data.function_name }}</td>
+                                    <td class="text-end">{{ data.employee_count }}</td>
+                                    <td class="text-end">{{ data.total|floatformat:2|intcomma }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-secondary">
+                                <tr>
+                                    <th colspan="2">Total</th>
+                                    <th class="text-end">{{ preview_data.total_employees }}</th>
+                                    <th class="text-end">{{ preview_data.total_amount|floatformat:2|intcomma }}</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <!-- Breakdown by Component -->
+                    <h5 class="mt-4 mb-3"><i class="bi bi-cash-stack"></i> Breakdown by Salary Component</h5>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Account Code</th>
+                                    <th>Component Name</th>
+                                    <th class="text-end">Employees</th>
+                                    <th class="text-end">Amount (Rs.)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for code, data in preview_data.by_component.items %}
+                                <tr>
+                                    <td>{{ code }}</td>
+                                    <td>{{ data.name }}</td>
+                                    <td class="text-end">{{ data.employees }}</td>
+                                    <td class="text-end">{{ data.amount|floatformat:2|intcomma }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Create Bill Button -->
+                    {% if is_valid %}
+                    <div class="alert alert-info mt-4">
+                        <h5><i class="bi bi-info-circle"></i> Ready to Create Bill</h5>
+                        <p>All budget validations passed. Click below to create the salary bill.</p>
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="month" value="{{ month }}">
+                            <input type="hidden" name="year" value="{{ year }}">
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="bi bi-check-circle"></i> Create Salary Bill
+                            </button>
+                        </form>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning mt-4">
+                        <i class="bi bi-exclamation-triangle"></i> Cannot create bill due to budget validation errors above.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <div class="alert alert-danger">
+                <h5><i class="bi bi-exclamation-triangle"></i> No Active Fiscal Year</h5>
+                <p>Please contact your administrator to set up a fiscal year before generating salary bills.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-submit preview on month/year change
+document.addEventListener('DOMContentLoaded', function() {
+    const monthSelect = document.getElementById('id_month');
+    const yearInput = document.getElementById('id_year');
+    
+    if (monthSelect && yearInput) {
+        monthSelect.addEventListener('change', function() {
+            document.getElementById('previewForm').submit();
+        });
+        
+        yearInput.addEventListener('change', function() {
+            document.getElementById('previewForm').submit();
+        });
+    }
+});
+</script>
+{% endblock %}

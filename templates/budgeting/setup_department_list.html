@@ -26,9 +26,9 @@
                     <th style="width: 100px;">Code</th>
                     <th>Department Name</th>
                     <th>Related Functions</th>
-                    <th class="text-center">Active</th>
+                    <th class="text-center" style="width:120px;">Active</th>
                     <th class="text-end">Created At</th>
-                    <th class="text-end">Actions</th>
+                    <th class="text-end" style="width:140px;">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -51,18 +51,20 @@
                         {% endif %}
                     </td>
                     <td class="text-end text-muted small">{{ dept.created_at|date:"M d, Y" }}</td>
-                    <td class="text-end">
-                        <a href="{% url 'budgeting:setup_department_edit' dept.pk %}" class="btn btn-sm btn-outline-primary me-1" title="Edit">
-                            <i class="bi bi-pencil"></i>
-                        </a>
-                        <a href="{% url 'budgeting:setup_department_delete' dept.pk %}" class="btn btn-sm btn-outline-danger" title="Delete">
-                            <i class="bi bi-trash"></i>
-                        </a>
+                    <td class="text-end" style="width:140px;">
+                        <div class="d-flex justify-content-end align-items-center">
+                            <a href="{% url 'budgeting:setup_department_edit' dept.pk %}" class="btn btn-sm btn-outline-primary me-2" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <a href="{% url 'budgeting:setup_department_delete' dept.pk %}" class="btn btn-sm btn-outline-danger" title="Delete">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        </div>
                     </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="3" class="text-center py-4 text-muted">No departments found.</td>
+                    <td colspan="6" class="text-center py-4 text-muted">No departments found.</td>
                 </tr>
                 {% endfor %}
             </tbody>

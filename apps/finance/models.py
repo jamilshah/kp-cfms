@@ -69,6 +69,16 @@ class FunctionCode(UUIDMixin):
         blank=True,
         verbose_name=_('Description')
     )
+    usage_notes = models.TextField(
+        blank=True,
+        verbose_name=_('Usage Notes'),
+        help_text=_('Guidelines on what expenses should be recorded under this function (AGP/PIFRA compliance)')
+    )
+    is_default = models.BooleanField(
+        default=False,
+        verbose_name=_('Is Default'),
+        help_text=_('Mark as default function for its department')
+    )
     is_active = models.BooleanField(
         default=True,
         verbose_name=_('Is Active')
@@ -435,23 +445,24 @@ class BudgetHead(AuditLogMixin, StatusMixin):
     
     def __str__(self) -> str:
         """
-        Dynamic string representation based on head type.
+        Dynamic string representation with clear function context.
         
         Case A (Regular - sub_code='00'):
-            Format: "[Function Code] - [Object Code] : [Object Name]"
-            Example: "AD - A03303 : Electricity"
+            Format: "[Function Name] - [Object Name] ([Object Code])"
+            Example: "Administration - Electricity (A03303)"
         
         Case B (Sub-Head - sub_code!='00'):
-            Format: "[Object Code]-[Sub Code] : [Local Description]"
-            Example: "C03880-01 : Rent of Shops"
+            Format: "[Function Name] - [Local Description] ([Object Code]-[Sub Code])"
+            Example: "Infrastructure - Rent of Shops (C03880-01)"
         """
+        func_name = self.function.name if self.function else 'Unknown Function'
+        
         if self.sub_code != '00' and self.local_description:
-            # Sub-Head format
-            return f"{self.local_description} ({self.global_head.code}-{self.sub_code})"
+            # Sub-Head format with function name
+            return f"{func_name} - {self.local_description} ({self.global_head.code}-{self.sub_code})"
         else:
-            # Regular format
-            func_code = self.function.code if self.function else 'XX'
-            return f"{self.global_head.name} ({func_code} - {self.global_head.code})"
+            # Regular format with function name
+            return f"{func_name} - {self.global_head.name} ({self.global_head.code})"
     
     # Proxy properties for template compatibility
     @property

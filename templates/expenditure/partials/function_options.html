@@ -1,6 +1,10 @@
 <option value="">---------</option>
 {% for func in functions %}
-<option value="{{ func.pk }}">{{ func }}</option>
+<option value="{{ func.pk }}" 
+        {% if func.pk == default_id %}selected{% endif %}
+        {% if func.usage_notes %}title="{{ func.usage_notes }}"{% endif %}>
+    {{ func }}
+</option>
 {% endfor %}
 
 {# Clear budget heads when function list is reloaded #}

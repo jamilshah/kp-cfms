@@ -4,7 +4,8 @@ Forms for Employee Salary Structure Management (KP Government CFMS Compliant)
 from django import forms
 from decimal import Decimal
 from apps.budgeting.models_employee import BudgetEmployee, CITY_CATEGORIES
-from apps.budgeting.models import ScheduleOfEstablishment
+from apps.budgeting.models import ScheduleOfEstablishment, Department, FiscalYear
+from apps.finance.models import FunctionCode
 
 
 class EmployeeSalaryForm(forms.ModelForm):
@@ -14,6 +15,7 @@ class EmployeeSalaryForm(forms.ModelForm):
     Uses year-by-year ARA calculation based on frozen 2022 value and subsequent relief announcements.
     
     Fields:
+    - Assignment: fiscal_year, department, function (NEW)
     - Personal: name, father_name, designation, date_of_birth, qualification, joining_date
     - Pay: bps (BPS grade), running_basic (from last pay slip)
     - Eligibility: city_category, is_govt_accommodation, is_house_hiring
@@ -24,6 +26,7 @@ class EmployeeSalaryForm(forms.ModelForm):
     class Meta:
         model = BudgetEmployee
         fields = [
+            'fiscal_year', 'department', 'function',
             'name', 'father_name', 'designation', 'date_of_birth', 'qualification', 'joining_date',
             'bps', 'running_basic',
             'city_category', 'is_govt_accommodation', 'is_house_hiring',
@@ -33,6 +36,18 @@ class EmployeeSalaryForm(forms.ModelForm):
             'remarks'
         ]
         widgets = {
+            'fiscal_year': forms.Select(attrs={
+                'class': 'form-select',
+                'required': True,
+            }),
+            'department': forms.Select(attrs={
+                'class': 'form-select',
+                'required': True,
+            }),
+            'function': forms.Select(attrs={
+                'class': 'form-select',
+                'required': True,
+            }),
             'name': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Full Name',

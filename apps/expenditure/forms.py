@@ -121,9 +121,6 @@ class BillForm(forms.ModelForm):
         help_text=_('Filter budget heads by department.'),
         widget=forms.Select(attrs={
             'class': 'form-select select2-enable',
-            'hx-get': reverse_lazy('finance:load_functions'),
-            'hx-target': '#id_function',
-            'hx-trigger': 'change',
         })
     )
     function = forms.ModelChoiceField(
@@ -133,11 +130,6 @@ class BillForm(forms.ModelForm):
         help_text=_('Filter budget heads by function.'),
         widget=forms.Select(attrs={
             'class': 'form-select select2-enable',
-            'hx-get': reverse_lazy('finance:load_budget_heads_options'),
-            'hx-target': '#budget-head-options',
-            'hx-trigger': 'change',
-            'hx-include': '[name=department]',
-            'hx-vals': '{"account_type": "EXP"}',  # Only show Expenditure heads
         })
     )
 

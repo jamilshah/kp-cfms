@@ -17,6 +17,9 @@ from apps.expenditure.views import (
     PaymentCreateView, PaymentListView,
     BillAmountAPIView, load_budget_heads, load_functions
 )
+from apps.expenditure.views_salary import (
+    SalaryBillGenerateView, SalaryBillPreviewAPI
+)
 
 app_name = 'expenditure'
 
@@ -36,6 +39,10 @@ urlpatterns = [
     path('bills/<int:pk>/submit/', BillSubmitView.as_view(), name='bill_submit'),
     path('bills/<int:pk>/verify/', BillVerifyView.as_view(), name='bill_verify'),
     path('bills/<int:pk>/approve/', BillApproveView.as_view(), name='bill_approve'),
+    
+    # Salary Bill Generation
+    path('bills/salary/generate/', SalaryBillGenerateView.as_view(), name='salary_bill_generate'),
+    path('api/salary/preview/', SalaryBillPreviewAPI.as_view(), name='salary_bill_preview_api'),
     
     # Payment Management
     path('payments/', PaymentListView.as_view(), name='payment_list'),

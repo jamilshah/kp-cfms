@@ -60,6 +60,7 @@ from apps.budgeting.views_employee_salary import (
     EmployeeSalaryCSVImportView,
     EmployeeSalaryCSVTemplateView,
     BulkApplyIncrementView,
+    load_department_functions,
     BudgetBookReportView,
     BudgetBookExportView
 )
@@ -199,6 +200,7 @@ urlpatterns = [
     path('employee-salary/<int:pk>/', EmployeeSalaryDetailView.as_view(), name='employee_salary_detail'),
     path('employee-salary/<int:pk>/edit/', EmployeeSalaryUpdateView.as_view(), name='employee_salary_edit'),
     path('employee-salary/<int:pk>/delete/', EmployeeSalaryDeleteView.as_view(), name='employee_salary_delete'),
+    path('employee-salary/load-functions/', load_department_functions, name='employee_salary_load_functions'),
     path('employee-salary/csv-import/', EmployeeSalaryCSVImportView.as_view(), name='employee_salary_csv_import'),
     path('employee-salary/csv-template/', EmployeeSalaryCSVTemplateView.as_view(), name='employee_salary_csv_template'),
     path('employee-salary/bulk-increment/', BulkApplyIncrementView.as_view(), name='employee_salary_bulk_increment'),

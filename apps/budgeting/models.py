@@ -452,6 +452,15 @@ class Department(TimeStampedMixin):
         verbose_name=_('Related Functions'),
         help_text=_('Accounting functions (Element 3) managed by this wing.')
     )
+    default_function = models.ForeignKey(
+        'finance.FunctionCode',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='default_for_departments',
+        verbose_name=_('Default Function'),
+        help_text=_('Primary/default function for this department (auto-selected in forms)')
+    )
     is_active = models.BooleanField(
         default=True,
         verbose_name=_('Is Active')

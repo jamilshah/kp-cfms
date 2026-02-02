@@ -135,52 +135,50 @@ Description: Bill Create/Edit Form Template
                             <div class="alert alert-danger m-2">{{ lines.non_form_errors }}</div>
                             {% endif %}
                             
-                            <div class="table-responsive">
-                                <table class="table table-bordered mb-0" id="linesTable">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th style="width: 40%">Budget Head (Department/Function) <span class="text-danger">*</span></th>
-                                            <th style="width: 35%">Description</th>
-                                            <th style="width: 20%">Amount (Rs.) <span class="text-danger">*</span></th>
-                                            <th style="width: 5%"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="linesBody">
-                                        {% for line_form in lines %}
-                                        <tr class="line-row">
-                                            <td>
-                                                {% for hidden in line_form.hidden_fields %}
-                                                    {{ hidden }}
-                                                {% endfor %}
+                            <div id="linesContainer">
+                                {% for line_form in lines %}
+                                <div class="card mb-3 line-row">
+                                    <div class="card-body">
+                                        {% for hidden in line_form.hidden_fields %}
+                                            {{ hidden }}
+                                        {% endfor %}
+                                        
+                                        <div class="row mb-3">
+                                            <div class="col-12">
+                                                <label class="form-label fw-bold">
+                                                    Budget Head (Department/Function) <span class="text-danger">*</span>
+                                                </label>
                                                 {{ line_form.budget_head }}
                                                 {% if line_form.budget_head.errors %}
                                                     <div class="text-danger small">{{ line_form.budget_head.errors.0 }}</div>
                                                 {% endif %}
-                                            </td>
-                                            <td>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="row">
+                                            <div class="col-md-8">
+                                                <label class="form-label">Description</label>
                                                 {{ line_form.description }}
                                                 {% if line_form.description.errors %}
                                                     <div class="text-danger small">{{ line_form.description.errors.0 }}</div>
                                                 {% endif %}
-                                            </td>
-                                            <td>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">Amount (Rs.) <span class="text-danger">*</span></label>
                                                 {{ line_form.amount }}
                                                 {% if line_form.amount.errors %}
                                                     <div class="text-danger small">{{ line_form.amount.errors.0 }}</div>
                                                 {% endif %}
-                                            </td>
-                                            <td class="text-center">
-                                                {% if lines.can_delete %}
-                                                    {{ line_form.DELETE }}
-                                                {% endif %}
-                                                <button type="button" class="btn btn-sm btn-danger delete-row" title="Remove">
+                                            </div>
+                                            <div class="col-md-1 d-flex align-items-end">
+                                                <button type="button" class="btn btn-sm btn-danger delete-row w-100" title="Remove">
                                                     <i class="bi bi-trash"></i>
                                                 </button>
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
                             </div>
                         </div>
                     </div>
@@ -240,42 +238,202 @@ Description: Bill Create/Edit Form Template
 
 {% block extra_js %}
 <!-- Template for new row (hidden) -->
-<table style="display: none;">
-    <tbody id="emptyRowTemplate">
-        <tr class="line-row">
-            <td>
-                {{ lines.empty_form.budget_head }}
-            </td>
-            <td>
-                {{ lines.empty_form.description }}
-            </td>
-            <td>
-                {{ lines.empty_form.amount }}
-            </td>
-            <td class="text-center">
-                {% if lines.can_delete %}
-                    {{ lines.empty_form.DELETE }}
-                {% endif %}
-                <button type="button" class="btn btn-sm btn-danger delete-row">
-                    <i class="bi bi-trash"></i>
-                </button>
-            </td>
-        </tr>
-    </tbody>
-</table>
+<div id="emptyRowTemplate" style="display: none;">
+    <div class="card mb-3 line-row">
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-12">
+                    <label class="form-label fw-bold">
+                        Budget Head (Department/Function) <span class="text-danger">*</span>
+                    </label>
+                    {{ lines.empty_form.budget_head }}
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-8">
+                    <label class="form-label">Description</label>
+                    {{ lines.empty_form.description }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Amount (Rs.) <span class="text-danger">*</span></label>
+                    {{ lines.empty_form.amount }}
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button type="button" class="btn btn-sm btn-danger delete-row w-100" title="Remove">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Hidden container for HTMX response scripts -->
 <div id="budget-head-options" style="display:none;"></div>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // --- Department Filter ---
+        const departmentSelect = document.querySelector('select[name="department"]');
+        const functionSelect = document.getElementById('{{ form.function.id_for_label }}');
+        
+        // Function to load functions for selected department
+        function loadFunctions() {
+            const departmentId = departmentSelect.value;
+            console.log('Department selected:', departmentId);
+            
+            // Clear function dropdown and its value
+            functionSelect.innerHTML = '<option value="">---------</option>';
+            functionSelect.value = ''; // Ensure no value is selected
+            
+            // Clear budget heads
+            clearBudgetHeads();
+            
+            if (!departmentId) {
+                functionSelect.innerHTML = '<option value="">Select department first...</option>';
+                return;
+            }
+            
+            // Fetch functions for selected department
+            const url = `{% url 'finance:load_functions' %}?department=${departmentId}`;
+            console.log('Fetching functions from:', url);
+            
+            fetch(url)
+                .then(response => response.text())
+                .then(html => {
+                    functionSelect.innerHTML = html;
+                    
+                    // Important: Clear the value after loading options
+                    functionSelect.value = '';
+                    
+                    // Reinitialize Select2 for function dropdown WITHOUT triggering change
+                    if (typeof $ !== 'undefined') {
+                        $(functionSelect).select2('destroy').select2({
+                            theme: 'bootstrap-5',
+                            width: '100%',
+                            placeholder: "Select function...",
+                            allowClear: true
+                        });
+                        
+                        // Force clear the value in Select2
+                        $(functionSelect).val(null).trigger('change.select2');
+                    }
+                    
+                    console.log('Functions loaded successfully');
+                })
+                .catch(error => console.error('Error loading functions:', error));
+        }
+        
+        function clearBudgetHeads() {
+            document.querySelectorAll('select[name$="-budget_head"]').forEach(select => {
+                select.innerHTML = '<option value="">---------</option>';
+                if (typeof $ !== 'undefined') {
+                    $(select).select2('destroy').select2({
+                        theme: 'bootstrap-5',
+                        width: '100%',
+                        placeholder: "Select function first"
+                    });
+                }
+            });
+            currentBudgetHeadOptions = '<option value="">---------</option>';
+        }
+        
+        // Function to load budget heads for selected function
+        function loadBudgetHeads() {
+            const functionId = functionSelect.value;
+            console.log('loadBudgetHeads called with function:', functionId);
+            
+            if (!functionId) {
+                clearBudgetHeads();
+                return;
+            }
+            
+            // Fetch budget heads for selected function
+            const url = `{% url 'expenditure:load_budget_heads' %}?function=${functionId}`;
+            console.log('Fetching from:', url);
+            
+            fetch(url)
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    return response.text();
+                })
+                .then(html => {
+                    console.log('Response HTML length:', html.length);
+                    
+                    // Extract options from the response
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const options = doc.querySelectorAll('option');
+                    console.log('Options found:', options.length);
+                    
+                    // Store options HTML for new rows
+                    let optionsHtml = '<option value="">---------</option>';
+                    options.forEach(opt => {
+                        optionsHtml += `<option value="${opt.value}">${opt.textContent}</option>`;
+                    });
+                    currentBudgetHeadOptions = optionsHtml;
+                    
+                    // Update all budget head dropdowns
+                    const selects = document.querySelectorAll('select[name$="-budget_head"]');
+                    console.log('Updating', selects.length, 'select elements');
+                    
+                    selects.forEach(select => {
+                        const currentValue = select.value; // Preserve selected value
+                        select.innerHTML = currentBudgetHeadOptions;
+                        
+                        // Restore selected value if it's still in the list
+                        if (currentValue) {
+                            select.value = currentValue;
+                        }
+                        
+                        // Reinitialize Select2
+                        if (typeof $ !== 'undefined') {
+                            $(select).select2('destroy').select2({
+                                theme: 'bootstrap-5',
+                                width: '100%',
+                                placeholder: "Search Budget Head...",
+                                allowClear: true
+                            });
+                        }
+                    });
+                    
+                    console.log('Budget heads updated successfully');
+                })
+                .catch(error => console.error('Error loading budget heads:', error));
+        }
+        
+        // Set up cascade: Department -> Functions -> Budget Heads
+        if (departmentSelect) {
+            departmentSelect.addEventListener('change', loadFunctions);
+            
+            // Also load on page load if department is already selected
+            if (departmentSelect.value) {
+                setTimeout(function() {
+                    console.log('Triggering department filter for:', departmentSelect.value);
+                    loadFunctions();
+                }, 100);
+            }
+        }
+        
+        if (functionSelect) {
+            functionSelect.addEventListener('change', loadBudgetHeads);
+        }
+        
+        if (functionSelect) {
+            functionSelect.addEventListener('change', loadBudgetHeads);
+        }
+        
         // --- FormSet Logic ---
-        const linesBody = document.getElementById('linesBody');
+        const linesContainer = document.getElementById('linesContainer');
         const addLineBtn = document.getElementById('addLineBtn');
         const totalFormsInput = document.querySelector('#id_lines-TOTAL_FORMS');
         const grossAmountInput = document.getElementById('{{ form.gross_amount.id_for_label }}');
         const taxAmountInput = document.getElementById('{{ form.tax_amount.id_for_label }}');
         const netAmountDisplay = document.getElementById('net_amount_display');
+        
+        // Store current budget head options
+        let currentBudgetHeadOptions = '<option value="">---------</option>';
         
         // Function to update totals
         function updateTotals() {
@@ -313,10 +471,12 @@ Description: Bill Create/Edit Form Template
                 deleteBtn.addEventListener('click', function() {
                     const deleteInput = row.querySelector('input[name$="-DELETE"]');
                     if (deleteInput) {
+                        // For existing rows: mark for deletion via Django formset
                         deleteInput.checked = true;
                         row.style.display = 'none';
                     } else {
-                        row.remove(); // For dynamic rows
+                        // For new dynamic rows: just remove
+                        row.remove();
                     }
                     updateTotals();
                 });
@@ -340,10 +500,17 @@ Description: Bill Create/Edit Form Template
             const template = document.getElementById('emptyRowTemplate').innerHTML;
             const newHtml = template.replace(/__prefix__/g, currentFormCount);
             
-            linesBody.insertAdjacentHTML('beforeend', newHtml);
+            linesContainer.insertAdjacentHTML('beforeend', newHtml);
             totalFormsInput.value = currentFormCount + 1;
             
-            const newRow = linesBody.lastElementChild;
+            const newRow = linesContainer.lastElementChild;
+            
+            // Apply current filtered options to the new row's select
+            const newSelect = newRow.querySelector('select[name$="-budget_head"]');
+            if (newSelect) {
+                newSelect.innerHTML = currentBudgetHeadOptions;
+            }
+            
             attachRowListeners(newRow);
         });
         
