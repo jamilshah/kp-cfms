@@ -410,7 +410,7 @@ Description: Base template with Bootstrap 5 and navigation.
             <div class="accordion-item bg-transparent border-0">
                 <h2 class="accordion-header" id="headingReporting">
                     <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseReporting" aria-expanded="false" aria-controls="collapseReporting">
-                        <i class="bi bi-file-earmark-bar-graph me-2"></i> Reports
+                        <i class="bi bi-file-earmark-bar-graph me-2"></i> Budget Reports
                     </button>
                 </h2>
                 <div id="collapseReporting" class="accordion-collapse collapse {% if request.resolver_match.app_name == 'reporting' %}show{% endif %}" aria-labelledby="headingReporting" data-bs-parent="#sidebarAccordion">
@@ -419,6 +419,9 @@ Description: Base template with Bootstrap 5 and navigation.
                             <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'reporting' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'reporting:dashboard' %}"><i class="bi bi-speedometer2 me-2"></i> Reports Dashboard</a></li>
                             <li class="nav-item"><a class="nav-link {% if 'cash_book' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:dashboard' %}"><i class="bi bi-journal-text me-2"></i> Cash Book</a></li>
                             <li class="nav-item"><a class="nav-link {% if 'monthly_summary' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:monthly_summary' %}"><i class="bi bi-bar-chart me-2"></i> Monthly Summary</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'general_ledger' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:general_ledger' %}"><i class="bi bi-book me-2"></i> General Ledger</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'trial_balance' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:trial_balance' %}"><i class="bi bi-calculator me-2"></i> Trial Balance</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'account_statement' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:account_statement' %}"><i class="bi bi-file-earmark-text me-2"></i> Account Statement</a></li>
                         </ul>
                     </div>
                 </div>

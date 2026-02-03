@@ -1,35 +1,51 @@
 from django.urls import path
-from . import views
+
+from apps.reporting.views import (
+    ReportDashboardView,
+    CashBookReportView,
+    BRSReportView,
+    MonthlySummaryView,
+)
+from apps.reporting.views_ledger import GeneralLedgerView, TrialBalanceView, AccountStatementView
+from apps.reporting.views_api import BudgetHeadAutocompleteView
 
 app_name = 'reporting'
 
 urlpatterns = [
     # Dashboard
-    path('', views.ReportDashboardView.as_view(), name='dashboard'),
+    path('', ReportDashboardView.as_view(), name='dashboard'),
     
     # Cash Book Report
     path(
         'cash-book/<int:bank_account_id>/<int:year>/<int:month>/',
-        views.CashBookReportView.as_view(),
+        CashBookReportView.as_view(),
         name='cash_book_report'
     ),
     
     # BRS Report
     path(
         'brs/<int:statement_id>/',
-        views.BRSReportView.as_view(),
+        BRSReportView.as_view(),
         name='brs_report'
     ),
     
     # Monthly Summary
     path(
         'monthly-summary/',
-        views.MonthlySummaryView.as_view(),
+        MonthlySummaryView.as_view(),
         name='monthly_summary'
     ),
     path(
         'monthly-summary/<int:year>/<int:month>/',
-        views.MonthlySummaryView.as_view(),
+        MonthlySummaryView.as_view(),
         name='monthly_summary_detail'
     ),
+    
+    # Ledger Reports
+    path('general-ledger/', GeneralLedgerView.as_view(), name='general_ledger'),
+    path('trial-balance/', TrialBalanceView.as_view(), name='trial_balance'),
+    path('account-statement/', AccountStatementView.as_view(), name='account_statement'),
+    
+    # API Endpoints
+    path('api/budget-heads/autocomplete/', BudgetHeadAutocompleteView.as_view(), name='budget_head_autocomplete'),
 ]
