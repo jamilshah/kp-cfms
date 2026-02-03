@@ -37,9 +37,9 @@ class Command(BaseCommand):
         REQUIRED_ACCOUNTS = [
             # Suspense & Clearing Accounts
             (
-                SystemCode.SYS_SUSPENSE, 'G05101', 'Suspense Account',
-                'G05', 'Suspense & Clearing',
-                'G051', 'Suspense',
+                SystemCode.SYS_SUSPENSE, 'G05103', 'Suspense Account',
+                'G05', 'Control Accounts',
+                'G051', 'Miscellaneous',
                 AccountType.LIABILITY
             ),
             (
@@ -61,35 +61,35 @@ class Command(BaseCommand):
                 AccountType.LIABILITY
             ),
             (
-                SystemCode.CLEARING_SEC, 'G01190', 'Security / Retention Money',
-                'G01', 'Current Liabilities',
-                'G011', 'Deposits',
+                SystemCode.CLEARING_SEC, 'G05106', 'Security / Retention Money',
+                'G05', 'Control Accounts',
+                'G051', 'Miscellaneous',
                 AccountType.LIABILITY
             ),
             # Accounts Payable & Receivable
             (
-                SystemCode.AP, 'G02001', 'Accounts Payable - Creditors',
-                'G02', 'Accounts Payable',
-                'G020', 'Trade Creditors',
+                SystemCode.AP, 'G01101', 'Accounts Payable',
+                'G01', 'Current Liabilities',
+                'G011', 'Payables',
                 AccountType.LIABILITY
             ),
             (
-                SystemCode.AR, 'F01101', 'Accounts Receivable',
+                SystemCode.AR, 'F01603', 'Accounts Receivable',
                 'F01', 'Current Assets',
-                'F011', 'Receivables',
+                'F016', 'Receivables',
                 AccountType.ASSET
             ),
             # Tax Payable Accounts (for expenditure workflow)
             (
-                SystemCode.TAX_IT, 'G02101', 'Income Tax Payable',
-                'G02', 'Accounts Payable',
-                'G021', 'Tax Payables',
+                SystemCode.TAX_IT, 'G01204', 'Income Tax deducted from contractors/suppliers',
+                'G01', 'Current Liabilities',
+                'G012', 'Others',
                 AccountType.LIABILITY
             ),
             (
-                SystemCode.TAX_GST, 'G02102', 'GST/Sales Tax Payable',
-                'G02', 'Accounts Payable',
-                'G021', 'Tax Payables',
+                SystemCode.TAX_GST, 'G01205', 'Sales Tax deducted from contractors/suppliers',
+                'G01', 'Current Liabilities',
+                'G012', 'Others',
                 AccountType.LIABILITY
             ),
         ]
@@ -144,16 +144,16 @@ class Command(BaseCommand):
                         global_head = GlobalHead.objects.filter(code=gh_code).first()
                         if not global_head:
                             self.stdout.write(
-                                self.style.SUCCESS(f"✓ Would create: {gh_code} - {gh_name} ({sys_code})")
+                                self.style.SUCCESS(f"[OK] Would create: {gh_code} - {gh_name} ({sys_code})")
                             )
                             created_count += 1
                         elif global_head.system_code != sys_code:
                             self.stdout.write(
-                                self.style.WARNING(f"⚠ Would update: {gh_code} → {sys_code} (currently: {global_head.system_code})")
+                                self.style.WARNING(f"[!!] Would update: {gh_code} -> {sys_code} (currently: {global_head.system_code})")
                             )
                             updated_count += 1
                         else:
-                            self.stdout.write(f"✓ Verified: {gh_code} is {sys_code}")
+                            self.stdout.write(f"[OK] Verified: {gh_code} is {sys_code}")
                             verified_count += 1
                     else:
                         global_head, created = GlobalHead.objects.get_or_create(
@@ -168,7 +168,7 @@ class Command(BaseCommand):
 
                         if created:
                             self.stdout.write(
-                                self.style.SUCCESS(f"✓ Created: {gh_code} - {gh_name} ({sys_code})")
+                                self.style.SUCCESS(f"[OK] Created: {gh_code} - {gh_name} ({sys_code})")
                             )
                             created_count += 1
                         else:
@@ -177,17 +177,17 @@ class Command(BaseCommand):
                                 global_head.system_code = sys_code
                                 global_head.save()
                                 self.stdout.write(
-                                    self.style.WARNING(f"⚠ Updated: {gh_code} → {sys_code}")
+                                    self.style.WARNING(f"[!!] Updated: {gh_code} -> {sys_code}")
                                 )
                                 updated_count += 1
                             else:
-                                self.stdout.write(f"✓ Verified: {gh_code} is {sys_code}")
+                                self.stdout.write(f"[OK] Verified: {gh_code} is {sys_code}")
                                 verified_count += 1
 
                 except Exception as e:
                     error_msg = f"Error processing {sys_code} ({gh_code}): {str(e)}"
                     errors.append(error_msg)
-                    self.stdout.write(self.style.ERROR(f"✗ {error_msg}"))
+                    self.stdout.write(self.style.ERROR(f"[XX] {error_msg}"))
 
         # Summary
         self.stdout.write("=" * 80)
@@ -204,4 +204,4 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.WARNING("\nDRY RUN COMPLETE - No changes were made"))
         else:
-            self.stdout.write(self.style.SUCCESS("\n✓ All system codes configured successfully!"))
+            self.stdout.write(self.style.SUCCESS("\n[OK] All system codes configured successfully!"))
