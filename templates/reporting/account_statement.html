@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Account Statement - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="mb-4">
+        <h2 class="mb-1">
+            <i class="bi bi-file-earmark-text me-2"></i>Account Statement
+        </h2>
+        <p class="text-muted">Account activity with opening and closing balances</p>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label for="budget_head" class="form-label">Budget Head <span class="text-danger">*</span></label>
+                    <select name="budget_head" id="budget_head" class="form-select" required>
+                        <option value="">Type to search...</option>
+                        {% if selected_budget_head %}
+                        <option value="{{ selected_budget_head.id }}" selected>
+                            {{ selected_budget_head.code }} - {{ selected_budget_head.global_head.name }}
+                        </option>
+                        {% endif %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="date_from" class="form-label">Date From <span class="text-danger">*</span></label>
+                    <input type="date" name="date_from" id="date_from" class="form-control" 
+                           value="{{ filter_date_from|default:default_date_from }}" required>
+                </div>
+                <div class="col-md-3">
+                    <label for="date_to" class="form-label">Date To <span class="text-danger">*</span></label>
+                    <input type="date" name="date_to" id="date_to" class="form-control" 
+                           value="{{ filter_date_to|default:default_date_to }}" required>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search me-1"></i>Generate
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if selected_budget_head %}
+    <!-- Statement Results -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Account Statement</h5>
+        </div>
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <strong>Account:</strong> {{ selected_budget_head.code }} - {{ selected_budget_head.name }}<br>
+                    <strong>Type:</strong> {{ selected_budget_head.get_account_type_display }}
+                </div>
+                <div class="col-md-6 text-end">
+                    <strong>Period:</strong> {{ filter_date_from|date:"Y-m-d" }} to {{ filter_date_to|date:"Y-m-d" }}
+                </div>
+            </div>
+
+            <!-- Opening Balance -->
+            <div class="alert alert-secondary">
+                <strong>Opening Balance ({{ filter_date_from|date:"Y-m-d" }}):</strong> 
+                <span class="float-end">{{ opening_balance|floatformat:2 }}</span>
+            </div>
+
+            <!-- Transactions -->
+            {% if entries %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Voucher No</th>
+                            <th>Description</th>
+                            <th class="text-end">Debit</th>
+                            <th class="text-end">Credit</th>
+                            <th class="text-end">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in entries %}
+                        <tr>
+                            <td>{{ item.entry.voucher.date|date:"Y-m-d" }}</td>
+                            <td>
+                                <a href="{% url 'finance:voucher_detail' item.entry.voucher.pk %}" class="text-decoration-none">
+                                    {{ item.entry.voucher.voucher_no }}
+                                </a>
+                            </td>
+                            <td>{{ item.entry.description|truncatewords:15 }}</td>
+                            <td class="text-end">
+                                {% if item.entry.debit > 0 %}
+                                    {{ item.entry.debit|floatformat:2 }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if item.entry.credit > 0 %}
+                                    {{ item.entry.credit|floatformat:2 }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <strong>{{ item.balance|floatformat:2 }}</strong>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle me-2"></i>No transactions in this period.
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Closing Balance -->
+        <div class="card-footer">
+            <div class="row">
+                <div class="col-6">
+                    <strong>Closing Balance ({{ filter_date_to|date:"Y-m-d" }}):</strong>
+                </div>
+                <div class="col-6 text-end">
+                    <strong class="fs-5 text-primary">{{ closing_balance|floatformat:2 }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    $('#budget_head').select2({
+        ajax: {
+            url: '{% url "reporting:budget_head_autocomplete" %}',
+            dataType: 'json',
+            delay: 250,
+            data: function (params) {
+                return { q: params.term };
+            },
+            processResults: function (data) {
+                return { results: data.results };
+            },
+            cache: true
+        },
+        minimumInputLength: 2,
+        placeholder: 'Type at least 2 characters to search...',
+        allowClear: true,
+        width: '100%'
+    });
+});
+</script>
+{% endblock %}
