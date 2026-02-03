@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Trial Balance - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="mb-4">
+        <h2 class="mb-1">
+            <i class="bi bi-calculator me-2"></i>Trial Balance
+        </h2>
+        <p class="text-muted">Summary of all account balances</p>
+    </div>
+
+    <!-- Filter Card -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label for="as_of_date" class="form-label">As of Date</label>
+                    <input type="date" name="as_of_date" id="as_of_date" class="form-control" 
+                           value="{{ as_of_date|date:'Y-m-d' }}" required>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search me-1"></i>Generate
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Trial Balance Results -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <strong>Trial Balance</strong>
+                <br>
+                <small class="text-muted">As of {{ as_of_date|date:"F d, Y" }}</small>
+            </div>
+            <div>
+                {% if is_balanced %}
+                <span class="badge bg-success">
+                    <i class="bi bi-check-circle me-1"></i>Balanced
+                </span>
+                {% else %}
+                <span class="badge bg-danger">
+                    <i class="bi bi-exclamation-triangle me-1"></i>Out of Balance
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-body">
+            {% if accounts %}
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead>
+                        <tr>
+                            <th>Account Code</th>
+                            <th>Account Name</th>
+                            <th>Type</th>
+                            <th class="text-end">Debit Balance</th>
+                            <th class="text-end">Credit Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for account in accounts %}
+                        <tr>
+                            <td>{{ account.head.code }}</td>
+                            <td>{{ account.head.name }}</td>
+                            <td>
+                                <span class="badge bg-secondary">{{ account.head.get_account_type_display }}</span>
+                            </td>
+                            <td class="text-end">
+                                {% if account.debit_balance > 0 %}
+                                    {{ account.debit_balance|floatformat:2 }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if account.credit_balance > 0 %}
+                                    {{ account.credit_balance|floatformat:2 }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-active">
+                        <tr>
+                            <td colspan="3" class="text-end"><strong>Total:</strong></td>
+                            <td class="text-end">
+                                <strong>{{ total_debit_balance|floatformat:2 }}</strong>
+                            </td>
+                            <td class="text-end">
+                                <strong>{{ total_credit_balance|floatformat:2 }}</strong>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan="3" class="text-end"><strong>Difference:</strong></td>
+                            <td colspan="2" class="text-end">
+                                <strong class="{% if not is_balanced %}text-danger{% endif %}">
+                                    {{ total_debit_balance|floatformat:2|add:"-"|add:total_credit_balance|floatformat:2 }}
+                                </strong>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                <i class="bi bi-info-circle me-2"></i>No account balances found as of this date.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
