@@ -518,28 +518,32 @@ class RevenueWorkspaceView(LoginRequiredMixin, TemplateView):
         context['fiscal_year'] = fiscal_year
         context['organization'] = organization
         
-        from apps.revenue.models import RevenueDemand, RevenueCollection, DemandStatus
+        from apps.revenue.models import RevenueDemand, RevenueCollection, DemandStatus, CollectionStatus
         from django.db.models import Sum, Q
+        from django.db.models import Sum, Q, F, Count
+        from django.db.models.functions import Coalesce
         from datetime import date
         
         today = timezone.now().date()
         month_start = date(today.year, today.month, 1)
         
-        # Today's Collections
+        # Today's Collections (Posted only - Accrual basis)
         today_collections = RevenueCollection.objects.filter(
             organization=organization,
-            fiscal_year=fiscal_year,
-            collection_date=today
-        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+            demand__fiscal_year=fiscal_year,
+            receipt_date=today,
+            status=CollectionStatus.POSTED
+        ).aggregate(total=Sum('amount_received'))['total'] or Decimal('0.00')
         
         context['today_collections'] = today_collections
         
-        # Month-to-Date Collections
+        # Month-to-Date Collections (Posted only - Accrual basis)
         mtd_collections = RevenueCollection.objects.filter(
             organization=organization,
-            fiscal_year=fiscal_year,
-            collection_date__gte=month_start
-        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+            demand__fiscal_year=fiscal_year,
+            receipt_date__gte=month_start,
+            status=CollectionStatus.POSTED
+        ).aggregate(total=Sum('amount_received'))['total'] or Decimal('0.00')
         
         context['mtd_collections'] = mtd_collections
         
@@ -547,27 +551,77 @@ class RevenueWorkspaceView(LoginRequiredMixin, TemplateView):
         outstanding_demands = RevenueDemand.objects.filter(
             organization=organization,
             fiscal_year=fiscal_year,
-            status__in=[DemandStatus.PENDING, DemandStatus.PARTIALLY_PAID]
-        ).select_related('payer', 'revenue_head').order_by('due_date')[:10]
+            status__in=[DemandStatus.POSTED, DemandStatus.PARTIAL]
+        ).select_related('payer', 'budget_head').order_by('due_date')[:10]
         
         context['outstanding_demands'] = outstanding_demands
         context['outstanding_demands_count'] = outstanding_demands.count()
         
-        # Total Outstanding Amount
-        total_outstanding = outstanding_demands.aggregate(
-            total=Sum('amount')
+        # Total Outstanding Amount (All demands, accounting for partial payments)
+        total_outstanding = RevenueDemand.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            status__in=[DemandStatus.POSTED, DemandStatus.PARTIAL]
+        ).annotate(
+            total_collected=Coalesce(
+                Sum('collections__amount_received', 
+                    filter=Q(collections__status=CollectionStatus.POSTED)),
+                Decimal('0.00')
+            )
+        ).aggregate(
+            total=Sum(F('amount') - F('total_collected'))
         )['total'] or Decimal('0.00')
         
         context['total_outstanding'] = total_outstanding
         
         # Unreconciled Collections (not posted to GL)
-        unreconciled_collections = RevenueCollection.objects.filter(
+        unreconciled_data = RevenueCollection.objects.filter(
             organization=organization,
-            fiscal_year=fiscal_year,
-            is_posted=False
-        ).count()
+            demand__fiscal_year=fiscal_year,
+            status=CollectionStatus.DRAFT
+        ).aggregate(
+            count=Count('id'),
+            total=Sum('amount_received')
+        )
         
-        context['unreconciled_collections'] = unreconciled_collections
+        context['unreconciled_collections'] = unreconciled_data['count'] or 0
+        context['unreconciled_amount'] = unreconciled_data['total'] or Decimal('0.00')
+        
+        # Expenditure Metrics (Cashier handles both collections and payments)
+        from apps.expenditure.models import Payment
+        
+        # Today's Payments (Posted only)
+        today_payments = Payment.objects.filter(
+            organization=organization,
+            bill__fiscal_year=fiscal_year,
+            cheque_date=today,
+            is_posted=True
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        
+        context['today_payments'] = today_payments
+        
+        # Month-to-Date Payments (Posted only)
+        mtd_payments = Payment.objects.filter(
+            organization=organization,
+            bill__fiscal_year=fiscal_year,
+            cheque_date__gte=month_start,
+            is_posted=True
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        
+        context['mtd_payments'] = mtd_payments
+        
+        # Pending Payments (Draft status - not posted)
+        pending_payments_data = Payment.objects.filter(
+            organization=organization,
+            bill__fiscal_year=fiscal_year,
+            is_posted=False
+        ).aggregate(
+            count=Count('id'),
+            total=Sum('amount')
+        )
+        
+        context['pending_payments'] = pending_payments_data['count'] or 0
+        context['pending_payments_amount'] = pending_payments_data['total'] or Decimal('0.00')
         
         return context
 

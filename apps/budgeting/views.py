@@ -979,10 +979,14 @@ class SetupDashboardView(LoginRequiredMixin, AdminRequiredMixin, TemplateView):
         from apps.finance.models import BudgetHead, Fund, ChequeBook
         context['coa_count'] = BudgetHead.objects.count()
         context['fund_count'] = Fund.objects.count()
-        context['chequebook_count'] = ChequeBook.objects.count()
+        context['chequebook_count'] = ChequeBook.objects.filter(
+            bank_account__organization=self.request.user.organization
+        ).count()
         
         from apps.core.models import BankAccount
-        context['bank_account_count'] = BankAccount.objects.count()
+        context['bank_account_count'] = BankAccount.objects.filter(
+            organization=self.request.user.organization
+        ).count()
         return context
 
 

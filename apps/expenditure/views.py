@@ -651,3 +651,42 @@ def load_budget_heads(request):
         'budget_heads': budget_heads,
         'department': department
     })
+
+class BankAccountNextChequeAPIView(LoginRequiredMixin, View):
+    """API view to get next available cheque number for a bank account."""
+    
+    def get(self, request: HttpRequest, pk: int) -> JsonResponse:
+        user = request.user
+        org = getattr(user, 'organization', None)
+        
+        from apps.core.models import BankAccount
+        from apps.finance.models import ChequeLeaf, LeafStatus
+        
+        try:
+            # Ensure account belongs to user's org
+            account = BankAccount.objects.get(pk=pk, organization=org)
+            
+            # Find first available leaf across all active books
+            # Ordered by book issue date/serial to ensure we use oldest books first
+            next_leaf = ChequeLeaf.objects.filter(
+                book__bank_account=account,
+                book__is_active=True,
+                status=LeafStatus.AVAILABLE
+            ).order_by('book__issue_date', 'book__start_serial', 'id').first()
+            
+            if next_leaf:
+                return JsonResponse({
+                    'success': True,
+                    'next_cheque_number': next_leaf.leaf_number
+                })
+            else:
+                return JsonResponse({
+                    'success': False, 
+                    'error': 'No available cheques found in active books.'
+                })
+                
+        except BankAccount.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Bank account not found.'
+            }, status=404)

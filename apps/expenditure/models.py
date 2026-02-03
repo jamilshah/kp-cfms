@@ -48,6 +48,11 @@ class BillStatus(models.TextChoices):
     RETURNED = 'RETURNED', _('Returned for Corrections')
 
 
+class BillType(models.TextChoices):
+    REGULAR = 'REGULAR', _('Regular Bill')
+    SALARY = 'SALARY', _('Monthly Salary')
+
+
 class Payee(AuditLogMixin, StatusMixin, TenantAwareMixin):
     """
     Payee/Vendor Registry for the organization.
@@ -248,6 +253,41 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         default=BillStatus.DRAFT,
         verbose_name=_('Status')
     )
+    bill_type = models.CharField(
+        max_length=20,
+        choices=BillType.choices,
+        default=BillType.REGULAR,
+        verbose_name=_('Bill Type')
+    )
+    fund = models.ForeignKey(
+        'finance.Fund',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='bills',
+        verbose_name=_('Fund')
+    )
+    salary_month = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_('Salary Month'),
+        help_text=_('Month (1-12) for salary bills')
+    )
+    salary_year = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_('Salary Year'),
+        help_text=_('Year for salary bills')
+    )
+    department = models.ForeignKey(
+        'budgeting.Department',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='bills',
+        verbose_name=_('Department')
+    )
+
     submitted_at = models.DateTimeField(
         null=True,
         blank=True,

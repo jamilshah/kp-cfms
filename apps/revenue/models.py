@@ -330,7 +330,6 @@ class RevenueDemand(AuditLogMixin, TenantAwareMixin):
         
         # Get the Accounts Receivable system head
         ar_head = BudgetHead.objects.filter(
-            is_system_head=True,
             global_head__system_code='AR'
         ).first()
         
@@ -610,10 +609,9 @@ class RevenueCollection(AuditLogMixin, TenantAwareMixin):
                 _('Cannot post collection for a demand that is not Posted or Partially Paid.')
             )
         
-        # Get the Accounts Receivable system head
+        # Get the Accounts Receivable system head (C03880)
         ar_head = BudgetHead.objects.filter(
-            is_system_head=True,
-            global_head__system_code='AR'
+            global_head__code='C03880'
         ).first()
         
         if not ar_head:

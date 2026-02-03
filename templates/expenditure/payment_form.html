@@ -161,9 +161,10 @@ Description: Payment Form Template for Cheque Issuance
 {% endblock %}
 
 {% block extra_js %}
-{% if not bill %}
+
 <script>
     $(document).ready(function() {
+        {% if not bill %}
         // Load bill details when bill is selected
         $('#{{ form.bill.id_for_label }}').on('change', function() {
             const billId = $(this).val();
@@ -196,7 +197,32 @@ Description: Payment Form Template for Cheque Issuance
                 $('#{{ form.amount.id_for_label }}').val('');
             }
         });
+        {% endif %}
+
+        // Auto-fetch next cheque number when bank account is selected
+        $('#{{ form.bank_account.id_for_label }}').on('change', function() {
+            const accountId = $(this).val();
+            
+            if (accountId) {
+                $.ajax({
+                    url: `/expenditure/api/bank-accounts/${accountId}/next-cheque/`,
+                    type: 'GET',
+                    success: function(data) {
+                        if (data.success) {
+                            $('#{{ form.cheque_number.id_for_label }}').val(data.next_cheque_number);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error fetching cheque number');
+                    }
+                });
+            }
+        });
+        
+        // Trigger on load if account selected
+        if ($('#{{ form.bank_account.id_for_label }}').val()) {
+             $('#{{ form.bank_account.id_for_label }}').trigger('change');
+        }
     });
 </script>
-{% endif %}
 {% endblock %}

@@ -829,7 +829,7 @@ class JournalEntry(TimeStampedMixin):
     def __str__(self) -> str:
         amount = self.debit if self.debit > 0 else self.credit
         entry_type = 'Dr' if self.debit > 0 else 'Cr'
-        return f"{self.budget_head.tma_sub_object} - {entry_type} {amount}"
+        return f"{self.budget_head.code} - {entry_type} {amount}"
     
     def clean(self) -> None:
         """Validate that either debit or credit is set, but not both."""

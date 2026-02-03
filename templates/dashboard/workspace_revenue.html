@@ -54,12 +54,47 @@ Description: Revenue / Collecting Officer Workspace
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card stat-card danger">
+            <a href="{% url 'revenue:collection_list' %}?status=DRAFT" class="text-decoration-none">
+                <div class="card stat-card danger">
+                    <div class="card-body">
+                        <div class="stat-label">Unreconciled</div>
+                        <div class="stat-value">Rs. {{ unreconciled_amount|floatformat:2 }} <small>({{ unreconciled_collections }})</small></div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- Expenditure Metrics -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <h5 class="text-muted"><i class="bi bi-cash-coin me-2"></i>Expenditure (Payments)</h5>
+        </div>
+        <div class="col-md-4">
+            <div class="card stat-card">
                 <div class="card-body">
-                    <div class="stat-label">Unreconciled</div>
-                    <div class="stat-value">{{ unreconciled_collections }}</div>
+                    <div class="stat-label">Today's Payments</div>
+                    <div class="stat-value">Rs. {{ today_payments|floatformat:2 }}</div>
                 </div>
             </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <div class="stat-label">Month-to-Date Payments</div>
+                    <div class="stat-value">Rs. {{ mtd_payments|floatformat:2 }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <a href="{% url 'expenditure:payment_list' %}?is_posted=False" class="text-decoration-none">
+                <div class="card stat-card warning">
+                    <div class="card-body">
+                        <div class="stat-label">Pending Payments</div>
+                        <div class="stat-value">Rs. {{ pending_payments_amount|floatformat:2 }} <small>({{ pending_payments }})</small></div>
+                    </div>
+                </div>
+            </a>
         </div>
     </div>
 
@@ -92,15 +127,19 @@ Description: Revenue / Collecting Officer Workspace
                     <tbody>
                         {% for demand in outstanding_demands %}
                         <tr class="{% if demand.due_date < today %}table-danger{% endif %}">
-                            <td><strong>{{ demand.demand_number }}</strong></td>
+                            <td><strong>{{ demand.challan_no }}</strong></td>
                             <td>{{ demand.payer.name }}</td>
-                            <td><small>{{ demand.revenue_head.name }}</small></td>
+                            <td><small>{{ demand.budget_head.name }}</small></td>
                             <td><strong>Rs. {{ demand.amount|floatformat:2 }}</strong></td>
                             <td>{{ demand.due_date|date:"d M Y" }}</td>
                             <td>
-                                <span class="badge bg-{{ demand.get_status_color }}">
-                                    {{ demand.get_status_display }}
-                                </span>
+                                {% if demand.status == 'POSTED' %}
+                                <span class="badge bg-warning text-dark">{{ demand.get_status_display }}</span>
+                                {% elif demand.status == 'PARTIAL' %}
+                                <span class="badge bg-info text-dark">{{ demand.get_status_display }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ demand.get_status_display }}</span>
+                                {% endif %}
                             </td>
                             <td>
                                 <a href="{% url 'revenue:demand_detail' demand.pk %}" 
