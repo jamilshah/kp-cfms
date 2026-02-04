@@ -48,6 +48,12 @@ STANDARD_ROLES = [
         'is_system_role': True,
     },
     {
+        'code': 'TOF',
+        'name': 'Tehsil Officer Finance (Verifier)',
+        'description': 'Finance Branch Head. VERIFIER for Bills and Vouchers after Pre-Audit. Reviews budget compliance before TMO approval.',
+        'is_system_role': True,
+    },
+    {
         'code': 'ACCOUNTANT',
         'name': 'Accountant (Verifier)',
         'description': 'Accounts Branch. CHECKER for transactions. Reconciles bank accounts and verifies ledger entries.',

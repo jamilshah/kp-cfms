@@ -199,7 +199,7 @@ Description: Base template with Bootstrap 5 and navigation.
     
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark fixed-top" style="background-color: var(--cfms-primary);">
         <div class="container-fluid">
@@ -229,19 +229,29 @@ Description: Base template with Bootstrap 5 and navigation.
                            hx-trigger="click"
                            hx-target="#notification-dropdown-content"
                            hx-swap="innerHTML">
-                            <i class="bi bi-bell fs-5"></i>
-                            <span id="notification-badge" 
-                                  hx-get="{% url 'core:notification_badge' %}"
-                                  hx-trigger="load, every 30s"
-                                  hx-swap="innerHTML">
-                                {% include 'core/notification_badge.html' %}
-                            </span>
+                            <div class="position-relative d-inline-block">
+                                <i class="bi bi-bell fs-5"></i>
+                                <span id="notification-badge" 
+                                      class="position-absolute"
+                                      style="top: 0; right: 0; width: 0; height: 0;"
+                                      hx-get="{% url 'core:notification_badge' %}"
+                                      hx-trigger="load, every 60s, reloadBadge from:body"
+                                      hx-swap="innerHTML">
+                                    {% include 'core/notification_badge.html' %}
+                                </span>
+                            </div>
                         </a>
-                        <div class="dropdown-menu dropdown-menu-end" style="min-width: 400px; max-width: 500px;" id="notification-dropdown-content">
-                            <div class="text-center p-3">
-                                <div class="spinner-border spinner-border-sm" role="status">
+                        <div class="dropdown-menu dropdown-menu-end shadow-sm border-0" 
+                             style="min-width: 320px; max-width: 400px;" 
+                             id="notification-dropdown-content"
+                             hx-get="{% url 'core:notification_dropdown' %}"
+                             hx-trigger="reloadNotifications from:body"
+                             hx-swap="innerHTML">
+                            <div class="text-center p-4">
+                                <div class="spinner-border text-primary spinner-border-sm" role="status">
                                     <span class="visually-hidden">Loading...</span>
                                 </div>
+                                <p class="small text-muted mb-0 mt-2">Loading notifications...</p>
                             </div>
                         </div>
                     </li>
@@ -450,8 +460,8 @@ Description: Base template with Bootstrap 5 and navigation.
                 {% endif %}
             {% endif %}
 
-            <!-- System Admin (visible to Provincial Super Admin only: is_superuser=True and organization=None) -->
-            {% if user.is_authenticated and user.is_superuser and not user.organization %}
+            <!-- System Admin (visible to Super Admins: is_superuser=True) -->
+            {% if user.is_authenticated and user.is_superuser %}
             <div class="accordion-item bg-transparent border-0">
                 <h2 class="accordion-header" id="headingSystemAdmin">
                     <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseSystemAdmin" aria-expanded="false" aria-controls="collapseSystemAdmin">

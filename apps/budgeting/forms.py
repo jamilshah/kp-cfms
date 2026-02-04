@@ -32,7 +32,7 @@ class FiscalYearForm(forms.ModelForm):
     
     class Meta:
         model = FiscalYear
-        fields = ['organization', 'year_name', 'start_date', 'end_date', 'is_active']
+        fields = ['organization', 'year_name', 'start_date', 'end_date', 'is_active', 'is_locked']
         widgets = {
             'organization': forms.Select(attrs={
                 'class': 'form-control'
@@ -51,6 +51,11 @@ class FiscalYearForm(forms.ModelForm):
             }),
             'is_active': forms.CheckboxInput(attrs={
                 'class': 'form-check-input'
+            }),
+            'is_locked': forms.CheckboxInput(attrs={
+                'class': 'form-check-input',
+                'data-bs-toggle': 'tooltip',
+                'title': 'Check to finalize and lock budget (prevents further edits)'
             }),
         }
     
@@ -85,6 +90,23 @@ class FiscalYearForm(forms.ModelForm):
                 })
         
         return cleaned_data
+
+    def save(self, commit=True):
+        """Enforce organization assignment on save."""
+        instance = super().save(commit=False)
+        
+        # Ensure organization is set if user context has one
+        if self.request and self.request.user.organization:
+            instance.organization = self.request.user.organization
+            
+        # If manually unlocking, revert status from LOCKED to DRAFT
+        # This ensures consistency between is_locked flag and status text
+        if not instance.is_locked and instance.status == BudgetStatus.LOCKED:
+            instance.status = BudgetStatus.DRAFT
+            
+        if commit:
+            instance.save()
+        return instance
 
 
 class BudgetAllocationBaseForm(forms.ModelForm):

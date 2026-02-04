@@ -126,14 +126,16 @@ Description: Finance Officer / Accountant Workspace
     <!-- Quick Links -->
     <div class="row g-4">
         <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body text-center">
-                    <i class="bi bi-cash-stack fs-1 text-primary mb-3"></i>
-                    <h5>Pending Liabilities</h5>
-                    <p class="stat-value text-danger">Rs. {{ pending_liabilities|floatformat:2 }}</p>
-                    <p class="text-muted">Bills approved but not yet paid</p>
+            <a href="{% url 'reporting:pending_liabilities' %}" class="card-link text-decoration-none">
+                <div class="card h-100 shadow-sm hover-card">
+                    <div class="card-body text-center">
+                        <i class="bi bi-cash-stack fs-1 text-danger mb-3"></i>
+                        <h5 class="text-dark">Pending Liabilities</h5>
+                        <p class="stat-value text-danger">Rs. {{ pending_liabilities|floatformat:2 }}</p>
+                        <p class="text-muted small">Unpaid Taxes & Approved Bills</p>
+                    </div>
                 </div>
-            </div>
+            </a>
         </div>
         <div class="col-md-4">
             <div class="card h-100">

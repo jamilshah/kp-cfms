@@ -13,9 +13,9 @@ from apps.expenditure.views import (
     ExpenditureDashboardView,
     PayeeListView, PayeeCreateView, PayeeUpdateView,
     BillListView, BillCreateView, BillDetailView,
-    BillSubmitView, BillVerifyView, BillApproveView,
+    BillSubmitView, BillPreAuditView, BillVerifyView, BillApproveView,
     PaymentCreateView, PaymentListView,
-    BillAmountAPIView, load_budget_heads, load_functions
+    BillAmountAPIView, load_budget_heads, load_functions, load_payees
 )
 from apps.expenditure.views import BankAccountNextChequeAPIView
 from apps.expenditure.views_salary import (
@@ -38,6 +38,7 @@ urlpatterns = [
     path('bills/create/', BillCreateView.as_view(), name='bill_create'),
     path('bills/<int:pk>/', BillDetailView.as_view(), name='bill_detail'),
     path('bills/<int:pk>/submit/', BillSubmitView.as_view(), name='bill_submit'),
+    path('bills/<int:pk>/pre-audit/', BillPreAuditView.as_view(), name='bill_pre_audit'),
     path('bills/<int:pk>/verify/', BillVerifyView.as_view(), name='bill_verify'),
     path('bills/<int:pk>/approve/', BillApproveView.as_view(), name='bill_approve'),
     
@@ -55,4 +56,5 @@ urlpatterns = [
     path('api/bank-accounts/<int:pk>/next-cheque/', BankAccountNextChequeAPIView.as_view(), name='bank_account_next_cheque_api'),
     path('ajax/load-budget-heads/', load_budget_heads, name='load_budget_heads'),
     path('ajax/load-functions/', load_functions, name='load_functions'),
+    path('ajax/load-payees/', load_payees, name='load_payees'),
 ]

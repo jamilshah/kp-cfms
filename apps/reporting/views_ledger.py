@@ -64,7 +64,8 @@ class GeneralLedgerView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
                 # Build query with optimized select_related
                 entries_query = JournalEntry.objects.filter(
                     budget_head=budget_head,
-                    voucher__is_posted=True
+                    voucher__is_posted=True,
+                    voucher__organization=organization
                 ).select_related('voucher', 'budget_head')
                 
                 # Apply date filters
@@ -135,12 +136,14 @@ class TrialBalanceView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
             total_debit=Coalesce(
                 Sum('journal_entries__debit',
                     filter=Q(journal_entries__voucher__is_posted=True,
+                            journal_entries__voucher__organization=organization,
                             journal_entries__voucher__date__lte=as_of_date)),
                 Decimal('0.00')
             ),
             total_credit=Coalesce(
                 Sum('journal_entries__credit',
                     filter=Q(journal_entries__voucher__is_posted=True,
+                            journal_entries__voucher__organization=organization,
                             journal_entries__voucher__date__lte=as_of_date)),
                 Decimal('0.00')
             )
@@ -237,6 +240,7 @@ class AccountStatementView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
                 opening_entries = JournalEntry.objects.filter(
                     budget_head=budget_head,
                     voucher__is_posted=True,
+                    voucher__organization=organization,
                     voucher__date__lt=date_from_obj
                 ).aggregate(
                     total_debit=Coalesce(Sum('debit'), Decimal('0.00')),
@@ -258,6 +262,7 @@ class AccountStatementView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
                 entries = JournalEntry.objects.filter(
                     budget_head=budget_head,
                     voucher__is_posted=True,
+                    voucher__organization=organization,
                     voucher__date__gte=date_from_obj,
                     voucher__date__lte=date_to_obj
                 ).select_related('voucher', 'budget_head').order_by('voucher__date', 'voucher__id')
@@ -285,5 +290,60 @@ class AccountStatementView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
                 context['error'] = 'Selected budget head not found.'
         
         context['filter_budget_head'] = budget_head_id
+        
+        return context
+
+
+class PendingLiabilitiesView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
+    """
+    Pending Liabilities Report.
+    
+    Shows unpaid liabilities (Taxes, Retention Money, etc.) that require payment.
+    Filters for Liability accounts with positive Credit balance.
+    """
+    template_name = 'reporting/pending_liabilities.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        organization = self.request.user.organization
+        
+        # Get as-of date (default today)
+        context['as_of_date'] = date.today()
+        
+        # Get Liability Heads with balances
+        liabilities = BudgetHead.objects.filter(
+            is_active=True,
+            global_head__account_type='LIA'  # Filter for Liabilities
+        ).select_related('global_head', 'fund', 'function').annotate(
+            total_debit=Coalesce(
+                Sum('journal_entries__debit',
+                    filter=Q(journal_entries__voucher__is_posted=True,
+                            journal_entries__voucher__organization=organization)),
+                Decimal('0.00')
+            ),
+            total_credit=Coalesce(
+                Sum('journal_entries__credit',
+                    filter=Q(journal_entries__voucher__is_posted=True,
+                            journal_entries__voucher__organization=organization)),
+                Decimal('0.00')
+            )
+        )
+        
+        # Calculate Pending Balances
+        # Liability Balance = Credit (Owed) - Debit (Paid)
+        pending_items = []
+        total_pending = Decimal('0.00')
+        
+        for head in liabilities:
+            balance = head.total_credit - head.total_debit
+            if balance > Decimal('0.00'):
+                pending_items.append({
+                    'head': head,
+                    'balance': balance,
+                })
+                total_pending += balance
+        
+        context['pending_items'] = pending_items
+        context['total_pending'] = total_pending
         
         return context

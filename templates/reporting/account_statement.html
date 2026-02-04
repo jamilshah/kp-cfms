@@ -31,12 +31,12 @@
                 <div class="col-md-3">
                     <label for="date_from" class="form-label">Date From <span class="text-danger">*</span></label>
                     <input type="date" name="date_from" id="date_from" class="form-control" 
-                           value="{{ filter_date_from|default:default_date_from }}" required>
+                           value="{% if filter_date_from %}{{ filter_date_from }}{% elif default_date_from %}{{ default_date_from|date:'Y-m-d' }}{% endif %}" required>
                 </div>
                 <div class="col-md-3">
                     <label for="date_to" class="form-label">Date To <span class="text-danger">*</span></label>
                     <input type="date" name="date_to" id="date_to" class="form-control" 
-                           value="{{ filter_date_to|default:default_date_to }}" required>
+                           value="{% if filter_date_to %}{{ filter_date_to }}{% elif default_date_to %}{{ default_date_to|date:'Y-m-d' }}{% endif %}" required>
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary w-100">

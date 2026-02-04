@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load static %}
+
+{% block title %}Pending Liabilities - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="bi bi-cash-coin me-2"></i>Pending Liabilities
+            </h2>
+            <p class="text-muted">Unpaid liabilities (Taxes, Retention, Payments) needing clearance.</p>
+        </div>
+        <div>
+            <span class="badge bg-primary fs-6">
+                As of {{ as_of_date|date:"d M Y" }}
+            </span>
+        </div>
+    </div>
+
+    <!-- Summary Card -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-danger text-white shadow-sm">
+                <div class="card-body text-center">
+                    <h5 class="card-title opacity-75">Total Pending Payment</h5>
+                    <h2 class="display-6 fw-bold mb-0">Rs. {{ total_pending|floatformat:2|intcomma }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="alert alert-info h-100 d-flex align-items-center mb-0">
+                <div>
+                    <i class="bi bi-info-circle-fill fs-4 me-3"></i>
+                    <div>
+                        <strong>What is this report?</strong><br>
+                        This report lists money you owe to others (e.g., Tax Authority, Contractors).
+                        A positive amount means you have withheld or recorded the liability but have not yet paid it out (Cleared it).
+                        To clear these, create a <strong>Payment Voucher (PV)</strong> debiting the liability account.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liability List -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+            <h5 class="card-title mb-0">Liability Accounts</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Account Code</th>
+                            <th>Account Name</th>
+                            <th>Function/Dept</th>
+                            <th class="text-end pe-4">Pending Amount</th>
+                            <th class="text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in pending_items %}
+                        <tr>
+                            <td class="ps-4 font-monospace fw-bold">{{ item.head.global_head.code }}</td>
+                            <td>{{ item.head.global_head.name }}</td>
+                            <td>
+                                {% if item.head.function %}
+                                    <span class="badge bg-secondary">{{ item.head.function.code }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end pe-4 fw-bold text-danger">
+                                {{ item.balance|floatformat:2|intcomma }}
+                            </td>
+                            <td class="text-center">
+                                <a href="{% url 'reporting:account_statement' %}?budget_head={{ item.head.id }}&date_from={{ as_of_date|date:'Y-m-d' }}&date_to={{ as_of_date|date:'Y-m-d' }}" 
+                                   class="btn btn-sm btn-outline-secondary"
+                                   title="View Ledger">
+                                    <i class="bi bi-list-ul"></i> Ledger
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-5 text-muted">
+                                <i class="bi bi-check-circle-fill fs-1 text-success mb-3"></i>
+                                <p class="mb-0">No pending liabilities found. All clear!</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <td colspan="3" class="text-end fw-bold">Total Pending:</td>
+                            <td class="text-end pe-4 fw-bold text-danger">{{ total_pending|floatformat:2|intcomma }}</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

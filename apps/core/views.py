@@ -129,7 +129,9 @@ def notification_mark_read_view(request, pk):
     )
     notification.mark_as_read()
     
-    return HttpResponse('')
+    response = HttpResponse('')
+    response['HX-Trigger'] = 'reloadBadge, reloadNotifications'
+    return response
 
 
 @login_required
@@ -142,13 +144,11 @@ def notification_mark_all_read_view(request):
     """
     NotificationService.mark_all_as_read(request.user)
     
-    # Return updated badge
-    html = render_to_string(
-        'core/notification_badge.html',
-        {'unread_count': 0},
-        request=request
-    )
-    return HttpResponse(html)
+    # Return updated badge or just trigger reload
+    response = HttpResponse('')
+    # Trigger both badge and dropdown list reload
+    response['HX-Trigger'] = 'reloadBadge, reloadNotifications'
+    return response
 
 
 # =====================================================================

@@ -77,6 +77,13 @@ Description: Bill Create/Edit Form Template
                                 <a href="{% url 'expenditure:payee_create' %}" target="_blank">
                                     <i class="bi bi-plus-circle"></i> Add new payee
                                 </a>
+                                <button type="button" 
+                                        class="btn btn-sm btn-link text-decoration-none p-0 ms-2"
+                                        hx-get="{% url 'expenditure:load_payees' %}"
+                                        hx-target="#{{ form.payee.id_for_label }}"
+                                        hx-swap="innerHTML">
+                                    <i class="bi bi-arrow-clockwise"></i> Refresh List
+                                </button>
                             </small>
                         </div>
                         <div class="col-md-6">

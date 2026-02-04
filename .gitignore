@@ -19,6 +19,7 @@ media/
 venv/
 env/
 ENV/
+debug_scripts/
 
 # Documentation
 docs/

@@ -38,8 +38,7 @@ Description: Notification dropdown list (recent notifications for navbar).
     <button type="button" 
             class="btn btn-sm btn-link text-muted"
             hx-post="{% url 'core:notification_mark_all_read' %}"
-            hx-target="#notification-badge"
-            hx-swap="outerHTML">
+            hx-swap="none">
         Mark All as Read
     </button>
     {% endif %}

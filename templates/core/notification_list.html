@@ -32,58 +32,64 @@ Description: Full notification list page.
             <button type="button" 
                     class="btn btn-outline-primary"
                     hx-post="{% url 'core:notification_mark_all_read' %}"
-                    hx-target="#notification-list"
-                    hx-swap="outerHTML">
+                    hx-swap="none">
                 <i class="bi bi-check-all"></i> Mark All as Read
             </button>
             {% endif %}
         </div>
     </div>
 
-    <!-- Notification Tabs -->
-    <ul class="nav nav-tabs mb-3" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#all-notifications">
-                All <span class="badge bg-secondary ms-1">{{ notifications|length }}</span>
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#unread-notifications">
-                Unread <span class="badge bg-danger ms-1">{{ unread_count }}</span>
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#workflow-notifications">
-                Workflow <span class="badge bg-primary ms-1">{{ workflow_count }}</span>
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#alert-notifications">
-                Alerts <span class="badge bg-danger ms-1">{{ alert_count }}</span>
-            </button>
-        </li>
-    </ul>
+    <div id="notification-container"
+         hx-get="{% url 'core:notification_list' %}"
+         hx-trigger="reloadNotifications from:body"
+         hx-target="this"
+         hx-select="#notification-container"
+         hx-swap="outerHTML">
+        <!-- Notification Tabs -->
+        <ul class="nav nav-tabs mb-3" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#all-notifications">
+                    All <span class="badge bg-secondary ms-1">{{ notifications|length }}</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#unread-notifications">
+                    Unread <span class="badge bg-danger ms-1">{{ unread_count }}</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#workflow-notifications">
+                    Workflow <span class="badge bg-primary ms-1">{{ workflow_count }}</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#alert-notifications">
+                    Alerts <span class="badge bg-danger ms-1">{{ alert_count }}</span>
+                </button>
+            </li>
+        </ul>
 
-    <!-- Tab Content -->
-    <div class="tab-content" id="notification-list">
-        <!-- All Notifications -->
-        <div class="tab-pane fade show active" id="all-notifications" role="tabpanel">
-            {% include 'core/notification_list_partial.html' with notifications=notifications %}
-        </div>
+        <!-- Tab Content -->
+        <div class="tab-content" id="notification-list">
+            <!-- All Notifications -->
+            <div class="tab-pane fade show active" id="all-notifications" role="tabpanel">
+                {% include 'core/notification_list_partial.html' with notifications=notifications %}
+            </div>
 
-        <!-- Unread Only -->
-        <div class="tab-pane fade" id="unread-notifications" role="tabpanel">
-            {% include 'core/notification_list_partial.html' with notifications=unread_notifications %}
-        </div>
+            <!-- Unread Only -->
+            <div class="tab-pane fade" id="unread-notifications" role="tabpanel">
+                {% include 'core/notification_list_partial.html' with notifications=unread_notifications %}
+            </div>
 
-        <!-- Workflow Only -->
-        <div class="tab-pane fade" id="workflow-notifications" role="tabpanel">
-            {% include 'core/notification_list_partial.html' with notifications=workflow_notifications %}
-        </div>
+            <!-- Workflow Only -->
+            <div class="tab-pane fade" id="workflow-notifications" role="tabpanel">
+                {% include 'core/notification_list_partial.html' with notifications=workflow_notifications %}
+            </div>
 
-        <!-- Alerts Only -->
-        <div class="tab-pane fade" id="alert-notifications" role="tabpanel">
-            {% include 'core/notification_list_partial.html' with notifications=alert_notifications %}
+            <!-- Alerts Only -->
+            <div class="tab-pane fade" id="alert-notifications" role="tabpanel">
+                {% include 'core/notification_list_partial.html' with notifications=alert_notifications %}
+            </div>
         </div>
     </div>
 </div>

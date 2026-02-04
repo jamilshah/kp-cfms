@@ -314,6 +314,41 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         related_name='approved_bills',
         verbose_name=_('Approved By')
     )
+    
+    # Audit trail fields for pre-audit step
+    audited_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Audited At'),
+        help_text=_('Timestamp when bill was pre-audited by Finance Officer.')
+    )
+    audited_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='audited_bills',
+        verbose_name=_('Audited By'),
+        help_text=_('Finance Officer who pre-audited this bill.')
+    )
+    
+    # Audit trail fields for verification step
+    verified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Verified At'),
+        help_text=_('Timestamp when bill was verified by TO Finance/Accountant.')
+    )
+    verified_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='verified_bills',
+        verbose_name=_('Verified By'),
+        help_text=_('TO Finance/Accountant who verified this bill.')
+    )
+    
     rejected_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -399,27 +434,55 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         self.save(update_fields=['status', 'submitted_at', 'submitted_by', 'updated_at'])
 
     @transaction.atomic
-    def verify(self, user: 'CustomUser') -> None:
+    @transaction.atomic
+    def pre_audit(self, user: 'CustomUser') -> None:
         """
-        Verify the bill (Accountant Step).
+        Pre-Audit the bill (Finance Officer Step).
         
         Args:
-            user: The accountant verifying the bill.
+            user: The Finance Officer performing pre-audit.
             
         Raises:
             WorkflowTransitionException: If bill is not in SUBMITTED status.
         """
         if self.status != BillStatus.SUBMITTED:
             raise WorkflowTransitionException(
-                f"Cannot verify bill. Current status is '{self.get_status_display()}'. "
-                "Only SUBMITTED bills can be verified."
+                f"Cannot pre-audit bill. Current status is '{self.get_status_display()}'. "
+                "Only SUBMITTED bills can be pre-audited."
             )
+        
+        from django.utils import timezone
+        
+        self.status = BillStatus.AUDITED
+        self.audited_at = timezone.now()
+        self.audited_by = user
+        self.updated_by = user
+        self.save(update_fields=['status', 'audited_at', 'audited_by', 'updated_at', 'updated_by'])
+    
+    def verify(self, user: 'CustomUser') -> None:
+        """
+        Verify the bill (Tehsil Officer Finance Step).
+        
+        Args:
+            user: The Tehsil Officer Finance verifying the bill.
+            
+        Raises:
+            WorkflowTransitionException: If bill is not in AUDITED status.
+        """
+        if self.status != BillStatus.AUDITED:
+            raise WorkflowTransitionException(
+                f"Cannot verify bill. Current status is '{self.get_status_display()}'. "
+                "Only AUDITED bills can be verified."
+            )
+        
+        from django.utils import timezone
         
         previous_status = self.status
         self.status = BillStatus.VERIFIED
-        # We can store verified_by in updated_by for now (or add a dedicated field if needed)
+        self.verified_at = timezone.now()
+        self.verified_by = user
         self.updated_by = user
-        self.save(update_fields=['status', 'updated_at', 'updated_by'])
+        self.save(update_fields=['status', 'verified_at', 'verified_by', 'updated_at', 'updated_by'])
     
     @transaction.atomic
     def approve(self, user: 'CustomUser') -> None:
@@ -552,6 +615,7 @@ class Bill(AuditLogMixin, TenantAwareMixin):
             date=timezone.now().date(),
             voucher_type=VoucherType.JOURNAL,
             fund=lines[0].budget_head.fund, # Use fund from first line (assuming single fund voucher)
+            payee=self.payee.name,  # Add payee name
             description=f"Liability for Bill #{self.id}: {self.payee.name} - {self.description[:100]}",
             created_by=user
         )

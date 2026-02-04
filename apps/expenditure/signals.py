@@ -148,23 +148,23 @@ def _notify_on_marked_for_audit(bill: Bill, bill_url: str) -> None:
 
 def _notify_on_audited(bill: Bill, bill_url: str) -> None:
     """
-    Notify TMO/Approvers when bill passes audit.
+    Notify TO Finance/Approvers when bill passes audit.
     
     Args:
         bill: The Bill instance that passed audit.
         bill_url: URL to the bill detail page.
     """
-    # Get all TMOs in the organization
-    tmos = bill.organization.users.filter(
-        roles__code__in=['TMO']
+    # Get all TO Finance and Accountants in the organization
+    tofs = bill.organization.users.filter(
+        roles__code__in=['TOF', 'TO_FINANCE', 'ACCOUNTANT', 'AC']
     ).distinct()
     
-    for tmo in tmos:
+    for tof in tofs:
         NotificationService.send_notification(
-            recipient=tmo,
-            title=f"Bill #{bill.bill_number} Ready for Approval",
-            message=f"Bill from {bill.payee.name} has passed audit and requires your approval. "
-                    f"Amount: Rs. {bill.net_amount:,.2f}",
+            recipient=tof,
+            title=f"Bill #{bill.bill_number} Ready for Verification",
+            message=f"Bill from {bill.payee.name} has passed audit. "
+                    f"Amount: Rs. {bill.net_amount:,.2f}. Please verify budget.",
             link=bill_url,
             category=NotificationCategory.WORKFLOW,
             icon='bi-check-circle'

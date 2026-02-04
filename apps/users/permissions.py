@@ -96,6 +96,26 @@ class FinanceOfficerRequiredMixin(RoleRequiredMixin):
     required_roles = ['FINANCE_OFFICER', 'TOF', 'TO_FINANCE', 'TMO']
 
 
+class PreAuditRequiredMixin(RoleRequiredMixin):
+    """
+    Mixin that restricts access to Pre-Audit (Finance Officer) role.
+    
+    Used for pre-auditing bills before verification.
+    """
+    
+    required_roles = ['FINANCE_OFFICER', 'SUPER_ADMIN', 'ADM']
+
+
+class TehsilOfficerFinanceRequiredMixin(RoleRequiredMixin):
+    """
+    Mixin that restricts access to Tehsil Officer Finance (Verifier) role.
+    
+    Used for verifying bills after pre-audit.
+    """
+    
+    required_roles = ['TOF', 'TO_FINANCE', 'SUPER_ADMIN', 'ADM']
+
+
 class CashierRequiredMixin(RoleRequiredMixin):
     """
     Mixin that restricts access to Cashier role.

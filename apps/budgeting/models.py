@@ -361,7 +361,7 @@ class BudgetAllocation(AuditLogMixin, TenantAwareMixin):
     
     def get_available_budget(self) -> Decimal:
         """Calculate remaining available budget."""
-        return self.released_amount - self.spent_amount
+        return self.revised_allocation - self.spent_amount
     
     def get_commitment_balance(self) -> Decimal:
         """Get uncommitted balance from revised allocation."""

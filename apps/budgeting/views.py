@@ -165,6 +165,12 @@ class FiscalYearUpdateView(LoginRequiredMixin, ApproverRequiredMixin, UpdateView
     template_name = 'budgeting/fiscal_year_form.html'
     success_url = reverse_lazy('budgeting:fiscal_year_list')
     
+    def get_form_kwargs(self) -> Dict[str, Any]:
+        """Pass request to form."""
+        kwargs = super().get_form_kwargs()
+        kwargs['request'] = self.request
+        return kwargs
+    
     def form_valid(self, form):
         form.instance.updated_by = self.request.user
         messages.success(self.request, _('Fiscal year updated successfully.'))
@@ -228,15 +234,25 @@ class BudgetAllocationListView(LoginRequiredMixin, ListView):
             'fiscal_year', 'budget_head', 'budget_head__function'
         )
         
+        # Filter by organization
+        user_org = self.request.user.organization
+        if user_org:
+            queryset = queryset.filter(organization=user_org)
+        
         # Filter by fiscal year
         fiscal_year_id = self.request.GET.get('fiscal_year')
         if fiscal_year_id:
             queryset = queryset.filter(fiscal_year_id=fiscal_year_id)
         else:
-            # Default to active fiscal year
-            active_fy = FiscalYear.objects.filter(is_active=True).first()
-            if active_fy:
-                queryset = queryset.filter(fiscal_year=active_fy)
+            # Default to active fiscal year for this organization
+            if user_org:
+                active_fy = FiscalYear.objects.filter(
+                    organization=user_org, 
+                    is_active=True
+                ).first()
+                
+                if active_fy:
+                    queryset = queryset.filter(fiscal_year=active_fy)
         
         # Filter by account type
         account_type = self.request.GET.get('account_type')
@@ -279,7 +295,13 @@ class ReceiptEstimateCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateVi
         fy_id = self.request.GET.get('fiscal_year')
         if fy_id:
             return get_object_or_404(FiscalYear, pk=fy_id)
-        return FiscalYear.objects.filter(is_active=True).first()
+        
+        # Filter active FY by user's organization
+        user_org = self.request.user.organization
+        qs = FiscalYear.objects.filter(is_active=True)
+        if user_org:
+            qs = qs.filter(organization=user_org)
+        return qs.first()
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -299,6 +321,7 @@ class ReceiptEstimateCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateVi
             return self.form_invalid(form)
         
         form.instance.fiscal_year = fiscal_year
+        form.instance.organization = self.request.user.organization
         form.instance.created_by = self.request.user
         form.instance.updated_by = self.request.user
         
@@ -325,7 +348,13 @@ class ExpenditureEstimateCreateView(LoginRequiredMixin, MakerRequiredMixin, Crea
         fy_id = self.request.GET.get('fiscal_year')
         if fy_id:
             return get_object_or_404(FiscalYear, pk=fy_id)
-        return FiscalYear.objects.filter(is_active=True).first()
+        
+        # Filter active FY by user's organization
+        user_org = self.request.user.organization
+        qs = FiscalYear.objects.filter(is_active=True)
+        if user_org:
+            qs = qs.filter(organization=user_org)
+        return qs.first()
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -345,6 +374,7 @@ class ExpenditureEstimateCreateView(LoginRequiredMixin, MakerRequiredMixin, Crea
             return self.form_invalid(form)
         
         form.instance.fiscal_year = fiscal_year
+        form.instance.organization = self.request.user.organization
         form.instance.created_by = self.request.user
         form.instance.updated_by = self.request.user
         
@@ -422,7 +452,13 @@ class ScheduleOfEstablishmentCreateView(LoginRequiredMixin, MakerRequiredMixin, 
         fy_id = self.request.GET.get('fiscal_year')
         if fy_id:
             return get_object_or_404(FiscalYear, pk=fy_id)
-        return FiscalYear.objects.filter(is_active=True).first()
+        
+        # Filter active FY by user's organization
+        user_org = self.request.user.organization
+        qs = FiscalYear.objects.filter(is_active=True)
+        if user_org:
+            qs = qs.filter(organization=user_org)
+        return qs.first()
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -442,6 +478,7 @@ class ScheduleOfEstablishmentCreateView(LoginRequiredMixin, MakerRequiredMixin, 
             return self.form_invalid(form)
         
         form.instance.fiscal_year = fiscal_year
+        form.instance.organization = self.request.user.organization
         form.instance.created_by = self.request.user
         form.instance.updated_by = self.request.user
         
@@ -469,7 +506,13 @@ class NewPostProposalCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateVi
         fy_id = self.request.GET.get('fiscal_year')
         if fy_id:
             return get_object_or_404(FiscalYear, pk=fy_id)
-        return FiscalYear.objects.filter(is_active=True).first()
+        
+        # Filter active FY by user's organization
+        user_org = self.request.user.organization
+        qs = FiscalYear.objects.filter(is_active=True)
+        if user_org:
+            qs = qs.filter(organization=user_org)
+        return qs.first()
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -489,6 +532,7 @@ class NewPostProposalCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateVi
             return self.form_invalid(form)
         
         form.instance.fiscal_year = fiscal_year
+        form.instance.organization = self.request.user.organization
         form.instance.created_by = self.request.user
         form.instance.updated_by = self.request.user
         

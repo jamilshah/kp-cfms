@@ -330,10 +330,16 @@ class BillDetailView(LoginRequiredMixin, DetailView):
         # Check user permissions for workflow actions
         context['can_submit'] = bill.status == BillStatus.DRAFT
         
-        # Accountant can verify submitted bills
-        context['can_verify'] = (
+        # Finance Officer can pre-audit submitted bills
+        context['can_pre_audit'] = (
             bill.status == BillStatus.SUBMITTED and
-            (user.is_checker() or user.is_superuser)
+            (user.has_any_role(['FINANCE_OFFICER']) or user.is_superuser)
+        )
+        
+        # Tehsil Officer Finance can verify audited bills
+        context['can_verify'] = (
+            bill.status == BillStatus.AUDITED and
+            (user.has_any_role(['TOF', 'TO_FINANCE', 'ACCOUNTANT', 'AC']) or user.is_superuser)
         )
         
         # TMO can approve only verified bills
@@ -389,6 +395,29 @@ class BillSubmitView(LoginRequiredMixin, View):
         return redirect('expenditure:bill_detail', pk=pk)
 
 
+class BillPreAuditView(LoginRequiredMixin, View):
+    """View to pre-audit a bill (Finance Officer step)."""
+    
+    def post(self, request: HttpRequest, pk: int) -> HttpResponse:
+        user = request.user
+        org = getattr(user, 'organization', None)
+        
+        bill = get_object_or_404(Bill, pk=pk, organization=org)
+        
+        # Check permission (Finance Officer)
+        if not (user.has_any_role(['FINANCE_OFFICER']) or user.is_superuser):
+            messages.error(request, _('Permission denied. Only Finance Officers can pre-audit bills.'))
+            return redirect('expenditure:bill_detail', pk=pk)
+            
+        try:
+            bill.pre_audit(user)
+            messages.success(request, _('Bill pre-audited successfully. Forwarded to TO for verification.'))
+        except WorkflowTransitionException as e:
+            messages.error(request, str(e))
+        
+        return redirect('expenditure:bill_detail', pk=pk)
+
+
 class BillVerifyView(LoginRequiredMixin, View):
     """View to verify a bill (Accountant step)."""
     
@@ -398,8 +427,9 @@ class BillVerifyView(LoginRequiredMixin, View):
         
         bill = get_object_or_404(Bill, pk=pk, organization=org)
         
-        if not (user.is_checker() or user.is_superuser):
-            messages.error(request, _('Permission denied. Only Accountants can verify bills.'))
+        # Check permission (Tehsil Officer Finance or Accountant)
+        if not (user.has_any_role(['TOF', 'TO_FINANCE', 'ACCOUNTANT', 'AC']) or user.is_superuser):
+            messages.error(request, _('Permission denied. Only Tehsil Officer Finance or Accountant can verify bills.'))
             return redirect('expenditure:bill_detail', pk=pk)
             
         try:
@@ -690,3 +720,18 @@ class BankAccountNextChequeAPIView(LoginRequiredMixin, View):
                 'success': False,
                 'error': 'Bank account not found.'
             }, status=404)
+
+
+def load_payees(request):
+    """
+    AJAX view to load payees filtered by organization.
+    Returns HTML <option> list.
+    """
+    user = request.user
+    org = getattr(user, 'organization', None)
+    
+    payees = Payee.objects.none()
+    if org:
+        payees = Payee.objects.filter(organization=org).order_by('name')
+        
+    return render(request, 'expenditure/partials/payee_options.html', {'payees': payees})

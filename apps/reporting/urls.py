@@ -6,7 +6,7 @@ from apps.reporting.views import (
     BRSReportView,
     MonthlySummaryView,
 )
-from apps.reporting.views_ledger import GeneralLedgerView, TrialBalanceView, AccountStatementView
+from apps.reporting.views_ledger import GeneralLedgerView, TrialBalanceView, AccountStatementView, PendingLiabilitiesView
 from apps.reporting.views_api import BudgetHeadAutocompleteView
 
 app_name = 'reporting'
@@ -45,6 +45,7 @@ urlpatterns = [
     path('general-ledger/', GeneralLedgerView.as_view(), name='general_ledger'),
     path('trial-balance/', TrialBalanceView.as_view(), name='trial_balance'),
     path('account-statement/', AccountStatementView.as_view(), name='account_statement'),
+    path('pending-liabilities/', PendingLiabilitiesView.as_view(), name='pending_liabilities'),
     
     # API Endpoints
     path('api/budget-heads/autocomplete/', BudgetHeadAutocompleteView.as_view(), name='budget_head_autocomplete'),

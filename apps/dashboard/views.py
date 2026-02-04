@@ -411,14 +411,36 @@ class FinanceWorkspaceView(LoginRequiredMixin, TemplateView):
             'utilization_rate': utilization_rate,
         }
         
-        # Pending Liabilities (Approved but not paid bills)
-        pending_liabilities = Bill.objects.filter(
-            organization=organization,
-            fiscal_year=fiscal_year,
-            status=BillStatus.APPROVED
-        ).aggregate(total=Sum('net_amount'))['total'] or Decimal('0.00')
+        # Pending Liabilities (Real GL Liabilities: Taxes, Retention, etc.)
+        # Calculate sum of Credit Balances for all Liability Accounts
+        from apps.finance.models import BudgetHead, AccountType
+        from django.db.models.functions import Coalesce
         
-        context['pending_liabilities'] = pending_liabilities
+        liability_heads = BudgetHead.objects.filter(
+            is_active=True,
+            global_head__account_type=AccountType.LIABILITY
+        ).annotate(
+            total_debit=Coalesce(
+                Sum('journal_entries__debit',
+                    filter=Q(journal_entries__voucher__is_posted=True,
+                            journal_entries__voucher__organization=organization)),
+                Decimal('0.00')
+            ),
+            total_credit=Coalesce(
+                Sum('journal_entries__credit',
+                    filter=Q(journal_entries__voucher__is_posted=True,
+                            journal_entries__voucher__organization=organization)),
+                Decimal('0.00')
+            )
+        )
+        
+        total_liability_amount = Decimal('0.00')
+        for head in liability_heads:
+            balance = head.total_credit - head.total_debit
+            if balance > 0:
+                total_liability_amount += balance
+        
+        context['pending_liabilities'] = total_liability_amount
         
         return context
 
@@ -622,6 +644,18 @@ class RevenueWorkspaceView(LoginRequiredMixin, TemplateView):
         
         context['pending_payments'] = pending_payments_data['count'] or 0
         context['pending_payments_amount'] = pending_payments_data['total'] or Decimal('0.00')
+        
+        # Bills Awaiting Payment (Approved but not yet paid)
+        from apps.expenditure.models import Bill, BillStatus
+        
+        approved_bills = Bill.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            status=BillStatus.APPROVED
+        ).select_related('payee', 'approved_by').order_by('-approved_at')[:10]
+        
+        context['approved_bills'] = approved_bills
+        context['approved_bills_count'] = approved_bills.count()
         
         return context
 

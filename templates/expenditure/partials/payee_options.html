@@ -1,0 +1,4 @@
+<option value="">---------</option>
+{% for payee in payees %}
+<option value="{{ payee.id }}">{{ payee.name }}</option>
+{% endfor %}

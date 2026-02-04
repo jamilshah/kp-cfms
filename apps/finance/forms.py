@@ -464,10 +464,12 @@ class VoucherForm(forms.ModelForm):
         # RESTRICT voucher_type choices to only Manual types (exclude automated BP/BR)
         MANUAL_TYPES = [
             ('JV', 'Journal Voucher'),
+            ('PV', 'Payment Voucher'),
+            ('RV', 'Receipt Voucher'),
             ('CV', 'Contra Voucher'),
         ]
         self.fields['voucher_type'].choices = MANUAL_TYPES
-        self.fields['voucher_type'].initial = 'JV'
+        self.fields['voucher_type'].initial = 'PV'
         
         # Dynamic filtering logic for function based on department
         department_id = None

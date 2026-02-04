@@ -153,7 +153,11 @@ class TenantAdminForm(forms.Form):
     def clean_cnic(self):
         """Validate CNIC is unique."""
         cnic = self.cleaned_data.get('cnic')
-        if CustomUser.objects.filter(cnic=cnic).exists():
+        # Normalize CNIC for check (model strips dashes)
+        import re
+        normalized_cnic = re.sub(r'\D', '', cnic)
+        
+        if CustomUser.objects.filter(cnic=normalized_cnic).exists():
             raise forms.ValidationError('A user with this CNIC already exists.')
         return cnic
     
@@ -300,8 +304,9 @@ class UserForm(forms.ModelForm):
             self.fields['password1'].required = True
             self.fields['password2'].required = True
         else:
-            # CNIC readonly for edit
-            self.fields['cnic'].widget.attrs['readonly'] = True
+            # CNIC readonly for edit (except for superusers)
+            if not (request_user and request_user.is_superuser):
+                self.fields['cnic'].widget.attrs['readonly'] = True
             
         # Set initial roles if instance exists
         if self.instance.pk:
@@ -310,7 +315,11 @@ class UserForm(forms.ModelForm):
     def clean_cnic(self):
         """Validate CNIC is unique."""
         cnic = self.cleaned_data.get('cnic')
-        qs = CustomUser.objects.filter(cnic=cnic)
+        # Normalize CNIC for check (model strips dashes)
+        import re
+        normalized_cnic = re.sub(r'\D', '', cnic)
+        
+        qs = CustomUser.objects.filter(cnic=normalized_cnic)
         if self.instance.pk:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():

@@ -33,9 +33,8 @@ Description: Notification list partial (reusable component).
                 {% if notification.link %}
                 <a href="{{ notification.link }}" 
                    class="btn btn-sm btn-outline-primary"
-                   hx-post="{% url 'core:notification_mark_read' notification.id %}"
-                   hx-trigger="click"
-                   hx-swap="none">
+                   data-mark-read-url="{% url 'core:notification_mark_read' notification.id %}"
+                   onclick="htmx.ajax('POST', this.getAttribute('data-mark-read-url'), {swap: 'none'})">
                     <i class="bi bi-box-arrow-up-right"></i> View
                 </a>
                 {% endif %}
@@ -43,8 +42,7 @@ Description: Notification list partial (reusable component).
                 <button type="button" 
                         class="btn btn-sm btn-outline-secondary"
                         hx-post="{% url 'core:notification_mark_read' notification.id %}"
-                        hx-target="closest .list-group-item"
-                        hx-swap="outerHTML">
+                        hx-swap="none">
                     <i class="bi bi-check"></i> Mark Read
                 </button>
                 {% endif %}

@@ -251,16 +251,26 @@ class BillLineForm(forms.ModelForm):
     def __init__(self, *args, organization=None, fiscal_year=None, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Start with empty queryset - force user to select department/function
-        # This prevents showing all 2000+ budget heads on page load
-        self.fields['budget_head'].queryset = BudgetHead.objects.none()
-        self.fields['budget_head'].help_text = 'Select Department and Function above to filter budget heads'
-        
         self._organization = organization
         self._fiscal_year = fiscal_year
+        
+        # If this is a POST request (form submission), populate the queryset
+        # to allow validation to pass
+        if 'data' in kwargs or args:
+            # Show all active expenditure budget heads for validation
+            self.fields['budget_head'].queryset = BudgetHead.objects.filter(
+                global_head__account_type=AccountType.EXPENDITURE,
+                is_active=True
+            ).order_by('global_head__code')
+            self.fields['budget_head'].help_text = ''
+        else:
+            # Start with empty queryset on initial load - force user to select department/function
+            # This prevents showing all 2000+ budget heads on page load
+            self.fields['budget_head'].queryset = BudgetHead.objects.none()
+            self.fields['budget_head'].help_text = 'Select Department and Function above to filter budget heads'
     
     def clean_budget_head(self):
-        """Validate that the selected budget head has available funds."""
+        """Validate budget head and provide informative messages about budget availability."""
         budget_head = self.cleaned_data.get('budget_head')
         
         if not budget_head:
@@ -275,19 +285,38 @@ class BillLineForm(forms.ModelForm):
                     budget_head=budget_head
                 )
                 
-                # Check if budget is exhausted
+                # Check available budget and provide detailed information
                 available = allocation.get_available_budget()
+                
+                # For debugging: Show allocation details
                 if available <= 0:
                     raise forms.ValidationError(
-                        f"Budget exhausted for {budget_head.name} ({budget_head.code}). "
-                        f"Available: Rs 0.00. Please request re-appropriation from TO Finance."
+                        f"Budget exhausted for {budget_head.get_full_code()} - {budget_head.name}. "
+                        f"Allocated: Rs {allocation.revised_allocation:,.2f}, "
+                        f"Spent: Rs {allocation.spent_amount:,.2f}, "
+                        f"Available: Rs {available:,.2f}. "
+                        f"Please request re-appropriation from TO Finance."
                     )
                     
             except BudgetAllocation.DoesNotExist:
-                # This should not happen due to queryset filtering, but defensive check
+                # Debug: Check if allocation exists with different criteria
+                all_for_head = BudgetAllocation.objects.filter(budget_head=budget_head).count()
+                for_org = BudgetAllocation.objects.filter(
+                    organization=self._organization,
+                    budget_head=budget_head
+                ).count()
+                for_fy = BudgetAllocation.objects.filter(
+                    fiscal_year=self._fiscal_year,
+                    budget_head=budget_head
+                ).count()
+                
+                # Inform user that no allocation exists with debug info
                 raise forms.ValidationError(
-                    f"No budget allocation found for {budget_head.name} ({budget_head.code}) "
-                    f"in fiscal year {self._fiscal_year.year_name}."
+                    f"No budget allocation found for {budget_head.get_full_code()} - {budget_head.name}. "
+                    f"Debug: Total allocations for this head: {all_for_head}, "
+                    f"For your org ({self._organization.name}): {for_org}, "
+                    f"For FY {self._fiscal_year.year_name}: {for_fy}. "
+                    f"Org ID: {self._organization.id}, FY ID: {self._fiscal_year.id}, Head ID: {budget_head.id}"
                 )
         
         return budget_head

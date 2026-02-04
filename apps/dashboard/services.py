@@ -188,18 +188,8 @@ class DashboardService:
         
         for account in accounts_qs:
             # Calculate current balance from GL
-            # Current Balance = Sum(Debit) - Sum(Credit) for the bank's GL code
-            gl_entries = JournalEntry.objects.filter(
-                budget_head=account.gl_code,
-                voucher__is_posted=True
-            ).aggregate(
-                total_debit=Sum('debit'),
-                total_credit=Sum('credit')
-            )
-            
-            debit_total = gl_entries['total_debit'] or Decimal('0.00')
-            credit_total = gl_entries['total_credit'] or Decimal('0.00')
-            current_balance = debit_total - credit_total
+            # Calculate current balance using model method (safe & filtered)
+            current_balance = account.get_balance()
             
             accounts_data.append({
                 'title': account.title,

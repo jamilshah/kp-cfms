@@ -38,6 +38,8 @@ Description: Bill Detail Template with Workflow Actions
                     <span class="badge bg-secondary badge-status">Draft</span>
                     {% elif bill.status == 'SUBMITTED' %}
                     <span class="badge bg-warning text-dark badge-status">Submitted</span>
+                    {% elif bill.status == 'AUDITED' %}
+                    <span class="badge bg-info badge-status">Audited</span>
                     {% elif bill.status == 'VERIFIED' %}
                     <span class="badge bg-info text-white badge-status">Verified</span>
                     {% elif bill.status == 'APPROVED' %}
@@ -154,17 +156,17 @@ Description: Bill Detail Template with Workflow Actions
                                     <small class="text-muted">{{ line.budget_head.name|truncatechars:20 }}</small>
                                 </td>
                                 {% if alloc %}
-                                <td class="text-end align-middle">{{ alloc.released_amount|currency }}</td>
+                                <td class="text-end align-middle">{{ alloc.revised_allocation|currency }}</td>
                                 <td class="text-end text-danger align-middle">{{ alloc.spent_amount|currency }}</td>
                                 <td class="text-end text-success align-middle">{{ alloc.get_available_budget|currency }}</td>
                                 <td class="align-middle">
-                                    {% if alloc.released_amount > 0 %}
+                                    {% if alloc.revised_allocation > 0 %}
                                     <div class="progress" style="height: 15px;">
                                         <div class="progress-bar" role="progressbar" 
-                                             style="width: {% widthratio alloc.spent_amount alloc.released_amount 100 %}%"
-                                             aria-valuenow="{% widthratio alloc.spent_amount alloc.released_amount 100 %}" 
+                                             style="width: {% widthratio alloc.spent_amount alloc.revised_allocation 100 %}%"
+                                             aria-valuenow="{% widthratio alloc.spent_amount alloc.revised_allocation 100 %}" 
                                              aria-valuemin="0" aria-valuemax="100">
-                                            {% widthratio alloc.spent_amount alloc.released_amount 100 %}%
+                                            {% widthratio alloc.spent_amount alloc.revised_allocation 100 %}%
                                         </div>
                                     </div>
                                     {% else %}
@@ -273,10 +275,28 @@ Description: Bill Detail Template with Workflow Actions
                 </form>
                 {% endif %}
                 
+                {% if can_pre_audit %}
+                <div class="card bg-light mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title">Pre-Audit (Finance Officer)</h6>
+                        <form method="post" action="{% url 'expenditure:bill_pre_audit' bill.pk %}">
+                            {% csrf_token %}
+                            <p class="small text-muted mb-3">
+                                Review bill details and forward to TO for verification.
+                            </p>
+                            <button type="submit" class="btn btn-primary w-100 mb-2" 
+                                    onclick="return confirm('Pre-audit and forward to TO?');">
+                                <i class="bi bi-check-circle"></i> Pre-Audit & Forward
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% endif %}
+                
                 {% if can_verify %}
                 <div class="card bg-light mb-3">
                     <div class="card-body">
-                        <h6 class="card-title">Verification (Accountant)</h6>
+                        <h6 class="card-title">Verification (Tehsil Officer Finance)</h6>
                         <form method="post" action="{% url 'expenditure:bill_verify' bill.pk %}">
                             {% csrf_token %}
                             <p class="small text-muted mb-3">
@@ -288,7 +308,7 @@ Description: Bill Detail Template with Workflow Actions
                             </button>
                         </form>
                         
-                        <!-- Rejection Option for Accountant -->
+                        <!-- Rejection Option for TO -->
                         <button class="btn btn-outline-danger w-100" type="button" data-bs-toggle="collapse" data-bs-target="#rejectCollapse">
                             <i class="bi bi-x-circle"></i> Reject Bill
                         </button>
@@ -371,6 +391,20 @@ Description: Bill Detail Template with Workflow Actions
                         <small class="text-muted">Submitted</small><br>
                         {{ bill.submitted_at|date:"d-M-Y H:i" }}
                         {% if bill.submitted_by %} by {{ bill.submitted_by }}{% endif %}
+                    </li>
+                    {% endif %}
+                    {% if bill.audited_at %}
+                    <li class="mb-2">
+                        <small class="text-muted">Pre-Audited</small><br>
+                        {{ bill.audited_at|date:"d-M-Y H:i" }}
+                        {% if bill.audited_by %} by {{ bill.audited_by }}{% endif %}
+                    </li>
+                    {% endif %}
+                    {% if bill.verified_at %}
+                    <li class="mb-2">
+                        <small class="text-muted">Verified</small><br>
+                        {{ bill.verified_at|date:"d-M-Y H:i" }}
+                        {% if bill.verified_by %} by {{ bill.verified_by }}{% endif %}
                     </li>
                     {% endif %}
                     {% if bill.approved_at %}

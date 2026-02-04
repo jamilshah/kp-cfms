@@ -8,7 +8,8 @@ Description: Notification badge component (unread count for navbar).
 -------------------------------------------------------------------------
 -->
 {% if unread_count > 0 %}
-<span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+<span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light" 
+      style="font-size: 0.65rem; padding: 0.25em 0.45em; min-width: 1.5em;">
     {{ unread_count }}
     <span class="visually-hidden">unread notifications</span>
 </span>
