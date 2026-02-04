@@ -149,7 +149,7 @@ STATIC_URL = 'static/'
 
 # Login/Logout Configuration
 LOGIN_URL = 'login'
-LOGIN_REDIRECT_URL = 'dashboard:index'
+LOGIN_REDIRECT_URL = 'dashboard:workspace_redirect'
 LOGOUT_REDIRECT_URL = 'login'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'

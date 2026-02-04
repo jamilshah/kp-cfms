@@ -50,31 +50,38 @@
     {% if selected_budget_head %}
     <!-- Statement Results -->
     <div class="card">
-        <div class="card-header">
+        <div class="card-header bg-white">
             <h5 class="mb-0">Account Statement</h5>
         </div>
         <div class="card-body">
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <strong>Account:</strong> {{ selected_budget_head.code }} - {{ selected_budget_head.name }}<br>
-                    <strong>Type:</strong> {{ selected_budget_head.get_account_type_display }}
+            <div class="row mb-4">
+                <div class="col-md-8">
+                    <p class="mb-1"><strong>Account:</strong> {{ selected_budget_head.global_head.code }} - {{ selected_budget_head.global_head.name }}</p>
+                    <p class="mb-0"><strong>Type:</strong> 
+                        {% if selected_budget_head.global_head.account_type == 'LIA' %}
+                            Liability
+                        {% elif selected_budget_head.global_head.account_type == 'AST' %}
+                            Asset
+                        {% elif selected_budget_head.global_head.account_type == 'EXP' %}
+                            Expenditure
+                        {% elif selected_budget_head.global_head.account_type == 'REV' %}
+                            Revenue
+                        {% elif selected_budget_head.global_head.account_type == 'EQT' %}
+                            Equity
+                        {% else %}
+                            {{ selected_budget_head.global_head.account_type }}
+                        {% endif %}
+                    </p>
                 </div>
-                <div class="col-md-6 text-end">
-                    <strong>Period:</strong> {{ filter_date_from|date:"Y-m-d" }} to {{ filter_date_to|date:"Y-m-d" }}
+                <div class="col-md-4 text-end">
+                    <p class="mb-0"><strong>Period:</strong> {{ filter_date_from }} to {{ filter_date_to }}</p>
                 </div>
             </div>
 
-            <!-- Opening Balance -->
-            <div class="alert alert-secondary">
-                <strong>Opening Balance ({{ filter_date_from|date:"Y-m-d" }}):</strong> 
-                <span class="float-end">{{ opening_balance|floatformat:2 }}</span>
-            </div>
-
-            <!-- Transactions -->
-            {% if entries %}
+            <!-- Transaction Table -->
             <div class="table-responsive">
-                <table class="table table-hover table-sm">
-                    <thead>
+                <table class="table table-bordered mb-0">
+                    <thead class="table-light">
                         <tr>
                             <th>Date</th>
                             <th>Voucher No</th>
@@ -85,9 +92,14 @@
                         </tr>
                     </thead>
                     <tbody>
+                        <tr class="table-secondary">
+                            <td colspan="5"><strong>Opening Balance</strong></td>
+                            <td class="text-end"><strong>{{ opening_balance|floatformat:2 }}</strong></td>
+                        </tr>
+            {% if entries %}
                         {% for item in entries %}
                         <tr>
-                            <td>{{ item.entry.voucher.date|date:"Y-m-d" }}</td>
+                            <td>{{ item.entry.voucher.date|date:"d M Y" }}</td>
                             <td>
                                 <a href="{% url 'finance:voucher_detail' item.entry.voucher.pk %}" class="text-decoration-none">
                                     {{ item.entry.voucher.voucher_no }}
@@ -113,25 +125,19 @@
                             </td>
                         </tr>
                         {% endfor %}
+            {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-3">
+                                <i class="bi bi-info-circle me-2"></i>No transactions in this period
+                            </td>
+                        </tr>
+            {% endif %}
+                        <tr class="table-secondary">
+                            <td colspan="5"><strong>Closing Balance</strong></td>
+                            <td class="text-end"><strong class="text-primary fs-5">{{ closing_balance|floatformat:2 }}</strong></td>
+                        </tr>
                     </tbody>
                 </table>
-            </div>
-            {% else %}
-            <div class="alert alert-info">
-                <i class="bi bi-info-circle me-2"></i>No transactions in this period.
-            </div>
-            {% endif %}
-        </div>
-
-        <!-- Closing Balance -->
-        <div class="card-footer">
-            <div class="row">
-                <div class="col-6">
-                    <strong>Closing Balance ({{ filter_date_to|date:"Y-m-d" }}):</strong>
-                </div>
-                <div class="col-6 text-end">
-                    <strong class="fs-5 text-primary">{{ closing_balance|floatformat:2 }}</strong>
-                </div>
             </div>
         </div>
     </div>

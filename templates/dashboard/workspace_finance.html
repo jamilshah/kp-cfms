@@ -14,12 +14,33 @@ Description: Finance Officer / Accountant Workspace
 
 {% block content %}
 <div class="container-fluid py-4">
+    <style>
+        /* Ensure stat cards have consistent heights and centered content */
+        .stat-card .card-body{min-height:140px; display:flex; flex-direction:column; justify-content:center}
+        .stat-card .stat-label{font-size:0.9rem; color:#6c757d}
+        .stat-card .stat-value{font-weight:700; font-size:1.15rem}
+    </style>
     <!-- Header -->
     <div class="mb-4">
         <h2 class="mb-1">
             <i class="bi bi-calculator me-2"></i>Finance Workspace
         </h2>
-        <p class="text-muted">Budget Management & Bill Scrutiny</p>
+        <p class="text-muted">
+            Budget Management & Bill Scrutiny
+            <span class="text-primary ms-2">
+                <i class="bi bi-building"></i> {{ organization.name }} |
+                <i class="bi bi-calendar"></i> FY {{ fiscal_year.year_name }}
+            </span>
+        </p>
+        {% if budget_metrics.total_released == 0 %}
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i>
+            <strong>No funds released yet.</strong> 
+            Budget allocations exist but funds need to be released via 
+            <a href="{% url 'budgeting:quarterly_release_create' %}" class="alert-link">Quarterly Release</a> 
+            before spending can occur.
+        </div>
+        {% endif %}
     </div>
 
     {% if no_organization %}
@@ -32,37 +53,39 @@ Description: Finance Officer / Accountant Workspace
     </div>
     {% else %}
 
-    <!-- Budget Metrics Row -->
+    <!-- Budget Metrics Cards -->
     <div class="row g-4 mb-4">
         <div class="col-md-3">
-            <div class="card stat-card">
+            <div class="card stat-card h-100">
                 <div class="card-body">
-                    <div class="stat-label">Total Budget</div>
-                    <div class="stat-value">Rs. {{ budget_metrics.total_budget|floatformat:2 }}</div>
+                    <div class="stat-label">Revised Budget</div>
+                    <div class="stat-value text-muted">Rs. {{ budget_metrics.total_revised|floatformat:2 }}</div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card stat-card success">
+            <div class="card stat-card h-100" style="border-left: 4px solid var(--bs-primary);">
                 <div class="card-body">
-                    <div class="stat-label">Total Spent</div>
+                    <div class="stat-label">Released Budget</div>
+                    <div class="stat-value">Rs. {{ budget_metrics.total_released|floatformat:2 }}</div>
+                    <small class="text-muted">Available for spending</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card success h-100">
+                <div class="card-body">
+                    <div class="stat-label">Spent</div>
                     <div class="stat-value">Rs. {{ budget_metrics.total_spent|floatformat:2 }}</div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card stat-card warning">
+            <div class="card stat-card warning h-100">
                 <div class="card-body">
                     <div class="stat-label">Available</div>
                     <div class="stat-value">Rs. {{ budget_metrics.available|floatformat:2 }}</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card stat-card {% if budget_metrics.utilization_rate > 90 %}danger{% else %}success{% endif %}">
-                <div class="card-body">
-                    <div class="stat-label">Utilization Rate</div>
-                    <div class="stat-value">{{ budget_metrics.utilization_rate|floatformat:1 }}%</div>
+                    <small class="text-muted">Released - Spent</small>
                 </div>
             </div>
         </div>
@@ -132,7 +155,7 @@ Description: Finance Officer / Accountant Workspace
                         <i class="bi bi-cash-stack fs-1 text-danger mb-3"></i>
                         <h5 class="text-dark">Pending Liabilities</h5>
                         <p class="stat-value text-danger">Rs. {{ pending_liabilities|floatformat:2 }}</p>
-                        <p class="text-muted small">Unpaid Taxes & Approved Bills</p>
+                        <p class="text-muted small">Unpaid Bills & Withheld Taxes</p>
                     </div>
                 </div>
             </a>

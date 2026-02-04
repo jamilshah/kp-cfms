@@ -12,7 +12,14 @@
             <h2 class="mb-1">
                 <i class="bi bi-cash-coin me-2"></i>Pending Liabilities
             </h2>
-            <p class="text-muted">Unpaid liabilities (Taxes, Retention, Payments) needing clearance.</p>
+            <p class="text-muted">
+                Unpaid liabilities (Approved Bills & Withheld Taxes) for 
+                {% if fiscal_year %}
+                    <span class="text-primary">FY {{ fiscal_year.year_name }}</span>
+                {% else %}
+                    current fiscal year
+                {% endif %}
+            </p>
         </div>
         <div>
             <span class="badge bg-primary fs-6">
@@ -21,13 +28,23 @@
         </div>
     </div>
 
-    <!-- Summary Card -->
-    <div class="row mb-4">
+    {% if no_fiscal_year %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> No active fiscal year found. Please create or activate a fiscal year.
+    </div>
+    {% else %}
+
+    <!-- Summary Cards -->
+    <div class="row g-4 mb-4">
         <div class="col-md-4">
-            <div class="card bg-danger text-white shadow-sm">
+            <div class="card bg-danger text-white shadow-sm h-100">
                 <div class="card-body text-center">
                     <h5 class="card-title opacity-75">Total Pending Payment</h5>
                     <h2 class="display-6 fw-bold mb-0">Rs. {{ total_pending|floatformat:2|intcomma }}</h2>
+                    <div class="mt-3 pt-3 border-top border-light opacity-75">
+                        <small>Approved Bills: Rs. {{ approved_bills_total|floatformat:2|intcomma }}</small><br>
+                        <small>Tax Liabilities: Rs. {{ tax_liability_total|floatformat:2|intcomma }}</small>
+                    </div>
                 </div>
             </div>
         </div>
@@ -37,19 +54,22 @@
                     <i class="bi bi-info-circle-fill fs-4 me-3"></i>
                     <div>
                         <strong>What is this report?</strong><br>
-                        This report lists money you owe to others (e.g., Tax Authority, Contractors).
-                        A positive amount means you have withheld or recorded the liability but have not yet paid it out (Cleared it).
-                        To clear these, create a <strong>Payment Voucher (PV)</strong> debiting the liability account.
+                        This report shows pending liabilities for the current fiscal year:
+                        <ul class="mb-0 mt-2">
+                            <li><strong>Approved Bills:</strong> Bills approved for payment but not yet paid (Accounts Payable)</li>
+                            <li><strong>Tax Liabilities:</strong> Taxes withheld from bills but not yet remitted to tax authorities</li>
+                        </ul>
+                        To clear tax liabilities, create a <strong>Payment Voucher (PV)</strong> debiting the tax liability account.
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Liability List -->
+    <!-- Tax Liability Accounts -->
     <div class="card shadow-sm">
         <div class="card-header bg-white py-3">
-            <h5 class="card-title mb-0">Liability Accounts</h5>
+            <h5 class="card-title mb-0">Tax Liability Accounts (Withheld Taxes)</h5>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -79,7 +99,7 @@
                                 {{ item.balance|floatformat:2|intcomma }}
                             </td>
                             <td class="text-center">
-                                <a href="{% url 'reporting:account_statement' %}?budget_head={{ item.head.id }}&date_from={{ as_of_date|date:'Y-m-d' }}&date_to={{ as_of_date|date:'Y-m-d' }}" 
+                                <a href="{% url 'reporting:account_statement' %}?budget_head={{ item.head.id }}&date_from={{ fiscal_year.start_date|date:'Y-m-d' }}&date_to={{ as_of_date|date:'Y-m-d' }}" 
                                    class="btn btn-sm btn-outline-secondary"
                                    title="View Ledger">
                                     <i class="bi bi-list-ul"></i> Ledger
@@ -90,7 +110,7 @@
                         <tr>
                             <td colspan="5" class="text-center py-5 text-muted">
                                 <i class="bi bi-check-circle-fill fs-1 text-success mb-3"></i>
-                                <p class="mb-0">No pending liabilities found. All clear!</p>
+                                <p class="mb-0">No tax liabilities pending. All taxes remitted!</p>
                             </td>
                         </tr>
                         {% endfor %}
@@ -106,5 +126,7 @@
             </div>
         </div>
     </div>
+
+    {% endif %}
 </div>
 {% endblock %}

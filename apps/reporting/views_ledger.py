@@ -22,9 +22,11 @@ from apps.budgeting.models import FiscalYear
 
 class GeneralLedgerView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
     """
-    General Ledger by Account Report.
+    General Ledger Report.
     
-    Shows all journal entries for a selected budget head with running balance.
+    Shows all journal entries:
+    - For a selected budget head with running balance, OR
+    - For all accounts (when no head selected) without running balance
     """
     template_name = 'reporting/general_ledger.html'
     
@@ -49,7 +51,7 @@ class GeneralLedgerView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
             context['default_date_from'] = fiscal_year.start_date
             context['default_date_to'] = fiscal_year.end_date
         
-        # If budget head selected, fetch entries
+        # If budget head selected, fetch entries with running balance
         if budget_head_id:
             try:
                 budget_head = BudgetHead.objects.select_related(
@@ -97,9 +99,38 @@ class GeneralLedgerView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
                 
                 context['entries'] = entries_with_balance
                 context['final_balance'] = running_balance
+                context['single_account'] = True
                 
             except BudgetHead.DoesNotExist:
                 context['error'] = 'Selected budget head not found.'
+        
+        else:
+            # No budget head selected - show all transactions (multi-account view)
+            entries_query = JournalEntry.objects.filter(
+                voucher__is_posted=True,
+                voucher__organization=organization
+            ).select_related('voucher', 'budget_head', 'budget_head__global_head', 'budget_head__function')
+            
+            # Apply date filters
+            if date_from:
+                entries_query = entries_query.filter(voucher__date__gte=date_from)
+                context['filter_date_from'] = date_from
+            if date_to:
+                entries_query = entries_query.filter(voucher__date__lte=date_to)
+                context['filter_date_to'] = date_to
+            
+            # Order by date and voucher
+            entries = entries_query.order_by('voucher__date', 'voucher__id')
+            
+            # For multi-account view, no running balance
+            context['entries'] = [{'entry': entry} for entry in entries]
+            context['single_account'] = False
+            
+            # Calculate totals
+            total_debit = sum(entry.debit for entry in entries)
+            total_credit = sum(entry.credit for entry in entries)
+            context['total_debit'] = total_debit
+            context['total_credit'] = total_credit
         
         context['filter_budget_head'] = budget_head_id
         
@@ -299,7 +330,7 @@ class PendingLiabilitiesView(LoginRequiredMixin, TenantAwareMixin, TemplateView)
     Pending Liabilities Report.
     
     Shows unpaid liabilities (Taxes, Retention Money, etc.) that require payment.
-    Filters for Liability accounts with positive Credit balance.
+    Includes approved bills (AP) and tax liability GL balances for the current fiscal year.
     """
     template_name = 'reporting/pending_liabilities.html'
     
@@ -307,43 +338,90 @@ class PendingLiabilitiesView(LoginRequiredMixin, TenantAwareMixin, TemplateView)
         context = super().get_context_data(**kwargs)
         organization = self.request.user.organization
         
-        # Get as-of date (default today)
+        # Get current operating fiscal year
+        fiscal_year = FiscalYear.get_current_operating_year(organization)
+        
+        if not fiscal_year:
+            context['no_fiscal_year'] = True
+            context['as_of_date'] = date.today()
+            context['pending_items'] = []
+            context['total_pending'] = Decimal('0.00')
+            context['approved_bills_total'] = Decimal('0.00')
+            context['tax_liability_total'] = Decimal('0.00')
+            return context
+        
+        context['fiscal_year'] = fiscal_year
         context['as_of_date'] = date.today()
         
-        # Get Liability Heads with balances
-        liabilities = BudgetHead.objects.filter(
-            is_active=True,
-            global_head__account_type='LIA'  # Filter for Liabilities
+        # Import Bill model here to avoid circular imports
+        from apps.expenditure.models import Bill
+        from apps.finance.models import GlobalHead
+        
+        # 1. Calculate Approved Bills (AP) - not yet paid
+        approved_bills = Bill.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            status='APPROVED'  # Bills approved but not paid
+        ).aggregate(
+            total=Coalesce(Sum('net_amount'), Decimal('0.00'))
+        )
+        approved_bills_total = approved_bills['total']
+        
+        # 2. Calculate Tax Liability GL Balances (withheld taxes not yet remitted)
+        # Get tax liability heads using system_code
+        from apps.finance.models import SystemCode
+        
+        tax_liability_heads = GlobalHead.objects.filter(
+            system_code__in=[
+                SystemCode.TAX_IT,      # Income Tax Payable
+                SystemCode.TAX_GST,     # GST/Sales Tax Payable
+                SystemCode.CLEARING_IT, # Income Tax Withheld (clearing)
+                SystemCode.CLEARING_GST # GST Withheld (clearing)
+            ]
+        ).values_list('id', flat=True)
+        
+        # Get balances for tax liability heads scoped to org & fiscal year
+        # BudgetHead doesn't have fiscal_year or organization directly,
+        # so we filter via voucher fiscal_year and organization in the journal entry aggregation
+        tax_liabilities = BudgetHead.objects.filter(
+            global_head_id__in=tax_liability_heads,
+            is_active=True
         ).select_related('global_head', 'fund', 'function').annotate(
             total_debit=Coalesce(
                 Sum('journal_entries__debit',
                     filter=Q(journal_entries__voucher__is_posted=True,
-                            journal_entries__voucher__organization=organization)),
+                            journal_entries__voucher__organization=organization,
+                            journal_entries__voucher__fiscal_year=fiscal_year)),
                 Decimal('0.00')
             ),
             total_credit=Coalesce(
                 Sum('journal_entries__credit',
                     filter=Q(journal_entries__voucher__is_posted=True,
-                            journal_entries__voucher__organization=organization)),
+                            journal_entries__voucher__organization=organization,
+                            journal_entries__voucher__fiscal_year=fiscal_year)),
                 Decimal('0.00')
             )
         )
         
-        # Calculate Pending Balances
-        # Liability Balance = Credit (Owed) - Debit (Paid)
+        # Calculate Tax Liability Balances (Credit - Debit = amount owed)
         pending_items = []
-        total_pending = Decimal('0.00')
+        tax_liability_total = Decimal('0.00')
         
-        for head in liabilities:
+        for head in tax_liabilities:
             balance = head.total_credit - head.total_debit
             if balance > Decimal('0.00'):
                 pending_items.append({
                     'head': head,
                     'balance': balance,
                 })
-                total_pending += balance
+                tax_liability_total += balance
+        
+        # Total pending liabilities
+        total_pending = approved_bills_total + tax_liability_total
         
         context['pending_items'] = pending_items
         context['total_pending'] = total_pending
+        context['approved_bills_total'] = approved_bills_total
+        context['tax_liability_total'] = tax_liability_total
         
         return context

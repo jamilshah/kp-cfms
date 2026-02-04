@@ -36,17 +36,15 @@ class ExecutiveDashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'dashboard/index.html'
     
     def dispatch(self, request, *args, **kwargs):
-        """Auto-redirect LCB officers to provincial dashboard."""
+        """Auto-redirect LCB officers without org to provincial dashboard."""
         from django.shortcuts import redirect
         
         user = request.user
         
-        # Redirect LCB officers to provincial dashboard
-        if user.is_authenticated and (user.is_lcb_officer() or user.is_super_admin()):
-            # Only redirect if they don't have an organization
-            # (Super admins with org assignment can see TMA dashboard)
-            if not user.organization:
-                return redirect('dashboard:provincial')
+        # Redirect LCB officers without organization to provincial dashboard
+        # TMOs and other TMA users with org can access Executive Dashboard
+        if user.is_authenticated and user.is_lcb_officer() and not user.organization:
+            return redirect('dashboard:provincial')
 
         # Note: role-based workspace redirect is handled via
         # `DashboardRedirectView` at '/dashboard/workspace/'.
@@ -372,6 +370,8 @@ class FinanceWorkspaceView(LoginRequiredMixin, TemplateView):
         
         context['fiscal_year'] = fiscal_year
         context['organization'] = organization
+        context['debug_org_id'] = organization.id if organization else None
+        context['debug_fy_id'] = fiscal_year.id if fiscal_year else None
         
         # Import here to avoid circular imports
         from apps.expenditure.models import Bill, BillStatus
@@ -394,53 +394,83 @@ class FinanceWorkspaceView(LoginRequiredMixin, TemplateView):
             fiscal_year=fiscal_year
         )
         
-        total_budget = budget_allocations.aggregate(
-            total=Sum('revised_allocation')
-        )['total'] or Decimal('0.00')
+        # Count of allocations for this org/FY
+        allocation_count = budget_allocations.count()
         
-        total_spent = budget_allocations.aggregate(
-            total=Sum('spent_amount')
-        )['total'] or Decimal('0.00')
+        # Get comprehensive budget metrics
+        budget_totals = budget_allocations.aggregate(
+            total_revised=Sum('revised_allocation'),
+            total_released=Sum('released_amount'),
+            total_spent=Sum('spent_amount')
+        )
         
-        utilization_rate = (total_spent / total_budget * 100) if total_budget > 0 else Decimal('0.00')
+        total_revised = budget_totals['total_revised'] or Decimal('0.00')
+        total_released = budget_totals['total_released'] or Decimal('0.00')
+        total_spent = budget_totals['total_spent'] or Decimal('0.00')
+        
+        # Available = Released - Spent (funds available for spending)
+        available = total_released - total_spent
+        
+        # Utilization rate based on released amount (not revised)
+        utilization_rate = (total_spent / total_released * 100) if total_released > 0 else Decimal('0.00')
         
         context['budget_metrics'] = {
-            'total_budget': total_budget,
+            'total_revised': total_revised,
+            'total_released': total_released,
             'total_spent': total_spent,
-            'available': total_budget - total_spent,
+            'available': available,
             'utilization_rate': utilization_rate,
+            'allocation_count': allocation_count,
         }
         
-        # Pending Liabilities (Real GL Liabilities: Taxes, Retention, etc.)
-        # Calculate sum of Credit Balances for all Liability Accounts
-        from apps.finance.models import BudgetHead, AccountType
+        # Pending Liabilities = Approved bills (AP) + Tax liabilities (withheld taxes)
+        
+        # 1. Bills with status APPROVED = Accounts Payable (AP) liabilities
+        pending_bills_total = Bill.objects.filter(
+            organization=organization,
+            fiscal_year=fiscal_year,
+            status=BillStatus.APPROVED  # Approved but not yet paid
+        ).aggregate(total=Sum('net_amount'))['total'] or Decimal('0.00')
+        
+        # 2. Tax Liabilities = Credit balances in tax-related liability accounts
+        # When bills are approved, taxes are withheld and credited to tax liability accounts
+        # These remain as liabilities until remitted to government
+        from apps.finance.models import BudgetHead, SystemCode
         from django.db.models.functions import Coalesce
         
-        liability_heads = BudgetHead.objects.filter(
+        tax_liability_heads = BudgetHead.objects.filter(
             is_active=True,
-            global_head__account_type=AccountType.LIABILITY
+            global_head__system_code__in=[
+                SystemCode.TAX_IT,      # Income Tax Payable
+                SystemCode.TAX_GST,     # GST/Sales Tax Payable
+                SystemCode.CLEARING_IT, # Income Tax Withheld (clearing)
+                SystemCode.CLEARING_GST # GST Withheld (clearing)
+            ]
         ).annotate(
             total_debit=Coalesce(
                 Sum('journal_entries__debit',
                     filter=Q(journal_entries__voucher__is_posted=True,
-                            journal_entries__voucher__organization=organization)),
+                            journal_entries__voucher__organization=organization,
+                            journal_entries__voucher__fiscal_year=fiscal_year)),
                 Decimal('0.00')
             ),
             total_credit=Coalesce(
                 Sum('journal_entries__credit',
                     filter=Q(journal_entries__voucher__is_posted=True,
-                            journal_entries__voucher__organization=organization)),
+                            journal_entries__voucher__organization=organization,
+                            journal_entries__voucher__fiscal_year=fiscal_year)),
                 Decimal('0.00')
             )
         )
         
-        total_liability_amount = Decimal('0.00')
-        for head in liability_heads:
+        tax_liabilities_total = Decimal('0.00')
+        for head in tax_liability_heads:
             balance = head.total_credit - head.total_debit
             if balance > 0:
-                total_liability_amount += balance
+                tax_liabilities_total += balance
         
-        context['pending_liabilities'] = total_liability_amount
+        # Total pending liabilities = AP + Tax liabilities
+        context['pending_liabilities'] = pending_bills_total + tax_liabilities_total
         
         return context
 
