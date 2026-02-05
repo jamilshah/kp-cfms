@@ -43,7 +43,8 @@ class ExecutiveDashboardView(LoginRequiredMixin, TemplateView):
         
         # Redirect LCB officers without organization to provincial dashboard
         # TMOs and other TMA users with org can access Executive Dashboard
-        if user.is_authenticated and user.is_lcb_officer() and not user.organization:
+        # Superusers are exempted from this redirect
+        if user.is_authenticated and user.is_lcb_officer() and not user.organization and not user.is_superuser:
             return redirect('dashboard:provincial')
 
         # Note: role-based workspace redirect is handled via
@@ -73,7 +74,7 @@ class ExecutiveDashboardView(LoginRequiredMixin, TemplateView):
         
         # Get current operating fiscal year
         if organization:
-            fiscal_year = FiscalYear.get_current_operating_year(organization)
+            fiscal_year = FiscalYear.get_current_operating_year()
         else:
             # For provincial view, get any active fiscal year
             fiscal_year = FiscalYear.objects.filter(
@@ -171,6 +172,10 @@ class ProvincialDashboardView(LoginRequiredMixin, TemplateView):
     
     def dispatch(self, request, *args, **kwargs):
         """Enforce strict role-based access control."""
+        # First, ensure user is authenticated (LoginRequiredMixin will redirect if not)
+        if not request.user.is_authenticated:
+            return super().dispatch(request, *args, **kwargs)
+        
         user = request.user
         
         # Check if user has LCB/Admin access
@@ -318,6 +323,10 @@ class DashboardRedirectView(LoginRequiredMixin, RedirectView):
         """Route user to appropriate workspace based on their role."""
         user = self.request.user
         
+        # Super Admin -> System Admin Dashboard
+        if user.is_superuser:
+            return reverse('system_admin:dashboard')
+        
         # LCB Officers -> Provincial Dashboard
         if user.is_lcb_officer():
             return reverse('dashboard:provincial')
@@ -363,7 +372,7 @@ class FinanceWorkspaceView(LoginRequiredMixin, TemplateView):
             return context
         
         # Get current fiscal year
-        fiscal_year = FiscalYear.get_current_operating_year(organization)
+        fiscal_year = FiscalYear.get_current_operating_year()
         if not fiscal_year:
             context['no_fiscal_year'] = True
             return context
@@ -496,7 +505,7 @@ class AuditWorkspaceView(LoginRequiredMixin, TemplateView):
             context['no_organization'] = True
             return context
         
-        fiscal_year = FiscalYear.get_current_operating_year(organization)
+        fiscal_year = FiscalYear.get_current_operating_year()
         if not fiscal_year:
             context['no_fiscal_year'] = True
             return context
@@ -562,7 +571,7 @@ class RevenueWorkspaceView(LoginRequiredMixin, TemplateView):
             context['no_organization'] = True
             return context
         
-        fiscal_year = FiscalYear.get_current_operating_year(organization)
+        fiscal_year = FiscalYear.get_current_operating_year()
         if not fiscal_year:
             context['no_fiscal_year'] = True
             return context
@@ -712,7 +721,7 @@ class PAOWorkspaceView(LoginRequiredMixin, TemplateView):
             context['no_organization'] = True
             return context
         
-        fiscal_year = FiscalYear.get_current_operating_year(organization)
+        fiscal_year = FiscalYear.get_current_operating_year()
         if not fiscal_year:
             context['no_fiscal_year'] = True
             return context

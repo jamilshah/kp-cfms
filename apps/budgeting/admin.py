@@ -39,18 +39,17 @@ class BudgetEmployeeInline(admin.TabularInline):
 @admin.register(FiscalYear)
 class FiscalYearAdmin(admin.ModelAdmin):
     """
-    Admin configuration for FiscalYear model.
+    Admin configuration for GLOBAL FiscalYear model (LCB Admin only).
     """
     
     list_display = [
         'year_name', 'start_date', 'end_date', 
-        'status_badge', 'is_active', 'is_locked', 'sae_number'
+        'planning_status_badge', 'revision_status_badge'
     ]
-    list_filter = ['status', 'is_active', 'is_locked']
-    search_fields = ['year_name', 'sae_number']
+    list_filter = ['is_planning_active', 'is_revision_active']
+    search_fields = ['year_name']
     readonly_fields = [
-        'sae_number', 'sae_generated_at', 'created_at', 
-        'updated_at', 'created_by', 'updated_by'
+        'created_at', 'updated_at', 'created_by', 'updated_by'
     ]
     ordering = ['-start_date']
     
@@ -58,12 +57,9 @@ class FiscalYearAdmin(admin.ModelAdmin):
         (None, {
             'fields': ('year_name', 'start_date', 'end_date')
         }),
-        (_('Status'), {
-            'fields': ('status', 'is_active', 'is_locked')
-        }),
-        (_('SAE Information'), {
-            'fields': ('sae_number', 'sae_generated_at'),
-            'classes': ('collapse',)
+        (_('Planning Windows'), {
+            'fields': ('is_planning_active', 'is_revision_active'),
+            'description': _('Control when TMAs can create/edit budget proposals.')
         }),
         (_('Audit Trail'), {
             'fields': ('created_at', 'updated_at', 'created_by', 'updated_by'),
@@ -71,35 +67,45 @@ class FiscalYearAdmin(admin.ModelAdmin):
         }),
     )
     
-    actions = ['activate_budget_entry', 'deactivate_budget_entry']
+    actions = ['open_planning_window', 'close_planning_window', 'open_revision_window', 'close_revision_window']
     
-    def status_badge(self, obj: FiscalYear) -> str:
-        """Display status as a colored badge."""
-        color_map = {
-            BudgetStatus.DRAFT: 'secondary',
-            BudgetStatus.SUBMITTED: 'info',
-            BudgetStatus.VERIFIED: 'warning',
-            BudgetStatus.APPROVED: 'primary',
-            BudgetStatus.LOCKED: 'success',
-        }
-        color = color_map.get(obj.status, 'secondary')
-        return format_html(
-            '<span class="badge bg-{}">{}</span>',
-            color, obj.get_status_display()
-        )
-    status_badge.short_description = _('Status')
+    def planning_status_badge(self, obj: FiscalYear) -> str:
+        """Display planning window status as a colored badge."""
+        if obj.is_planning_active:
+            return format_html('<span class="badge bg-success">Planning Open</span>')
+        return format_html('<span class="badge bg-secondary">Planning Closed</span>')
+    planning_status_badge.short_description = _('Planning Window')
     
-    @admin.action(description=_('Activate budget entry window'))
-    def activate_budget_entry(self, request, queryset):
-        """Activate budget entry for selected fiscal years."""
-        count = queryset.filter(is_locked=False).update(is_active=True)
-        self.message_user(request, f'{count} fiscal year(s) activated.')
+    def revision_status_badge(self, obj: FiscalYear) -> str:
+        """Display revision window status as a colored badge."""
+        if obj.is_revision_active:
+            return format_html('<span class="badge bg-warning">Revision Open</span>')
+        return format_html('<span class="badge bg-secondary">Revision Closed</span>')
+    revision_status_badge.short_description = _('Revision Window')
     
-    @admin.action(description=_('Deactivate budget entry window'))
-    def deactivate_budget_entry(self, request, queryset):
-        """Deactivate budget entry for selected fiscal years."""
-        count = queryset.update(is_active=False)
-        self.message_user(request, f'{count} fiscal year(s) deactivated.')
+    @admin.action(description=_('Open planning window (May-June)'))
+    def open_planning_window(self, request, queryset):
+        """Open planning window for selected fiscal years."""
+        count = queryset.update(is_planning_active=True)
+        self.message_user(request, f'{count} fiscal year(s) planning window opened.')
+    
+    @admin.action(description=_('Close planning window'))
+    def close_planning_window(self, request, queryset):
+        """Close planning window for selected fiscal years."""
+        count = queryset.update(is_planning_active=False)
+        self.message_user(request, f'{count} fiscal year(s) planning window closed.')
+    
+    @admin.action(description=_('Open revision window (March)'))
+    def open_revision_window(self, request, queryset):
+        """Open revision window for selected fiscal years."""
+        count = queryset.update(is_revision_active=True)
+        self.message_user(request, f'{count} fiscal year(s) revision window opened.')
+    
+    @admin.action(description=_('Close revision window'))
+    def close_revision_window(self, request, queryset):
+        """Close revision window for selected fiscal years."""
+        count = queryset.update(is_revision_active=False)
+        self.message_user(request, f'{count} fiscal year(s) revision window closed.')
     
     def save_model(self, request, obj, form, change):
         """Track created_by and updated_by."""

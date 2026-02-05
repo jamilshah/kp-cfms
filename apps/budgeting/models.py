@@ -115,25 +115,25 @@ class ReappropriationStatus(models.TextChoices):
     APPROVED = 'APPROVED', _('Approved')
 
 
-class FiscalYear(AuditLogMixin, TenantAwareMixin):
+class FiscalYear(AuditLogMixin):
     """
-    Represents a financial year for budget planning.
+    GLOBAL Fiscal Year - shared across all TMAs in KP Province.
     
     The fiscal year in Pakistan runs from July 1 to June 30.
-    Budget entry is controlled via is_active and is_locked flags.
+    This is now a province-wide entity controlled by LCB.
+    Individual TMA budget status is tracked via BudgetProposal model.
     
     Attributes:
-        organization: The TMA this fiscal year belongs to
-        year_name: Display name (e.g., "2026-27")
+        year_name: Display name (e.g., "2026-27") - UNIQUE globally
         start_date: First day of fiscal year (July 1)
         end_date: Last day of fiscal year (June 30)
-        is_active: Whether budget entry window is open
-        is_locked: Whether budget is finalized (no edits allowed)
-        status: Current workflow status
+        is_planning_active: Whether budget planning window is open (LCB control)
+        is_revision_active: Whether revision window is open (March cycle)
     """
     
     year_name = models.CharField(
         max_length=20,
+        unique=True,
         verbose_name=_('Fiscal Year'),
         help_text=_('Display name for the fiscal year (e.g., "2026-27").')
     )
@@ -145,39 +145,21 @@ class FiscalYear(AuditLogMixin, TenantAwareMixin):
         verbose_name=_('End Date'),
         help_text=_('Last day of the fiscal year (June 30).')
     )
-    is_active = models.BooleanField(
+    is_planning_active = models.BooleanField(
         default=False,
-        verbose_name=_('Budget Entry Active'),
-        help_text=_('Whether budget entry window is currently open.')
+        verbose_name=_('Planning Window Open'),
+        help_text=_('Whether TMAs can create/edit budget proposals (May-June).')
     )
-    is_locked = models.BooleanField(
+    is_revision_active = models.BooleanField(
         default=False,
-        verbose_name=_('Budget Locked'),
-        help_text=_('Whether budget is finalized and locked for edits.')
-    )
-    status = models.CharField(
-        max_length=15,
-        choices=BudgetStatus.choices,
-        default=BudgetStatus.DRAFT,
-        verbose_name=_('Status')
-    )
-    sae_number = models.CharField(
-        max_length=50,
-        blank=True,
-        verbose_name=_('SAE Number'),
-        help_text=_('Unique identifier for Schedule of Authorized Expenditure.')
-    )
-    sae_generated_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name=_('SAE Generated At')
+        verbose_name=_('Revision Window Open'),
+        help_text=_('Whether TMAs can revise budgets (March cycle).')
     )
     
     class Meta:
         verbose_name = _('Fiscal Year')
         verbose_name_plural = _('Fiscal Years')
         ordering = ['-start_date']
-        unique_together = ['organization', 'year_name']
     
     def __str__(self) -> str:
         return f"FY {self.year_name}"
@@ -191,76 +173,201 @@ class FiscalYear(AuditLogMixin, TenantAwareMixin):
                     'end_date': _('End date must be after start date.')
                 })
     
-    def can_edit_budget(self) -> bool:
-        """Check if budget entries can be modified."""
-        return self.is_active and not self.is_locked
-    
     @classmethod
-    def get_current_operating_year(cls, organization):
+    def get_current_operating_year(cls):
         """
         Get the fiscal year that covers the current date.
         
         This is used for expenditure/receipt transactions, where we need
-        the fiscal year that contains today's date, not the one open
-        for budget entry (is_active).
+        the fiscal year that contains today's date.
         
-        Args:
-            organization: The organization to filter by.
-            
         Returns:
             FiscalYear or None: The fiscal year containing today's date.
         """
         from django.utils import timezone
         today = timezone.now().date()
         return cls.objects.filter(
-            organization=organization,
             start_date__lte=today,
             end_date__gte=today
         ).first()
 
-    def lock_budget(self, sae_number: str) -> None:
-        """
-        Lock the budget and set SAE number.
-        
-        Args:
-            sae_number: Unique SAE identifier.
-            
-        Raises:
-            BudgetLockedException: If budget is already locked.
-        """
-        if self.is_locked:
-            raise BudgetLockedException(
-                f"Budget for {self.year_name} is already locked."
+
+class BudgetProposalStatus(models.TextChoices):
+    """
+    Status choices for TMA budget proposal workflow.
+    Implements the budget cycle from budget_cycle.md.
+    """
+    DRAFT = 'DRAFT', _('Draft')
+    COUNCIL_APPROVED = 'COUNCIL_APPROVED', _('Council Approved')
+    SUBMITTED = 'SUBMITTED', _('Submitted to LCB')
+    UNDER_REVIEW = 'UNDER_REVIEW', _('Under LCB Review')
+    SANCTIONED = 'SANCTIONED', _('Sanctioned by LCB')
+    REJECTED = 'REJECTED', _('Rejected')
+    ACTIVE = 'ACTIVE', _('Active for Transactions')
+    CLOSED = 'CLOSED', _('Closed (Year End)')
+
+
+class BudgetProposal(AuditLogMixin, TenantAwareMixin):
+    """
+    Represents a TMA's budget proposal for a specific Fiscal Year.
+    
+    This model tracks the lifecycle of a TMA's budget from drafting
+    through council approval, LCB sanction, and execution.
+    
+    Attributes:
+        organization: The TMA this proposal belongs to
+        fiscal_year: The global fiscal year this proposal is for
+        status: Current workflow status
+        is_locked: Whether budget is locked for editing
+        council_resolution_no: Council resolution number
+        council_resolution_date: Date of council approval
+        submitted_at: When submitted to LCB
+        sanctioned_at: When sanctioned by LCB
+        sanctioned_by: LCB user who sanctioned
+        sae_number: SAE number after sanction
+        rejection_reason: Reason if rejected by LCB
+    """
+    
+    fiscal_year = models.ForeignKey(
+        FiscalYear,
+        on_delete=models.PROTECT,
+        related_name='proposals',
+        verbose_name=_('Fiscal Year')
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=BudgetProposalStatus.choices,
+        default=BudgetProposalStatus.DRAFT,
+        verbose_name=_('Status')
+    )
+    is_locked = models.BooleanField(
+        default=False,
+        verbose_name=_('Is Locked'),
+        help_text=_('Whether this budget proposal is locked for editing.')
+    )
+    
+    # Council Approval
+    council_resolution_no = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name=_('Council Resolution No.'),
+        help_text=_('Resolution number from Tehsil Council.')
+    )
+    council_resolution_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name=_('Council Resolution Date')
+    )
+    
+    # LCB Workflow
+    submitted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Submitted At')
+    )
+    sanctioned_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Sanctioned At')
+    )
+    sanctioned_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sanctioned_budgets',
+        verbose_name=_('Sanctioned By')
+    )
+    sae_number = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name=_('SAE Number'),
+        help_text=_('Schedule of Authorized Expenditure number.')
+    )
+    rejection_reason = models.TextField(
+        blank=True,
+        verbose_name=_('Rejection Reason')
+    )
+    
+    class Meta:
+        verbose_name = _('Budget Proposal')
+        verbose_name_plural = _('Budget Proposals')
+        ordering = ['-fiscal_year__start_date', 'organization__name']
+        unique_together = ['organization', 'fiscal_year']
+        indexes = [
+            models.Index(fields=['organization', 'fiscal_year']),
+            models.Index(fields=['status']),
+        ]
+    
+    def __str__(self) -> str:
+        return f"{self.organization.name} - FY {self.fiscal_year.year_name}"
+    
+    def can_edit_budget(self) -> bool:
+        """Check if budget entries can be modified by TMA."""
+        return (
+            self.fiscal_year.is_planning_active and 
+            not self.is_locked and
+            self.status in [BudgetProposalStatus.DRAFT, BudgetProposalStatus.COUNCIL_APPROVED]
+        )
+    
+    def submit_to_lcb(self, user) -> None:
+        """Submit budget proposal to LCB for review."""
+        if self.status != BudgetProposalStatus.COUNCIL_APPROVED:
+            raise WorkflowTransitionException(
+                "Budget must be approved by Council before submission to LCB."
             )
+        self.status = BudgetProposalStatus.SUBMITTED
+        self.submitted_at = timezone.now()
         self.is_locked = True
-        self.is_active = False
-        self.status = BudgetStatus.LOCKED
+        self.updated_by = user
+        self.save(update_fields=['status', 'submitted_at', 'is_locked', 'updated_by', 'updated_at'])
+    
+    def sanction(self, user, sae_number: str) -> None:
+        """Sanction the budget proposal (LCB action)."""
+        if self.status not in [BudgetProposalStatus.SUBMITTED, BudgetProposalStatus.UNDER_REVIEW]:
+            raise WorkflowTransitionException(
+                "Budget must be submitted before it can be sanctioned."
+            )
+        self.status = BudgetProposalStatus.SANCTIONED
+        self.sanctioned_at = timezone.now()
+        self.sanctioned_by = user
         self.sae_number = sae_number
-        self.sae_generated_at = timezone.now()
+        self.updated_by = user
         self.save(update_fields=[
-            'is_locked', 'is_active', 'status', 
-            'sae_number', 'sae_generated_at', 'updated_at'
+            'status', 'sanctioned_at', 'sanctioned_by', 'sae_number', 'updated_by', 'updated_at'
         ])
     
+    def activate_for_transactions(self) -> None:
+        """Activate budget for transactions (July 1st auto-activation)."""
+        if self.status != BudgetProposalStatus.SANCTIONED:
+            raise WorkflowTransitionException(
+                "Budget must be sanctioned before activation."
+            )
+        self.status = BudgetProposalStatus.ACTIVE
+        self.save(update_fields=['status', 'updated_at'])
+    
     def get_total_receipts(self) -> Decimal:
-        """Calculate total budgeted receipts for this fiscal year."""
+        """Calculate total budgeted receipts for this TMA's fiscal year."""
         from apps.finance.models import AccountType
-        result = self.allocations.filter(
+        result = self.fiscal_year.allocations.filter(
+            organization=self.organization,
             budget_head__global_head__account_type=AccountType.REVENUE
         ).aggregate(total=Sum('original_allocation'))
         return result['total'] or Decimal('0.00')
     
     def get_total_expenditure(self) -> Decimal:
-        """Calculate total budgeted expenditure for this fiscal year."""
+        """Calculate total budgeted expenditure for this TMA's fiscal year."""
         from apps.finance.models import AccountType
-        result = self.allocations.filter(
+        result = self.fiscal_year.allocations.filter(
+            organization=self.organization,
             budget_head__global_head__account_type=AccountType.EXPENDITURE
         ).aggregate(total=Sum('original_allocation'))
         return result['total'] or Decimal('0.00')
     
     def get_contingency_amount(self) -> Decimal:
-        """Get the contingency/reserve allocation amount."""
-        result = self.allocations.filter(
+        """Get the contingency/reserve allocation amount for this TMA."""
+        result = self.fiscal_year.allocations.filter(
+            organization=self.organization,
             budget_head__global_head__code__startswith='A09'
         ).aggregate(total=Sum('original_allocation'))
         return result['total'] or Decimal('0.00')

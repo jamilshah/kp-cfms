@@ -9,6 +9,7 @@ Description: Views for the Revenue module including Payer, Demand,
 -------------------------------------------------------------------------
 """
 from typing import Any, Dict
+import json
 from decimal import Decimal
 from django.views.generic import (
     ListView, CreateView, DetailView, UpdateView, TemplateView, View
@@ -141,11 +142,30 @@ class PayerCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
     template_name = 'revenue/payer_form.html'
     success_url = reverse_lazy('revenue:payer_list')
     
+    
+    def get_template_names(self):
+        if self.request.headers.get('HX-Request'):
+            return ['revenue/payer_form_partial.html']
+        return [self.template_name]
+
     def form_valid(self, form):
         user = self.request.user
         org = getattr(user, 'organization', None)
         form.instance.organization = org
         form.instance.created_by = user
+        
+        if self.request.headers.get('HX-Request'):
+            self.object = form.save()
+            response = HttpResponse(status=204)
+            trigger_data = {
+                'payerCreated': {
+                    'id': self.object.id,
+                    'name': self.object.name
+                }
+            }
+            response['HX-Trigger'] = json.dumps(trigger_data)
+            return response
+            
         messages.success(self.request, _('Payer created successfully.'))
         return super().form_valid(form)
 

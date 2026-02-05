@@ -30,7 +30,20 @@ Description: Budget Allocation List template.
 <div class="card mb-4">
     <div class="card-body">
         <form method="get" class="row g-3">
+            {% if request.user.organization is None %}
             <div class="col-md-3">
+                <select name="organization" class="form-select searchable-select">
+                    <option value="">All Organizations</option>
+                    {% for org in organizations %}
+                        <option value="{{ org.pk }}" {% if request.GET.organization == org.pk|stringformat:"i" %}selected{% endif %}>
+                            {{ org.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            
+            <div class="col-md-2">
                 <select name="fiscal_year" class="form-select">
                     <option value="">All Fiscal Years</option>
                     {% for fy in fiscal_years %}
@@ -40,20 +53,36 @@ Description: Budget Allocation List template.
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <select name="account_type" class="form-select">
                     <option value="">All Types</option>
                     <option value="EXP" {% if request.GET.account_type == 'EXP' %}selected{% endif %}>Expenditure</option>
                     <option value="REV" {% if request.GET.account_type == 'REV' %}selected{% endif %}>Revenue</option>
                 </select>
             </div>
-            <div class="col-md-4">
+            
+            <div class="col-md-2">
+                <select name="major_head" class="form-select searchable-select">
+                    <option value="">All Major Heads</option>
+                    {% for mh in major_heads %}
+                        <option value="{{ mh.pk }}" {% if request.GET.major_head == mh.pk|stringformat:"i" %}selected{% endif %}>
+                            {{ mh.code }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-3">
                 <input type="text" name="search" class="form-control" placeholder="Search..." value="{{ request.GET.search }}">
             </div>
-            <div class="col-md-2">
-                <button type="submit" class="btn btn-cfms w-100">
-                    <i class="bi bi-search"></i> Filter
+            
+            <div class="col-12 text-end">
+                <button type="submit" class="btn btn-cfms">
+                    <i class="bi bi-search"></i> Apply Filters
                 </button>
+                <a href="{% url 'budgeting:allocation_list' %}" class="btn btn-outline-secondary">
+                    Clear
+                </a>
             </div>
         </form>
     </div>
@@ -65,6 +94,11 @@ Description: Budget Allocation List template.
         <table class="table table-hover mb-0">
             <thead>
                 <tr>
+                    {% if request.user.organization is None %}
+                    <th>Organization</th>
+                    {% endif %}
+                    <th>Fund</th>
+                    <th>Function</th>
                     <th>Code</th>
                     <th>Description</th>
                     <th class="text-end">Original</th>
@@ -76,13 +110,26 @@ Description: Budget Allocation List template.
             <tbody>
                 {% for alloc in allocations %}
                 <tr>
+                    {% if request.user.organization is None %}
                     <td>
-                        <code>{{ alloc.budget_head.code }}</code>
+                        <span class="badge bg-secondary">{{ alloc.organization.name|truncatechars:15 }}</span>
+                    </td>
+                    {% endif %}
+                    <td>
+                        <span class="badge bg-light text-dark border">{{ alloc.budget_head.fund.code }}</span>
                     </td>
                     <td>
-                        {{ alloc.budget_head.name|truncatewords:8 }}
-                        <br>
-                        <small class="text-muted">{{ alloc.fiscal_year }}</small>
+                        <small class="fw-bold text-muted">{{ alloc.budget_head.function.code }}</small><br>
+                        <small>{{ alloc.budget_head.function.name|truncatechars:20 }}</small>
+                    </td>
+                    <td>
+                        <code>{{ alloc.budget_head.global_head.code }}</code>
+                    </td>
+                    <td>
+                        {{ alloc.budget_head.name }}
+                        {% if alloc.budget_head.sub_code != '00' %}
+                            <br><small class="text-info">Sub-Head: {{ alloc.budget_head.sub_code }}</small>
+                        {% endif %}
                     </td>
                     <td class="text-end">Rs {{ alloc.original_allocation|currency }}</td>
                     <td class="text-end">Rs {{ alloc.released_amount|currency }}</td>
@@ -97,7 +144,7 @@ Description: Budget Allocation List template.
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="text-center text-muted py-4">
+                    <td colspan="{% if request.user.organization is None %}9{% else %}8{% endif %}" class="text-center text-muted py-4">
                         No allocations found. Create budget entries to see them here.
                     </td>
                 </tr>

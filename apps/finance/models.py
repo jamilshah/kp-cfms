@@ -258,6 +258,15 @@ class GlobalHead(TimeStampedMixin):
         help_text=_('Select departments where this head is relevant. Leave empty for Universal scope.')
     )
     
+    # Function-based access control
+    applicable_functions = models.ManyToManyField(
+        'finance.FunctionCode',
+        blank=True,
+        related_name='applicable_global_heads',
+        verbose_name=_('Applicable Functions'),
+        help_text=_('Leave empty for universal heads (appear for all functions). Select specific functions to restrict this head.')
+    )
+    
     class Meta:
         verbose_name = _('Global Head')
         verbose_name_plural = _('Global Heads')
@@ -324,6 +333,36 @@ class GlobalHead(TimeStampedMixin):
         
         dept_names = list(self.applicable_departments.values_list('name', flat=True))
         return ', '.join(dept_names) if dept_names else 'None'
+    
+    def is_applicable_to_function(self, function) -> bool:
+        """
+        Check if this GlobalHead is applicable to the given function.
+        
+        Universal heads (no functions specified) appear for all functions.
+        Function-specific heads only appear for selected functions.
+        
+        Args:
+            function: FunctionCode instance or None
+            
+        Returns:
+            True if applicable, False otherwise
+        """
+        # If no functions specified, it's universal
+        if not self.applicable_functions.exists():
+            return True
+        
+        if not function:
+            return False
+        
+        return self.applicable_functions.filter(pk=function.pk).exists()
+    
+    def get_applicable_functions_display(self) -> str:
+        """Get comma-separated list of applicable function names."""
+        if not self.applicable_functions.exists():
+            return 'All Functions (Universal)'
+        
+        func_names = list(self.applicable_functions.values_list('name', flat=True))
+        return ', '.join(func_names) if func_names else 'None'
     
     @property
     def major_name(self) -> str:
@@ -580,6 +619,7 @@ class VoucherType(models.TextChoices):
     JOURNAL = 'JV', _('Journal Voucher')
     PAYMENT = 'PV', _('Payment Voucher')
     RECEIPT = 'RV', _('Receipt Voucher')
+    REVERSAL = 'REV', _('Reversal Voucher')
 
 
 class Voucher(AuditLogMixin, TenantAwareMixin):
@@ -618,7 +658,7 @@ class Voucher(AuditLogMixin, TenantAwareMixin):
         help_text=_('Date of the transaction.')
     )
     voucher_type = models.CharField(
-        max_length=2,
+        max_length=3,  # Increased to accommodate 'REV' (REVERSAL)
         choices=VoucherType.choices,
         default=VoucherType.JOURNAL,
         verbose_name=_('Voucher Type')
@@ -663,6 +703,49 @@ class Voucher(AuditLogMixin, TenantAwareMixin):
         blank=True,
         related_name='posted_vouchers',
         verbose_name=_('Posted By')
+    )
+    
+    # Reversal tracking fields
+    is_reversed = models.BooleanField(
+        default=False,
+        verbose_name=_('Is Reversed'),
+        help_text=_('True if this voucher has been reversed.')
+    )
+    reversed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Reversed At')
+    )
+    reversed_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='reversed_vouchers',
+        verbose_name=_('Reversed By')
+    )
+    reverses_voucher = models.ForeignKey(
+        'self',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='reversal_vouchers',
+        verbose_name=_('Reverses Voucher'),
+        help_text=_('If this is a reversal voucher, link to the original voucher.')
+    )
+    reversed_by_voucher = models.OneToOneField(
+        'self',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='reversed_voucher',
+        verbose_name=_('Reversed By Voucher'),
+        help_text=_('If this voucher was reversed, link to the reversal voucher.')
+    )
+    reversal_reason = models.TextField(
+        blank=True,
+        verbose_name=_('Reversal Reason'),
+        help_text=_('Reason for reversal (required when reversing).')
     )
     
     class Meta:
@@ -738,35 +821,103 @@ class Voucher(AuditLogMixin, TenantAwareMixin):
             reason=reason
         )
     
-    def unpost_voucher(self, user, reason='') -> None:
+    def unpost_voucher(self, user, reason='') -> 'Voucher':
         """
-        Unpost the voucher (reverse posting).
+        Reverse a posted voucher by creating a reversal voucher.
+        
+        This method implements proper accounting reversal by:
+        1. Creating a new REVERSAL voucher
+        2. Copying all journal entries with swapped debits/credits
+        3. Posting the reversal voucher automatically
+        4. Marking the original voucher as reversed
+        5. Linking both vouchers for audit trail
+        
+        IMPORTANT: This does NOT delete any posted transactions.
+        Both the original and reversal vouchers remain in the system.
         
         Args:
-            user: The user unposting the voucher.
-            reason: Reason for unposting (required for audit).
+            user: The user performing the reversal.
+            reason: Required reason for reversal (for audit compliance).
         
+        Returns:
+            The newly created reversal Voucher instance.
+            
         Raises:
-            ValidationError: If voucher is not posted.
+            ValidationError: If voucher is not posted or already reversed.
         """
         from django.core.exceptions import ValidationError
+        from django.utils import timezone
+        from django.db import transaction
         
+        # Validations
         if not self.is_posted:
-            raise ValidationError(_('Voucher is not posted.'))
+            raise ValidationError(_('Voucher is not posted. Only posted vouchers can be reversed.'))
         
-        self.is_posted = False
-        self.posted_at = None
-        self.posted_by = None
-        self.save(update_fields=['is_posted', 'posted_at', 'posted_by', 'updated_at'])
+        if self.is_reversed:
+            raise ValidationError(_('Voucher has already been reversed.'))
         
-        # Create audit log entry
-        VoucherAuditLog.objects.create(
-            voucher=self,
-            voucher_no=self.voucher_no,
-            action='UNPOST',
-            user=user,
-            reason=reason
-        )
+        if not reason or not reason.strip():
+            raise ValidationError(_('Reversal reason is required for audit trail.'))
+        
+        with transaction.atomic():
+            # Generate reversal voucher number
+            voucher_count = Voucher.objects.filter(
+                organization=self.organization,
+                fiscal_year=self.fiscal_year,
+                voucher_type=VoucherType.REVERSAL
+            ).count()
+            reversal_no = f"REV-{self.fiscal_year.year_name}-{voucher_count + 1:04d}"
+            
+            # Create the reversal voucher
+            reversal_voucher = Voucher.objects.create(
+                organization=self.organization,
+                voucher_no=reversal_no,
+                fiscal_year=self.fiscal_year,
+                date=timezone.now().date(),
+                voucher_type=VoucherType.REVERSAL,
+                fund=self.fund,
+                payee=self.payee,
+                reference_no=self.voucher_no,  # Reference original voucher
+                description=f"REVERSAL of {self.voucher_no}: {reason}",
+                reverses_voucher=self,
+                reversal_reason=reason,
+                created_by=user
+            )
+            
+            # Copy journal entries with swapped debits/credits
+            for entry in self.entries.all():
+                JournalEntry.objects.create(
+                    voucher=reversal_voucher,
+                    budget_head=entry.budget_head,
+                    description=f"Reversal: {entry.description}",
+                    debit=entry.credit,  # Swap: original credit becomes debit
+                    credit=entry.debit   # Swap: original debit becomes credit
+                )
+            
+            # Post the reversal voucher automatically
+            reversal_voucher.post_voucher(user, reason=f"Auto-posted reversal of {self.voucher_no}")
+            
+            # Mark the original voucher as reversed
+            self.is_reversed = True
+            self.reversed_at = timezone.now()
+            self.reversed_by = user
+            self.reversed_by_voucher = reversal_voucher
+            self.reversal_reason = reason
+            self.save(update_fields=[
+                'is_reversed', 'reversed_at', 'reversed_by', 
+                'reversed_by_voucher', 'reversal_reason', 'updated_at'
+            ])
+            
+            # Create audit log entry for the original voucher
+            VoucherAuditLog.objects.create(
+                voucher=self,
+                voucher_no=self.voucher_no,
+                action='UNPOST',
+                user=user,
+                reason=reason
+            )
+            
+            return reversal_voucher
 
 
 class VoucherAuditLog(models.Model):

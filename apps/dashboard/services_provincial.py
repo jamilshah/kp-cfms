@@ -88,7 +88,7 @@ class ProvincialAnalyticsService:
         
         collection_total = RevenueCollection.objects.filter(
             demand__fiscal_year=fiscal_year,
-            organization_id__in=org_ids,
+            demand__organization_id__in=org_ids,
             status=CollectionStatus.POSTED
         ).aggregate(total=Sum('amount_received'))['total'] or Decimal('0.00')
         
@@ -176,7 +176,7 @@ class ProvincialAnalyticsService:
             
             collection_total = RevenueCollection.objects.filter(
                 demand__fiscal_year=fiscal_year,
-                organization=org,
+                demand__organization=org,
                 status=CollectionStatus.POSTED
             ).aggregate(total=Sum('amount_received'))['total'] or Decimal('0.00')
             
@@ -322,7 +322,7 @@ class ProvincialAnalyticsService:
             # Total revenue
             revenue = RevenueCollection.objects.filter(
                 demand__fiscal_year=fiscal_year,
-                organization=org,
+                demand__organization=org,
                 status=CollectionStatus.POSTED
             ).aggregate(total=Sum('amount_received'))['total'] or Decimal('0.00')
             

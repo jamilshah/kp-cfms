@@ -65,40 +65,50 @@ class BudgetingDashboardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
         
-        # Get active fiscal year for current user's organization
+        # Get current operating fiscal year (global)
         user_org = self.request.user.organization
-        active_fy = FiscalYear.objects.filter(
-            is_active=True,
-            organization=user_org
-        ).first()
+        active_fy = FiscalYear.get_current_operating_year()
         context['active_fiscal_year'] = active_fy
         
-        # Get all fiscal years for dropdown (filtered by organization)
-        context['fiscal_years'] = FiscalYear.objects.filter(
-            organization=user_org
-        ).all()[:5]
+        # Get all fiscal years for dropdown
+        context['fiscal_years'] = FiscalYear.objects.all()[:5]
         
-        if active_fy:
-            # Calculate totals
-            context['total_receipts'] = active_fy.get_total_receipts()
-            context['total_expenditure'] = active_fy.get_total_expenditure()
-            context['contingency'] = active_fy.get_contingency_amount()
-            
-            # Validate budget
-            receipts = context['total_receipts']
-            expenditure = context['total_expenditure']
-            contingency = context['contingency']
-            
-            is_valid, _ = validate_reserve_requirement(receipts, contingency)
-            context['reserve_valid'] = is_valid
-            
-            is_valid, _ = validate_zero_deficit(receipts, expenditure)
-            context['deficit_valid'] = is_valid
+        if active_fy and user_org:
+            # Get BudgetProposal for this organization
+            from apps.budgeting.models import BudgetProposal
+            proposal = BudgetProposal.objects.filter(
+                fiscal_year=active_fy,
+                organization=user_org
+            ).first()
+
+            if proposal:
+                # Calculate totals using Proposal
+                context['total_receipts'] = proposal.get_total_receipts()
+                context['total_expenditure'] = proposal.get_total_expenditure()
+                context['contingency'] = proposal.get_contingency_amount()
+                
+                # Validate budget
+                receipts = context['total_receipts']
+                expenditure = context['total_expenditure']
+                contingency = context['contingency']
+                
+                is_valid, _ = validate_reserve_requirement(receipts, contingency)
+                context['reserve_valid'] = is_valid
+                
+                is_valid, _ = validate_zero_deficit(receipts, expenditure)
+                context['deficit_valid'] = is_valid
+            else:
+                context['total_receipts'] = Decimal('0.00')
+                context['total_expenditure'] = Decimal('0.00')
+                context['contingency'] = Decimal('0.00')
+                context['reserve_valid'] = False
+                context['deficit_valid'] = False
             
             # Pending quarterly releases
             context['pending_releases'] = QuarterlyRelease.objects.filter(
                 fiscal_year=active_fy,
-                is_released=False
+                is_released=False,
+                organization=user_org
             ).count()
         
         return context
@@ -115,15 +125,8 @@ class FiscalYearListView(LoginRequiredMixin, ListView):
     ordering = ['-start_date']
     
     def get_queryset(self):
-        """Filter fiscal years by user's organization."""
-        qs = super().get_queryset()
-        user_org = self.request.user.organization
-        
-        # Provincial admin sees all, TMA user sees only their org's FYs
-        if user_org:
-            qs = qs.filter(organization=user_org)
-        
-        return qs
+        """Return all fiscal years (now global)."""
+        return super().get_queryset()
 
 
 class FiscalYearCreateView(LoginRequiredMixin, ApproverRequiredMixin, CreateView):
@@ -212,9 +215,24 @@ class FiscalYearDetailView(LoginRequiredMixin, DetailView):
         )
         
         # Totals
-        context['total_receipts'] = fy.get_total_receipts()
-        context['total_expenditure'] = fy.get_total_expenditure()
-        context['contingency'] = fy.get_contingency_amount()
+        # Totals for current user's organization
+        user_org = self.request.user.organization
+        from apps.budgeting.models import BudgetProposal
+        proposal = None
+        if user_org:
+            proposal = BudgetProposal.objects.filter(
+                fiscal_year=fy,
+                organization=user_org
+            ).first()
+        
+        if proposal:
+            context['total_receipts'] = proposal.get_total_receipts()
+            context['total_expenditure'] = proposal.get_total_expenditure()
+            context['contingency'] = proposal.get_contingency_amount()
+        else:
+            context['total_receipts'] = Decimal('0.00')
+            context['total_expenditure'] = Decimal('0.00')
+            context['contingency'] = Decimal('0.00')
         
         return context
 
@@ -231,34 +249,47 @@ class BudgetAllocationListView(LoginRequiredMixin, ListView):
     
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
-            'fiscal_year', 'budget_head', 'budget_head__function'
+            'fiscal_year', 'budget_head', 'budget_head__function', 
+            'budget_head__global_head', 'budget_head__global_head__minor__major',
+            'organization'
         )
         
         # Filter by organization
-        user_org = self.request.user.organization
-        if user_org:
-            queryset = queryset.filter(organization=user_org)
+        user = self.request.user
+        if user.organization:
+            # TMA users only see their own
+            queryset = queryset.filter(organization=user.organization)
+        else:
+            # LCB/Provincial users see all, but can filter by organization
+            org_id = self.request.GET.get('organization')
+            if org_id:
+                queryset = queryset.filter(organization_id=org_id)
         
         # Filter by fiscal year
         fiscal_year_id = self.request.GET.get('fiscal_year')
         if fiscal_year_id:
             queryset = queryset.filter(fiscal_year_id=fiscal_year_id)
         else:
-            # Default to active fiscal year for this organization
-            if user_org:
-                active_fy = FiscalYear.objects.filter(
-                    organization=user_org, 
-                    is_active=True
-                ).first()
-                
-                if active_fy:
-                    queryset = queryset.filter(fiscal_year=active_fy)
+            # Default to current operating year
+            active_fy = FiscalYear.get_current_operating_year()
+            if active_fy:
+                queryset = queryset.filter(fiscal_year=active_fy)
         
         # Filter by account type
         account_type = self.request.GET.get('account_type')
         if account_type:
             queryset = queryset.filter(budget_head__global_head__account_type=account_type)
-        
+            
+        # Filter by Major Head
+        major_head_id = self.request.GET.get('major_head')
+        if major_head_id:
+            queryset = queryset.filter(budget_head__global_head__minor__major_id=major_head_id)
+            
+        # Filter by Minor Head
+        minor_head_id = self.request.GET.get('minor_head')
+        if minor_head_id:
+            queryset = queryset.filter(budget_head__global_head__minor_id=minor_head_id)
+
         # Search
         search = self.request.GET.get('search')
         if search:
@@ -267,12 +298,22 @@ class BudgetAllocationListView(LoginRequiredMixin, ListView):
                 Q(budget_head__global_head__name__icontains=search)
             )
         
-        return queryset.order_by('budget_head__global_head__code')
+        return queryset.order_by('organization__name', 'budget_head__global_head__code')
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
         context['search_form'] = BudgetSearchForm(self.request.GET)
         context['fiscal_years'] = FiscalYear.objects.all()
+        
+        from apps.finance.models import MajorHead, MinorHead
+        context['major_heads'] = MajorHead.objects.all()
+        context['minor_heads'] = MinorHead.objects.all()
+        
+        # Add Organization list for LCB users
+        if not self.request.user.organization:
+            from apps.core.models import Organization
+            context['organizations'] = Organization.objects.filter(is_active=True)
+            
         return context
 
 
@@ -296,12 +337,8 @@ class ReceiptEstimateCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateVi
         if fy_id:
             return get_object_or_404(FiscalYear, pk=fy_id)
         
-        # Filter active FY by user's organization
-        user_org = self.request.user.organization
-        qs = FiscalYear.objects.filter(is_active=True)
-        if user_org:
-            qs = qs.filter(organization=user_org)
-        return qs.first()
+        # Get current operating fiscal year
+        return FiscalYear.get_current_operating_year()
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -349,12 +386,8 @@ class ExpenditureEstimateCreateView(LoginRequiredMixin, MakerRequiredMixin, Crea
         if fy_id:
             return get_object_or_404(FiscalYear, pk=fy_id)
         
-        # Filter active FY by user's organization
-        user_org = self.request.user.organization
-        qs = FiscalYear.objects.filter(is_active=True)
-        if user_org:
-            qs = qs.filter(organization=user_org)
-        return qs.first()
+        # Get current operating fiscal year
+        return FiscalYear.get_current_operating_year()
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -401,7 +434,7 @@ class ScheduleOfEstablishmentListView(LoginRequiredMixin, ListView):
         if fiscal_year_id:
             queryset = queryset.filter(fiscal_year_id=fiscal_year_id)
         else:
-            active_fy = FiscalYear.objects.filter(is_active=True).first()
+            active_fy = FiscalYear.get_current_operating_year()
             if active_fy:
                 queryset = queryset.filter(fiscal_year=active_fy)
         
@@ -453,12 +486,8 @@ class ScheduleOfEstablishmentCreateView(LoginRequiredMixin, MakerRequiredMixin, 
         if fy_id:
             return get_object_or_404(FiscalYear, pk=fy_id)
         
-        # Filter active FY by user's organization
-        user_org = self.request.user.organization
-        qs = FiscalYear.objects.filter(is_active=True)
-        if user_org:
-            qs = qs.filter(organization=user_org)
-        return qs.first()
+        # Get current operating fiscal year
+        return FiscalYear.get_current_operating_year()
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -507,12 +536,8 @@ class NewPostProposalCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateVi
         if fy_id:
             return get_object_or_404(FiscalYear, pk=fy_id)
         
-        # Filter active FY by user's organization
-        user_org = self.request.user.organization
-        qs = FiscalYear.objects.filter(is_active=True)
-        if user_org:
-            qs = qs.filter(organization=user_org)
-        return qs.first()
+        # Get current operating fiscal year
+        return FiscalYear.get_current_operating_year()
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -560,10 +585,23 @@ class BudgetApprovalView(LoginRequiredMixin, ApproverRequiredMixin, FormView):
         fy = self.get_fiscal_year()
         context['fiscal_year'] = fy
         
-        # Calculate totals and validation
-        context['total_receipts'] = fy.get_total_receipts()
-        context['total_expenditure'] = fy.get_total_expenditure()
-        context['contingency'] = fy.get_contingency_amount()
+        # Get BudgetProposal
+        from apps.budgeting.models import BudgetProposal
+        proposal = BudgetProposal.objects.filter(
+            fiscal_year=fy,
+            organization=self.request.user.organization
+        ).first()
+
+        if proposal:
+            # Calculate totals and validation
+            context['total_receipts'] = proposal.get_total_receipts()
+            context['total_expenditure'] = proposal.get_total_expenditure()
+            context['contingency'] = proposal.get_contingency_amount()
+        else:
+            context['total_receipts'] = Decimal('0.00')
+            context['total_expenditure'] = Decimal('0.00')
+            context['contingency'] = Decimal('0.00')
+
         context['surplus'] = context['total_receipts'] - context['total_expenditure']
         
         # Required reserve

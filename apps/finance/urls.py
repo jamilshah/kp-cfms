@@ -39,6 +39,7 @@ from apps.finance.views import (
     
     # AJAX Views
     load_functions,
+    load_global_heads,
     load_budget_heads_options,
     budget_head_search_api,
 )
@@ -79,8 +80,9 @@ urlpatterns = [
     path('vouchers/<int:pk>/post/', PostVoucherView.as_view(), name='voucher_post'),
     path('vouchers/<int:pk>/unpost/', UnpostVoucherView.as_view(), name='voucher_unpost'),
     
-    # AJAX
+    # AJAX/HTMX endpoints
     path('ajax/load-functions/', load_functions, name='load_functions'),
+    path('ajax/load-global-heads/', load_global_heads, name='load_global_heads'),
     path('ajax/load-budget-heads-options/', load_budget_heads_options, name='load_budget_heads_options'),
     path('ajax/budget-head-search/', budget_head_search_api, name='budget_head_search_api'),
 ]

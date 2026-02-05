@@ -29,7 +29,34 @@
     </div>
 
     <!-- Status Alert -->
-    {% if not voucher.is_posted %}
+    {% if voucher.is_reversed %}
+    <div class="alert alert-danger">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-x-circle me-2 fs-4"></i>
+            <div>
+                <strong>This voucher has been REVERSED</strong><br>
+                <small>
+                    Reversed on {{ voucher.reversed_at|date:"Y-m-d H:i" }} by {{ voucher.reversed_by }}<br>
+                    Reason: {{ voucher.reversal_reason }}<br>
+                    Reversal Voucher: <a href="{% url 'finance:voucher_detail' voucher.reversed_by_voucher.pk %}" class="alert-link">{{ voucher.reversed_by_voucher.voucher_no }}</a>
+                </small>
+            </div>
+        </div>
+    </div>
+    {% elif voucher.reverses_voucher %}
+    <div class="alert alert-info">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-arrow-counterclockwise me-2 fs-4"></i>
+            <div>
+                <strong>This is a REVERSAL voucher</strong><br>
+                <small>
+                    Reverses: <a href="{% url 'finance:voucher_detail' voucher.reverses_voucher.pk %}" class="alert-link">{{ voucher.reverses_voucher.voucher_no }}</a><br>
+                    Reason: {{ voucher.reversal_reason }}
+                </small>
+            </div>
+        </div>
+    </div>
+    {% elif not voucher.is_posted %}
     <div class="alert alert-warning">
         <i class="bi bi-exclamation-triangle me-2"></i>
         This voucher is in <strong>DRAFT</strong> status and has not been posted to the General Ledger.
@@ -73,7 +100,15 @@
 
                         <dt class="col-sm-4">Status:</dt>
                         <dd class="col-sm-8">
-                            {% if voucher.is_posted %}
+                            {% if voucher.is_reversed %}
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-x-circle me-1"></i>Reversed
+                                </span>
+                            {% elif voucher.reverses_voucher %}
+                                <span class="badge bg-info">
+                                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reversal
+                                </span>
+                            {% elif voucher.is_posted %}
                                 <span class="badge bg-success">
                                     <i class="bi bi-check-circle me-1"></i>Posted
                                 </span>
@@ -217,28 +252,29 @@
     </div>
     {% endif %}
 
-    <!-- Unpost Voucher (if posted) -->
-    {% if voucher.is_posted %}
+    <!-- Reverse Voucher (if posted and not already reversed) -->
+    {% if voucher.is_posted and not voucher.is_reversed %}
     <div class="card border-warning mb-4">
         <div class="card-body">
-            <h5 class="card-title">Unpost Voucher</h5>
+            <h5 class="card-title">Reverse Voucher</h5>
             <p class="card-text">
-                Unpost this voucher to reverse its effect on the General Ledger. Use this to correct errors.
+                Create a reversal voucher to nullify this transaction. This follows professional accounting standards:
+                the original voucher remains unchanged, and a new reversal voucher with swapped debits/credits is created.
             </p>
-            <form method="post" action="{% url 'finance:voucher_unpost' voucher.pk %}" onsubmit="return confirm('Are you sure you want to unpost this voucher? This will reverse all GL entries. You will be able to edit or delete it afterwards.');">
+            <form method="post" action="{% url 'finance:voucher_unpost' voucher.pk %}" onsubmit="return confirm('Are you sure you want to reverse this voucher? This will create a new reversal voucher with opposite entries.');">
                 {% csrf_token %}
                 <div class="mb-3">
-                    <label for="unpostReason" class="form-label">Reason for Unposting <span class="text-danger">*</span></label>
-                    <textarea class="form-control" id="unpostReason" name="reason" rows="3" required placeholder="Explain why this voucher is being unposted (e.g., wrong account used, incorrect amount, etc.)"></textarea>
-                    <div class="form-text">This will be recorded in the audit trail.</div>
+                    <label for="reversalReason" class="form-label">Reason for Reversal <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="reversalReason" name="reason" rows="3" required placeholder="Explain why this voucher is being reversed (e.g., wrong account, incorrect amount, duplicate entry, etc.)"></textarea>
+                    <div class="form-text">This will be recorded in both vouchers for audit trail.</div>
                 </div>
                 <button type="submit" class="btn btn-warning">
-                    <i class="bi bi-arrow-counterclockwise me-2"></i>Unpost Voucher
+                    <i class="bi bi-arrow-counterclockwise me-2"></i>Create Reversal Voucher
                 </button>
             </form>
             <p class="text-muted mt-3 mb-0">
                 <i class="bi bi-info-circle me-1"></i>
-                After unposting, you can edit or delete this voucher.
+                A new reversal voucher will be created and automatically posted. Both vouchers remain in the system for audit trail.
             </p>
         </div>
     </div>

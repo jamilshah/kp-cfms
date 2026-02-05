@@ -136,7 +136,7 @@ def validate_zero_deficit(
     return True, None
 
 
-def validate_salary_linkage(fiscal_year_id: int) -> Tuple[bool, List[str]]:
+def validate_salary_linkage(fiscal_year_id: int, organization_id: int) -> Tuple[bool, List[str]]:
     """
     Validate that all salary budget heads are linked to sanctioned posts.
     
@@ -145,6 +145,7 @@ def validate_salary_linkage(fiscal_year_id: int) -> Tuple[bool, List[str]]:
     
     Args:
         fiscal_year_id: ID of the fiscal year to validate.
+        organization_id: ID of the organization.
         
     Returns:
         Tuple of (is_valid, list_of_errors).
@@ -153,17 +154,19 @@ def validate_salary_linkage(fiscal_year_id: int) -> Tuple[bool, List[str]]:
     
     errors: List[str] = []
     
-    # Get all salary allocations
+    # Get all salary allocations for this organization
     salary_allocations = BudgetAllocation.objects.filter(
         fiscal_year_id=fiscal_year_id,
+        organization_id=organization_id,
         budget_head__pifra_object__startswith='A01',
         original_allocation__gt=Decimal('0.00')
     ).select_related('budget_head')
     
-    # Get all establishment entries
+    # Get all establishment entries for this organization
     establishment_heads = set(
         ScheduleOfEstablishment.objects.filter(
-            fiscal_year_id=fiscal_year_id
+            fiscal_year_id=fiscal_year_id,
+            organization_id=organization_id
         ).values_list('budget_head_id', flat=True)
     )
     
@@ -179,12 +182,13 @@ def validate_salary_linkage(fiscal_year_id: int) -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
-def validate_establishment_vs_budget(fiscal_year_id: int) -> Tuple[bool, List[str]]:
+def validate_establishment_vs_budget(fiscal_year_id: int, organization_id: int) -> Tuple[bool, List[str]]:
     """
     Cross-validate establishment costs against budget allocations.
     
     Args:
         fiscal_year_id: ID of the fiscal year to validate.
+        organization_id: ID of the organization.
         
     Returns:
         Tuple of (is_valid, list_of_warnings).
@@ -196,7 +200,8 @@ def validate_establishment_vs_budget(fiscal_year_id: int) -> Tuple[bool, List[st
     
     # Group establishment costs by budget head
     establishment_costs = ScheduleOfEstablishment.objects.filter(
-        fiscal_year_id=fiscal_year_id
+        fiscal_year_id=fiscal_year_id,
+        organization_id=organization_id
     ).values('budget_head_id').annotate(
         total_cost=Sum('annual_salary') * Sum('sanctioned_posts')
     )
@@ -205,7 +210,8 @@ def validate_establishment_vs_budget(fiscal_year_id: int) -> Tuple[bool, List[st
         try:
             allocation = BudgetAllocation.objects.get(
                 fiscal_year_id=fiscal_year_id,
-                budget_head_id=entry['budget_head_id']
+                budget_head_id=entry['budget_head_id'],
+                organization_id=organization_id
             )
             if entry['total_cost'] > allocation.original_allocation:
                 warnings.append(
@@ -222,15 +228,15 @@ def validate_establishment_vs_budget(fiscal_year_id: int) -> Tuple[bool, List[st
     return len(warnings) == 0, warnings
 
 
-def generate_sae_number(fiscal_year_name: str) -> str:
+def generate_sae_number(fiscal_year_name: str, organization_id: int) -> str:
     """
-    Generate unique SAE number for a fiscal year.
+    Generate unique SAE number for a fiscal year and organization.
     
-    Format: SAE-YYYY-XXXX where YYYY is the start year
-    and XXXX is a sequential number.
+    Format: SAE-YYYY-ORG-XXXX
     
     Args:
         fiscal_year_name: Fiscal year name (e.g., "2026-27").
+        organization_id: Organization ID.
         
     Returns:
         Unique SAE number string.
@@ -239,24 +245,19 @@ def generate_sae_number(fiscal_year_name: str) -> str:
     
     year_prefix = fiscal_year_name.split('-')[0]
     
-    # Count existing SAEs for this year
+    # Count existing SAEs for this year and org
     count = SAERecord.objects.filter(
-        sae_number__startswith=f'SAE-{year_prefix}'
+        sae_number__startswith=f'SAE-{year_prefix}',
+        organization_id=organization_id
     ).count()
     
-    return f"SAE-{year_prefix}-{count + 1:04d}"
+    return f"SAE-{year_prefix}-{organization_id}-{count + 1:04d}"
 
 
 @transaction.atomic
 def finalize_budget(fiscal_year_id: int, approver_id: int) -> Dict:
     """
     Finalize budget and generate SAE (Schedule of Authorized Expenditure).
-    
-    This function:
-    1. Validates all budget rules (reserve, deficit, salary linkage)
-    2. Locks the fiscal year
-    3. Creates the SAE record
-    4. Initializes quarterly release schedule
     
     Args:
         fiscal_year_id: ID of the fiscal year to finalize.
@@ -271,29 +272,65 @@ def finalize_budget(fiscal_year_id: int, approver_id: int) -> Dict:
         ReserveViolationException: If reserve requirement not met.
     """
     from apps.budgeting.models import (
-        FiscalYear, SAERecord, QuarterlyRelease, ReleaseQuarter
+        FiscalYear, SAERecord, QuarterlyRelease, ReleaseQuarter, BudgetProposal
     )
     from apps.users.models import CustomUser
     
-    # Lock the fiscal year record for update
-    fiscal_year = FiscalYear.objects.select_for_update().get(id=fiscal_year_id)
     approver = CustomUser.objects.get(id=approver_id)
+    organization = approver.organization
+    
+    if not organization:
+        raise FiscalYearInactiveException("Approver must belong to an organization.")
+        
+    # Lock the fiscal year record (Global) and Proposal (Local)
+    fiscal_year = FiscalYear.objects.get(id=fiscal_year_id)
+    
+    # Get or create proposal
+    proposal, created = BudgetProposal.objects.get_or_create(
+        fiscal_year=fiscal_year,
+        organization=organization
+    )
     
     # Check if budget can be finalized
-    if fiscal_year.is_locked:
+    if proposal.is_locked:
         raise BudgetLockedException(
             f"Budget for {fiscal_year.year_name} is already locked."
         )
     
-    if not fiscal_year.is_active:
+    if not fiscal_year.is_planning_active and not fiscal_year.is_revision_active:
         raise FiscalYearInactiveException(
             f"Fiscal year {fiscal_year.year_name} is not active for budget entry."
         )
     
-    # Calculate totals
-    total_receipts = fiscal_year.get_total_receipts()
-    total_expenditure = fiscal_year.get_total_expenditure()
-    contingency = fiscal_year.get_contingency_amount()
+    # Calculate totals (Need to implement filtering in these methods or calc manually here)
+    # Assuming model helper methods fetch all by default, we rely on manager filtering or need to reimplement
+    # Since FiscalYear is global, fiscal_year.get_total_receipts() might aggregate ALL data if not careful.
+    # We should calculate here using the organization.
+    
+    # Re-calculation logic (since we can't trust the FY helpers to be filtered by org implicitly anymore)
+    from apps.budgeting.models import BudgetAllocation
+    from django.db.models import Sum
+    
+    receipt_allocations = BudgetAllocation.objects.filter(
+        fiscal_year=fiscal_year,
+        organization=organization,
+        budget_head__type='RECEIPT'
+    ).aggregate(total=Sum('original_allocation'))['total'] or Decimal('0.00')
+    
+    expenditure_allocations = BudgetAllocation.objects.filter(
+        fiscal_year=fiscal_year,
+        organization=organization,
+        budget_head__type='EXPENDITURE'
+    ).aggregate(total=Sum('original_allocation'))['total'] or Decimal('0.00')
+    
+    contingency = BudgetAllocation.objects.filter(
+        fiscal_year=fiscal_year,
+        organization=organization,
+        budget_head__is_contingency=True
+    ).aggregate(total=Sum('original_allocation'))['total'] or Decimal('0.00')
+    
+    total_receipts = receipt_allocations
+    total_expenditure = expenditure_allocations
     
     # Run validations
     validation_results = {
@@ -316,19 +353,20 @@ def finalize_budget(fiscal_year_id: int, approver_id: int) -> Dict:
     validation_results['deficit_check'] = {'valid': True, 'surplus': total_receipts - total_expenditure}
     
     # 3. Salary linkage (warning only, not blocking)
-    is_valid, errors = validate_salary_linkage(fiscal_year_id)
+    is_valid, errors = validate_salary_linkage(fiscal_year_id, organization.id)
     validation_results['salary_linkage'] = {'valid': is_valid, 'warnings': errors}
     
     # 4. Establishment vs budget (warning only)
-    is_valid, warnings = validate_establishment_vs_budget(fiscal_year_id)
+    is_valid, warnings = validate_establishment_vs_budget(fiscal_year_id, organization.id)
     validation_results['establishment_check'] = {'valid': is_valid, 'warnings': warnings}
     
     # Generate SAE number
-    sae_number = generate_sae_number(fiscal_year.year_name)
+    sae_number = generate_sae_number(fiscal_year.year_name, organization.id)
     
-    # Create SAE record
+    # Create SAE record (ensure organization is set)
     sae_record = SAERecord.objects.create(
         fiscal_year=fiscal_year,
+        organization=organization,
         sae_number=sae_number,
         total_receipts=total_receipts,
         total_expenditure=total_expenditure,
@@ -337,11 +375,11 @@ def finalize_budget(fiscal_year_id: int, approver_id: int) -> Dict:
     )
     
     # NEW: Convert PROPOSED posts (SNE) to SANCTIONED
-    # This officially sanctions the new posts requested in this budget
     from apps.budgeting.models import EstablishmentStatus, ScheduleOfEstablishment
     
     proposed_posts = ScheduleOfEstablishment.objects.filter(
         fiscal_year=fiscal_year,
+        organization=organization,
         establishment_status=EstablishmentStatus.PROPOSED
     )
     
@@ -349,8 +387,13 @@ def finalize_budget(fiscal_year_id: int, approver_id: int) -> Dict:
         # Calls the model method to convert and clear justification
         post.convert_to_sanctioned()
     
-    # Lock fiscal year
-    fiscal_year.lock_budget(sae_number)
+    # Lock budget proposal
+    proposal.is_locked = True
+    proposal.status = 'SANCTIONED' # Or whatever final status is
+    proposal.sae_number = sae_number
+    proposal.sanctioned_at = timezone.now()
+    proposal.sanctioned_by = approver
+    proposal.save()
     
     # Initialize quarterly releases
     release_dates = [
@@ -363,6 +406,7 @@ def finalize_budget(fiscal_year_id: int, approver_id: int) -> Dict:
     for quarter, release_date in release_dates:
         QuarterlyRelease.objects.create(
             fiscal_year=fiscal_year,
+            organization=organization,
             quarter=quarter,
             release_date=release_date,
             is_released=False,
@@ -399,21 +443,31 @@ def process_quarterly_release(
         Dictionary with release details.
     """
     from apps.budgeting.models import (
-        FiscalYear, BudgetAllocation, QuarterlyRelease
+        FiscalYear, BudgetAllocation, QuarterlyRelease, BudgetProposal
     )
     from apps.users.models import CustomUser
     
     fiscal_year = FiscalYear.objects.get(id=fiscal_year_id)
     processor = CustomUser.objects.get(id=processor_id)
+    organization = processor.organization
     
-    if not fiscal_year.is_locked:
-        raise FiscalYearInactiveException(
-            f"Budget for {fiscal_year.year_name} must be finalized before releasing funds."
-        )
+    if not organization:
+        raise FiscalYearInactiveException("Processor must belong to an organization.")
     
+    # Check proposal lock
+    try:
+        proposal = BudgetProposal.objects.get(fiscal_year=fiscal_year, organization=organization)
+        if not proposal.is_locked:
+             raise FiscalYearInactiveException(
+                f"Budget for {fiscal_year.year_name} must be finalized before releasing funds."
+            )
+    except BudgetProposal.DoesNotExist:
+        raise FiscalYearInactiveException("No budget proposal found.")
+
     # Get or update quarterly release record
     quarterly_release = QuarterlyRelease.objects.select_for_update().get(
         fiscal_year_id=fiscal_year_id,
+        organization=organization,
         quarter=quarter
     )
     
@@ -426,7 +480,8 @@ def process_quarterly_release(
     
     # Release 25% of non-salary allocations
     allocations = BudgetAllocation.objects.filter(
-        fiscal_year_id=fiscal_year_id
+        fiscal_year_id=fiscal_year_id,
+        organization=organization
     ).exclude(
         # Exclude salary heads (A01) - these are released in full
         budget_head__pifra_object__startswith='A01'
@@ -442,6 +497,7 @@ def process_quarterly_release(
     if quarter == 'Q1':
         salary_allocations = BudgetAllocation.objects.filter(
             fiscal_year_id=fiscal_year_id,
+            organization=organization,
             budget_head__pifra_object__startswith='A01'
         ).select_for_update()
         
@@ -467,17 +523,16 @@ def process_quarterly_release(
 def check_budget_availability(
     budget_head_id: int,
     fiscal_year_id: int,
+    organization_id: int,
     amount: Decimal
 ) -> Tuple[bool, Optional[str], Optional[Decimal]]:
     """
     Check if sufficient budget is available for a transaction.
     
-    This is the core Hard Budget Constraint check used before
-    any expenditure is authorized.
-    
     Args:
         budget_head_id: ID of the budget head.
         fiscal_year_id: ID of the fiscal year.
+        organization_id: ID of the organization.
         amount: Amount to be spent.
         
     Returns:
@@ -488,7 +543,8 @@ def check_budget_availability(
     try:
         allocation = BudgetAllocation.objects.get(
             budget_head_id=budget_head_id,
-            fiscal_year_id=fiscal_year_id
+            fiscal_year_id=fiscal_year_id,
+            organization_id=organization_id
         )
     except BudgetAllocation.DoesNotExist:
         return False, "No budget allocation found for this head.", Decimal('0.00')

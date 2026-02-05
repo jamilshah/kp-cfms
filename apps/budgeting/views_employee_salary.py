@@ -95,7 +95,7 @@ class EmployeeSalaryCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateVie
     def get_initial(self):
         """Set default fiscal year"""
         initial = super().get_initial()
-        active_fy = FiscalYear.objects.filter(is_active=True).first()
+        active_fy = FiscalYear.get_current_operating_year()
         if active_fy:
             initial['fiscal_year'] = active_fy
         return initial
@@ -110,7 +110,7 @@ class EmployeeSalaryCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateVie
     def form_valid(self, form):
         # Set fiscal year if not provided
         if not form.instance.fiscal_year:
-            form.instance.fiscal_year = FiscalYear.objects.filter(is_active=True).first()
+            form.instance.fiscal_year = FiscalYear.get_current_operating_year()
         
         # Optional: Link to schedule if provided
         schedule_id = self.request.GET.get('schedule') or self.request.POST.get('schedule')
@@ -336,7 +336,7 @@ class BudgetBookReportView(LoginRequiredMixin, TemplateView):
         if fiscal_year_id:
             fiscal_year = get_object_or_404(FiscalYear, id=fiscal_year_id)
         else:
-            fiscal_year = FiscalYear.objects.filter(is_active=True).first()
+            fiscal_year = FiscalYear.get_current_operating_year()
         
         context['fiscal_year'] = fiscal_year
         
@@ -394,7 +394,7 @@ class BudgetBookExportView(LoginRequiredMixin, TemplateView):
         if fiscal_year_id:
             fiscal_year = get_object_or_404(FiscalYear, id=fiscal_year_id)
         else:
-            fiscal_year = FiscalYear.objects.filter(is_active=True).first()
+            fiscal_year = FiscalYear.get_current_operating_year()
         
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="budget_book_{fiscal_year.year_name}.csv"'

@@ -61,7 +61,11 @@ Description: Revenue Demand Create/Edit Form Template
                             <div class="invalid-feedback d-block">{{ form.payer.errors.0 }}</div>
                             {% endif %}
                             <small class="text-muted">
-                                <a href="{% url 'revenue:payer_create' %}" target="_blank">
+                                <a href="#" 
+                                   data-bs-toggle="modal" 
+                                   data-bs-target="#payerModal" 
+                                   hx-get="{% url 'revenue:payer_create' %}" 
+                                   hx-target="#payerModalBody">
                                     <i class="bi bi-plus-circle"></i> Add new payer
                                 </a>
                             </small>
@@ -168,6 +172,26 @@ Description: Revenue Demand Create/Edit Form Template
         </div>
     </div>
 </div>
+
+<!-- Payer Modal -->
+<div class="modal fade" id="payerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Payer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="payerModalBody">
+                <!-- Content loaded via HTMX -->
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -181,6 +205,21 @@ Description: Revenue Demand Create/Edit Form Template
                 allowClear: true
             });
         }
+    });
+
+    document.body.addEventListener('payerCreated', function(evt) {
+        var payer = evt.detail;
+        
+        // Create new option
+        var newOption = new Option(payer.name, payer.id, true, true);
+        
+        // Append to select
+        $('#id_payer').append(newOption).trigger('change');
+        
+        // Close modal
+        var modalEl = document.getElementById('payerModal');
+        var modal = bootstrap.Modal.getInstance(modalEl);
+        modal.hide();
     });
 </script>
 {% endblock %}

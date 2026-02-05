@@ -27,16 +27,13 @@ from apps.finance.models import BudgetHead, AccountType
 
 class FiscalYearForm(forms.ModelForm):
     """
-    Form for creating/editing fiscal years.
+    Form for creating/editing GLOBAL fiscal years (LCB Admin only).
     """
     
     class Meta:
         model = FiscalYear
-        fields = ['organization', 'year_name', 'start_date', 'end_date', 'is_active', 'is_locked']
+        fields = ['year_name', 'start_date', 'end_date', 'is_planning_active', 'is_revision_active']
         widgets = {
-            'organization': forms.Select(attrs={
-                'class': 'form-control'
-            }),
             'year_name': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'e.g., 2026-27'
@@ -49,26 +46,22 @@ class FiscalYearForm(forms.ModelForm):
                 'class': 'form-control',
                 'type': 'date'
             }),
-            'is_active': forms.CheckboxInput(attrs={
-                'class': 'form-check-input'
-            }),
-            'is_locked': forms.CheckboxInput(attrs={
+            'is_planning_active': forms.CheckboxInput(attrs={
                 'class': 'form-check-input',
                 'data-bs-toggle': 'tooltip',
-                'title': 'Check to finalize and lock budget (prevents further edits)'
+                'title': 'Allow TMAs to create/edit budget proposals (May-June)'
+            }),
+            'is_revision_active': forms.CheckboxInput(attrs={
+                'class': 'form-check-input',
+                'data-bs-toggle': 'tooltip',
+                'title': 'Allow TMAs to revise budgets (March cycle)'
             }),
         }
     
     def __init__(self, *args, **kwargs):
-        """Initialize form and customize organization field based on user."""
+        """Accept request argument for validation if needed."""
         self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
-        
-        # If user has an organization (TMA admin), hide org field and pre-set it
-        if self.request and self.request.user.organization:
-            self.fields['organization'].widget = forms.HiddenInput()
-            self.fields['organization'].initial = self.request.user.organization
-            self.fields['organization'].disabled = True
     
     def clean(self) -> Dict[str, Any]:
         """Validate fiscal year dates."""
@@ -90,23 +83,6 @@ class FiscalYearForm(forms.ModelForm):
                 })
         
         return cleaned_data
-
-    def save(self, commit=True):
-        """Enforce organization assignment on save."""
-        instance = super().save(commit=False)
-        
-        # Ensure organization is set if user context has one
-        if self.request and self.request.user.organization:
-            instance.organization = self.request.user.organization
-            
-        # If manually unlocking, revert status from LOCKED to DRAFT
-        # This ensures consistency between is_locked flag and status text
-        if not instance.is_locked and instance.status == BudgetStatus.LOCKED:
-            instance.status = BudgetStatus.DRAFT
-            
-        if commit:
-            instance.save()
-        return instance
 
 
 class BudgetAllocationBaseForm(forms.ModelForm):
@@ -147,18 +123,21 @@ class BudgetAllocationBaseForm(forms.ModelForm):
             }),
         }
     
-    def __init__(self, *args, fiscal_year: Optional[FiscalYear] = None, **kwargs):
+    def __init__(self, *args, fiscal_year: Optional[FiscalYear] = None, 
+                 budget_proposal=None, **kwargs):
         """
-        Initialize form with fiscal year context.
+        Initialize form with fiscal year and budget proposal context.
         
         Args:
             fiscal_year: The fiscal year for this allocation.
+            budget_proposal: The BudgetProposal instance for edit control.
         """
         self.fiscal_year = fiscal_year
+        self.budget_proposal = budget_proposal
         super().__init__(*args, **kwargs)
         
-        # Check if budget is editable
-        if fiscal_year and not fiscal_year.can_edit_budget():
+        # Check if budget is editable via BudgetProposal
+        if budget_proposal and not budget_proposal.can_edit_budget():
             for field in self.fields.values():
                 field.disabled = True
 
@@ -304,9 +283,11 @@ class ScheduleOfEstablishmentForm(forms.ModelForm):
             }),
         }
     
-    def __init__(self, *args, fiscal_year: Optional[FiscalYear] = None, **kwargs):
+    def __init__(self, *args, fiscal_year: Optional[FiscalYear] = None, 
+                 budget_proposal=None, **kwargs):
         """Initialize form."""
         self.fiscal_year = fiscal_year
+        self.budget_proposal = budget_proposal
         super().__init__(*args, **kwargs)
         
         # Initialize dropdowns for existing instance
@@ -332,7 +313,7 @@ class ScheduleOfEstablishmentForm(forms.ModelForm):
             # Editable for new entries
             self.fields['sanctioned_posts'].widget.attrs.pop('readonly', None)
         
-        if fiscal_year and not fiscal_year.can_edit_budget():
+        if budget_proposal and not budget_proposal.can_edit_budget():
             for field in self.fields.values():
                 field.disabled = True
 
@@ -630,8 +611,8 @@ class PensionEstimateForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Filter active fiscal years or future ones
-        self.fields['fiscal_year'].queryset = FiscalYear.objects.filter(is_locked=False)
+        # Filter active fiscal years
+        self.fields['fiscal_year'].queryset = FiscalYear.objects.filter(is_planning_active=True)
 
 
 class RetiringEmployeeForm(forms.ModelForm):

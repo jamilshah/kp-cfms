@@ -76,16 +76,22 @@ class BudgetLockMiddleware:
     
     def _check_budget_status(self, request: HttpRequest) -> None:
         """
-        Validate that budget is editable.
+        Validate that budget is editable for the user's organization.
         
         Args:
             request: The HTTP request.
             
         Raises:
-            FiscalYearInactiveException: If no active fiscal year.
-            BudgetLockedException: If budget is locked.
+            FiscalYearInactiveException: If no planning-active fiscal year.
+            BudgetLockedException: If budget proposal is locked.
         """
-        from apps.budgeting.models import FiscalYear
+        from apps.budgeting.models import FiscalYear, BudgetProposal
+        
+        # User must have an organization
+        if not request.user.is_authenticated or not request.user.organization:
+            raise FiscalYearInactiveException(
+                "You must be logged in with an organization to edit budgets."
+            )
         
         # Try to get fiscal year from request
         fiscal_year_id = (
@@ -101,22 +107,39 @@ class BudgetLockMiddleware:
                     "The specified fiscal year does not exist."
                 )
         else:
-            # Default to active fiscal year
-            fiscal_year = FiscalYear.objects.filter(is_active=True).first()
+            # Default to planning-active fiscal year
+            fiscal_year = FiscalYear.objects.filter(is_planning_active=True).first()
             if not fiscal_year:
                 raise FiscalYearInactiveException(
-                    "No active fiscal year found. Please contact the administrator."
+                    "No active planning window found. Please contact the administrator."
                 )
         
-        # Check if locked
-        if fiscal_year.is_locked:
+        # Get or create BudgetProposal for this TMA
+        try:
+            proposal = BudgetProposal.objects.get(
+                organization=request.user.organization,
+                fiscal_year=fiscal_year
+            )
+        except BudgetProposal.DoesNotExist:
+            # If no proposal exists, check if planning window is open
+            if not fiscal_year.is_planning_active:
+                raise FiscalYearInactiveException(
+                    f"Budget planning for {fiscal_year.year_name} is not currently allowed."
+                )
+            # Proposal will be created on first budget entry
+            return
+        
+        # Check if proposal is locked
+        if proposal.is_locked:
             raise BudgetLockedException(
-                f"Budget for {fiscal_year.year_name} is locked and cannot be modified."
+                f"Budget proposal for {fiscal_year.year_name} is locked and cannot be modified. "
+                f"Status: {proposal.get_status_display()}"
             )
         
-        # Check if active
-        if not fiscal_year.is_active:
+        # Check if planning window is open
+        if not proposal.can_edit_budget():
             raise FiscalYearInactiveException(
                 f"Budget entry for {fiscal_year.year_name} is not currently allowed. "
-                "The budget entry window may be closed."
+                f"Status: {proposal.get_status_display()}"
             )
+

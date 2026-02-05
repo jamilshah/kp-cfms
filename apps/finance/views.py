@@ -284,6 +284,12 @@ class BudgetHeadUpdateView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
         context['back_url'] = self.success_url
         return context
 
+    def get_form_kwargs(self):
+        """Pass request to form to check for superuser status."""
+        kwargs = super().get_form_kwargs()
+        kwargs['request'] = self.request
+        return kwargs
+
 
 class BudgetHeadDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
     """Delete Budget Head."""
@@ -1136,13 +1142,18 @@ class PostVoucherView(LoginRequiredMixin, View):
 
 class UnpostVoucherView(LoginRequiredMixin, View):
     """
-    Unpost a voucher (reverse posting).
+    Reverse a posted voucher by creating a reversal voucher.
+    
+    This implements professional accounting practice:
+    - Does NOT delete or modify posted transactions
+    - Creates a new REVERSAL voucher with swapped Dr/Cr
+    - Maintains complete audit trail
+    - Both vouchers remain in the system
     
     Only allowed if:
     - Voucher is currently posted
+    - Voucher has not already been reversed
     - User has permission to unpost
-    
-    Use case: Correcting errors in posted vouchers
     """
     
     def post(self, request, pk):
@@ -1154,21 +1165,48 @@ class UnpostVoucherView(LoginRequiredMixin, View):
             pk=pk
         )
         
-        # Check if already unposted
+        # Check if already reversed
+        if voucher.is_reversed:
+            messages.warning(
+                request, 
+                _('Voucher has already been reversed. See reversal voucher: {}').format(
+                    voucher.reversed_by_voucher.voucher_no
+                )
+            )
+            return redirect('finance:voucher_detail', pk=pk)
+        
+        # Check if unposted
         if not voucher.is_posted:
-            messages.warning(request, _('Voucher is already unposted.'))
+            messages.warning(request, _('Voucher is not posted.'))
             return redirect('finance:voucher_detail', pk=pk)
         
         try:
             with transaction.atomic():
-                reason = request.POST.get('reason', 'Unposted for correction')
-                voucher.unpost_voucher(user=user, reason=reason)
+                reason = request.POST.get('reason', '').strip()
+                
+                # Validate reason is provided
+                if not reason:
+                    messages.error(
+                        request, 
+                        _('Reversal reason is required for audit compliance.')
+                    )
+                    return redirect('finance:voucher_detail', pk=pk)
+                
+                # Create reversal voucher
+                reversal_voucher = voucher.unpost_voucher(user=user, reason=reason)
+                
                 messages.success(
                     request, 
-                    _('Voucher unposted successfully. You can now edit or delete it.')
+                    _('Voucher reversed successfully. Reversal voucher {} created.').format(
+                        reversal_voucher.voucher_no
+                    )
                 )
+                
+                # Redirect to the reversal voucher to show what was created
+                return redirect('finance:voucher_detail', pk=reversal_voucher.pk)
+                
         except Exception as e:
-            messages.error(request, _('Error unposting voucher: ') + str(e))
+            messages.error(request, _('Error reversing voucher: ') + str(e))
         
         return redirect('finance:voucher_detail', pk=pk)
 
@@ -1204,6 +1242,38 @@ def load_functions(request):
         'functions': functions,
         'default_id': default_id
     })
+
+
+def load_global_heads(request):
+    """
+    HTMX view to load GlobalHead options filtered by selected function.
+    Returns HTML with option elements for the global_head select field.
+    
+    Filters GlobalHeads to show:
+    - Universal heads (no applicable_functions specified)
+    - Function-specific heads (where applicable_functions includes the selected function)
+    """
+    from apps.finance.models import GlobalHead
+    from django.db.models import Q
+    
+    function_id = request.GET.get('function')
+    global_heads = GlobalHead.objects.none()
+    
+    if function_id:
+        try:
+            function = FunctionCode.objects.get(id=function_id)
+            # Filter: Universal heads OR heads applicable to this function
+            global_heads = GlobalHead.objects.filter(
+                Q(applicable_functions__isnull=True) |  # Universal heads
+                Q(applicable_functions=function)  # Function-specific heads
+            ).select_related('minor__major').distinct().order_by('code')
+        except (ValueError, TypeError, FunctionCode.DoesNotExist):
+            pass
+    
+    return render(request, 'finance/partials/global_head_options.html', {
+        'global_heads': global_heads
+    })
+
 
 
 def load_budget_heads_options(request):

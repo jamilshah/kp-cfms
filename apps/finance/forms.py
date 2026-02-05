@@ -38,6 +38,7 @@ class BudgetHeadForm(forms.ModelForm):
         }
     
     def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop('request', None)
         super().__init__(*args, **kwargs)
         
         # Add Department filter field (not part of model)
@@ -54,6 +55,13 @@ class BudgetHeadForm(forms.ModelForm):
             help_text=_('Select your department to filter the function list.')
         )
         
+        # Add HTMX to function field to filter GlobalHead
+        self.fields['function'].widget.attrs.update({
+            'hx-get': reverse_lazy('finance:load_global_heads'),
+            'hx-target': '#id_global_head',
+            'hx-trigger': 'change',
+        })
+        
         # Reorder fields to put department first
         field_order = ['fund', 'department', 'function', 'global_head', 'is_active', 'budget_control', 'posting_allowed', 'project_required']
         self.fields = {k: self.fields[k] for k in field_order if k in self.fields}
@@ -66,25 +74,38 @@ class BudgetHeadForm(forms.ModelForm):
         self.fields['global_head'].help_text = _('What is this expense for? (e.g., Electricity, Salary, Petrol)')
         
         # Order global heads by code for easier selection
-        self.fields['global_head'].queryset = self.fields['global_head'].queryset.select_related(
+        # Filter by function if available (for edit mode or when function is pre-selected)
+        from django.db.models import Q
+        global_head_qs = self.fields['global_head'].queryset.select_related(
             'minor__major'
         ).order_by('code')
         
-        # If editing (instance exists), lock the identity fields
+        # If editing and function is set, filter GlobalHead by function
+        if self.instance and self.instance.pk and self.instance.function:
+            function = self.instance.function
+            global_head_qs = global_head_qs.filter(
+                Q(applicable_functions__isnull=True) |  # Universal heads
+                Q(applicable_functions=function)  # Function-specific heads
+            ).distinct()
+        
+        self.fields['global_head'].queryset = global_head_qs
+        
+        # If editing (instance exists)
         if self.instance and self.instance.pk:
-            self.fields['fund'].disabled = True
-            
             # Populate department if function is set
             if self.instance.function:
-                # Use the first linked department (reverse M2M from Department.related_functions)
                 # Note: FunctionCode.departments is the related_name from Department model
                 dept = self.instance.function.departments.first()
                 if dept:
                     self.fields['department'].initial = dept
             
-            self.fields['department'].disabled = True  # Lock filtering too
-            self.fields['function'].disabled = True
-            self.fields['global_head'].disabled = True
+            # Lock identity fields unless superuser
+            is_superuser = self.request and self.request.user.is_superuser
+            if not is_superuser:
+                self.fields['fund'].disabled = True
+                self.fields['department'].disabled = True
+                self.fields['function'].disabled = True
+                self.fields['global_head'].disabled = True
 
 
 class ChequeBookForm(forms.ModelForm):

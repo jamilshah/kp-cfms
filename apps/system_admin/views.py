@@ -61,9 +61,7 @@ class SystemDashboardView(LoginRequiredMixin, SuperAdminRequiredMixin, TemplateV
         context['districts'] = District.objects.filter(is_active=True).count()
         
         # Fiscal year status
-        context['active_fiscal_year'] = FiscalYear.objects.filter(
-            is_active=True
-        ).first()
+        context['active_fiscal_year'] = FiscalYear.get_current_operating_year()
         context['total_fiscal_years'] = FiscalYear.objects.count()
         
         # Recent users

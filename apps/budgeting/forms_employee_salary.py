@@ -197,7 +197,7 @@ class BulkIncrementForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         from apps.budgeting.models import FiscalYear
-        self.fields['fiscal_year'].queryset = FiscalYear.objects.filter(is_active=True)
+        self.fields['fiscal_year'].queryset = FiscalYear.objects.all().order_by('-start_date')
 
 
 class AutoCalculateAllowancesForm(forms.Form):

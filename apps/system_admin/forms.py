@@ -406,7 +406,8 @@ class GlobalHeadForm(forms.ModelForm):
     
     class Meta:
         model = GlobalHead
-        fields = ['code', 'name', 'minor', 'account_type', 'system_code']
+        fields = ['code', 'name', 'minor', 'account_type', 'system_code', 
+                  'scope', 'applicable_departments', 'applicable_functions']
         widgets = {
             'code': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -424,6 +425,17 @@ class GlobalHeadForm(forms.ModelForm):
             }),
             'system_code': forms.Select(attrs={
                 'class': 'form-select'
+            }),
+            'scope': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+            'applicable_departments': forms.SelectMultiple(attrs={
+                'class': 'form-select searchable-select',
+                'size': '5'
+            }),
+            'applicable_functions': forms.SelectMultiple(attrs={
+                'class': 'form-select searchable-select',
+                'size': '5'
             }),
         }
 
