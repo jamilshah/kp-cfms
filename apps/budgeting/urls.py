@@ -11,7 +11,7 @@ from django.urls import path
 
 from apps.finance.views import (
     BudgetHeadListView, BudgetHeadCreateView, 
-    BudgetHeadUpdateView, BudgetHeadDeleteView,
+    BudgetHeadUpdateView, BudgetHeadDeleteView, BudgetHeadToggleStatusView,
     FundListView, FundCreateView, FundUpdateView, FundDeleteView
 )
 from apps.core.views import (
@@ -155,6 +155,7 @@ urlpatterns = [
     path('setup/coa/add/', BudgetHeadCreateView.as_view(), name='setup_coa_add'),
     path('setup/coa/<int:pk>/edit/', BudgetHeadUpdateView.as_view(), name='setup_coa_edit'),
     path('setup/coa/<int:pk>/delete/', BudgetHeadDeleteView.as_view(), name='setup_coa_delete'),
+    path('setup/coa/<int:pk>/toggle-status/', BudgetHeadToggleStatusView.as_view(), name='setup_coa_toggle_status'),
 
     # Cheque Books
     path('setup/chequebooks/', ChequeBookListView.as_view(), name='setup_chequebooks'),

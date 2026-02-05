@@ -123,7 +123,18 @@ Description: Finance Officer / Accountant Workspace
                             <td><strong>{{ bill.bill_number }}</strong></td>
                             <td>{{ bill.bill_date|date:"d M Y" }}</td>
                             <td>{{ bill.payee.name }}</td>
-                            <td><small>{{ bill.budget_head.name }}</small></td>
+                            <td>
+                                {% with first_line=bill.lines.first %}
+                                    {% if first_line %}
+                                        <small>{{ first_line.budget_head.global_head.code }} - {{ first_line.budget_head.global_head.name|truncatewords:5 }}</small>
+                                        {% if bill.lines.count > 1 %}
+                                            <br><small class="text-muted">(+{{ bill.lines.count|add:"-1" }} more)</small>
+                                        {% endif %}
+                                    {% else %}
+                                        <small class="text-muted">No lines</small>
+                                    {% endif %}
+                                {% endwith %}
+                            </td>
                             <td><strong>Rs. {{ bill.net_amount|floatformat:2 }}</strong></td>
                             <td>{{ bill.submitted_by.get_full_name }}</td>
                             <td>

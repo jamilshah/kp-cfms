@@ -211,11 +211,13 @@
                             </span>
                         </td>
                         <td class="text-center">
-                            {% if head.is_active %}
-                                <i class="bi bi-check-circle-fill text-success" title="Active"></i>
-                            {% else %}
-                                <i class="bi bi-x-circle text-danger" title="Inactive"></i>
-                            {% endif %}
+                            <div class="form-check form-switch d-inline-block">
+                                <input class="form-check-input status-toggle" type="checkbox" 
+                                       role="switch" 
+                                       id="statusSwitch{{ head.pk }}" 
+                                       data-head-id="{{ head.pk }}"
+                                       {% if head.is_active %}checked{% endif %}>
+                            </div>
                         </td>
                         <td class="text-end">
                             <div class="btn-group btn-group-sm">
@@ -389,5 +391,82 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Event delegation for status toggles
+        document.body.addEventListener('change', function(e) {
+            if (e.target.classList.contains('status-toggle')) {
+                const toggle = e.target;
+                const headId = toggle.dataset.headId;
+                const isChecked = toggle.checked;
+                
+                // Disable to prevent multiple clicks
+                toggle.disabled = true;
+
+                // Use a safe placeholder that won't conflict with other parts of the URL
+                // We use '999999' as a dummy ID for the reverse lookup
+                const urlPattern = "{% url 'budgeting:setup_coa_toggle_status' 999999 %}";
+                const url = urlPattern.replace('999999', headId);
+                
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.status + ' ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        showToast(data.message || 'Status updated successfully');
+                    } else {
+                        throw new Error(data.message || 'Server returned error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Toggle Error:', error);
+                    // Revert state
+                    toggle.checked = !isChecked;
+                    alert('Failed to update status: ' + error.message);
+                })
+                .finally(() => {
+                    toggle.disabled = false;
+                });
+            }
+        });
+
+        function showToast(message) {
+            let container = document.getElementById('toastRequestDetails');
+            if (!container) {
+                container = document.createElement('div');
+                container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+                container.style.zIndex = '1050';
+                container.id = 'toastRequestDetails';
+                document.body.appendChild(container);
+            }
+            
+            const toastHtml = `
+                <div class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            
+            container.insertAdjacentHTML('beforeend', toastHtml);
+            const toastEl = container.lastElementChild;
+            const toast = new bootstrap.Toast(toastEl);
+            toast.show();
+        }
+    });
 </script>
 {% endblock %}

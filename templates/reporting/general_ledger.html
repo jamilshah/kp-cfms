@@ -80,12 +80,15 @@
                     </thead>
                     <tbody>
                         {% for item in entries %}
-                        <tr>
+                        <tr {% if item.entry.voucher.is_reversed %}class="text-muted" style="text-decoration: line-through;"{% endif %}>
                             <td>{{ item.entry.voucher.date|date:"d M Y" }}</td>
                             <td>
                                 <a href="{% url 'finance:voucher_detail' item.entry.voucher.pk %}" class="text-decoration-none">
                                     {{ item.entry.voucher.voucher_no }}
                                 </a>
+                                {% if item.entry.voucher.is_reversed %}
+                                <span class="badge bg-danger ms-1">REVERSED</span>
+                                {% endif %}
                             </td>
                             <td>{{ item.entry.description|truncatewords:15 }}</td>
                             <td class="text-end">
@@ -156,12 +159,15 @@
                     </thead>
                     <tbody>
                         {% for item in entries %}
-                        <tr>
+                        <tr {% if item.entry.voucher.is_reversed %}class="text-muted" style="text-decoration: line-through;"{% endif %}>
                             <td>{{ item.entry.voucher.date|date:"d M Y" }}</td>
                             <td>
                                 <a href="{% url 'finance:voucher_detail' item.entry.voucher.pk %}" class="text-decoration-none">
                                     {{ item.entry.voucher.voucher_no }}
                                 </a>
+                                {% if item.entry.voucher.is_reversed %}
+                                <span class="badge bg-danger ms-1">REVERSED</span>
+                                {% endif %}
                             </td>
                             <td>
                                 <small class="text-muted">{{ item.entry.budget_head.global_head.code }}</small><br>

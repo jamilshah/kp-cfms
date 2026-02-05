@@ -33,18 +33,20 @@ def fiscal_year_pre_save(sender, instance: FiscalYear, **kwargs) -> None:
         FiscalYear.objects.filter(is_active=True).update(is_active=False)
 
 
-@receiver(post_save, sender=FiscalYear)
-def fiscal_year_post_save(sender, instance: FiscalYear, created: bool, **kwargs) -> None:
-    """
-    Post-save signal for FiscalYear.
-    
-    Updates status based on lock state.
-    """
-    if instance.is_locked and instance.status != BudgetStatus.LOCKED:
-        # Use update to avoid recursion
-        FiscalYear.objects.filter(pk=instance.pk).update(
-            status=BudgetStatus.LOCKED
-        )
+# DISABLED: FiscalYear doesn't have is_locked or status fields
+# This signal was incorrectly referencing fields that don't exist on the model
+# @receiver(post_save, sender=FiscalYear)
+# def fiscal_year_post_save(sender, instance: FiscalYear, created: bool, **kwargs) -> None:
+#     """
+#     Post-save signal for FiscalYear.
+#     
+#     Updates status based on lock state.
+#     """
+#     if instance.is_locked and instance.status != BudgetStatus.LOCKED:
+#         # Use update to avoid recursion
+#         FiscalYear.objects.filter(pk=instance.pk).update(
+#             status=BudgetStatus.LOCKED
+#         )
 
 
 @receiver(post_save, sender=BudgetAllocation)

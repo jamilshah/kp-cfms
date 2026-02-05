@@ -387,12 +387,13 @@ class FinanceWorkspaceView(LoginRequiredMixin, TemplateView):
         from apps.budgeting.models import BudgetAllocation
         from django.db.models import Sum, Q
         
-        # Action Queue: Bills awaiting scrutiny
+        # Action Queue: Bills awaiting verification (after pre-audit)
+        # Finance workspace shows AUDITED bills that need verification by TO Finance
         pending_bills = Bill.objects.filter(
             organization=organization,
             fiscal_year=fiscal_year,
-            status=BillStatus.SUBMITTED
-        ).select_related('payee', 'budget_head').order_by('-bill_date')[:10]
+            status=BillStatus.AUDITED  # Bills that passed pre-audit, awaiting verification
+        ).select_related('payee').prefetch_related('lines__budget_head__global_head').order_by('-bill_date')[:10]
         
         context['pending_bills'] = pending_bills
         context['pending_bills_count'] = pending_bills.count()

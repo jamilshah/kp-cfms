@@ -165,7 +165,6 @@ class BillForm(forms.ModelForm):
             from django.utils import timezone
             today = timezone.now().date()
             self._current_fiscal_year = FiscalYear.objects.filter(
-                organization=organization,
                 start_date__lte=today,
                 end_date__gte=today
             ).first()

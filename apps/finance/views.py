@@ -302,6 +302,26 @@ class BudgetHeadDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
+class BudgetHeadToggleStatusView(LoginRequiredMixin, AdminRequiredMixin, View):
+    """
+    Toggle the active status of a Budget Head via AJAX.
+    """
+    
+    def post(self, request, pk):
+        head = get_object_or_404(BudgetHead, pk=pk)
+        
+        # Toggle status
+        head.is_active = not head.is_active
+        head.save_with_user(request.user)
+        
+        return JsonResponse({
+            'success': True,
+            'is_active': head.is_active,
+            'message': _('Status updated successfully.')
+        })
+
+
+
 # ============================================================================
 # Cheque Book Management Views
 # ============================================================================

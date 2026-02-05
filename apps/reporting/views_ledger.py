@@ -158,9 +158,11 @@ class TrialBalanceView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
         
         
         # Get all budget heads with balances (optimized with select_related)
-        budget_heads = BudgetHead.objects.filter(
-            is_active=True
-        ).select_related('global_head', 'fund', 'function').annotate(
+        # IMPORTANT: Include inactive heads ONLY if they have posted transactions
+        # This maintains trial balance integrity while hiding unused inactive accounts
+        budget_heads = BudgetHead.objects.select_related(
+            'global_head', 'fund', 'function'
+        ).annotate(
             total_debit=Coalesce(
                 Sum('journal_entries__debit',
                     filter=Q(journal_entries__voucher__is_posted=True,
@@ -204,6 +206,10 @@ class TrialBalanceView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
                 else:
                     credit_balance = Decimal('0.00')
                     debit_balance = abs(balance)
+            
+            # Skip accounts with zero net balance (equal debits and credits)
+            if debit_balance == 0 and credit_balance == 0:
+                continue
             
             accounts_data.append({
                 'head': head,
