@@ -1,0 +1,12 @@
+[Unit]
+Description=gunicorn daemon for KP-CFMS
+After=network.target
+
+[Service]
+User=misweb
+Group=www-data
+WorkingDirectory=/home/misweb/kp-cfms
+ExecStart=/home/misweb/kp-cfms/venv/bin/gunicorn --access-logfile - --workers 3 --bind 127.0.0.1:8000 config.wsgi:application
+
+[Install]
+WantedBy=multi-user.target
