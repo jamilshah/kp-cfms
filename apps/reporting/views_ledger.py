@@ -42,10 +42,7 @@ class GeneralLedgerView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
         # Budget heads loaded via AJAX autocomplete for performance
         
         # Get active fiscal year for default dates
-        fiscal_year = FiscalYear.objects.filter(
-            organization=organization,
-            is_active=True
-        ).first()
+        fiscal_year = FiscalYear.get_current_operating_year()
         
         if fiscal_year:
             context['default_date_from'] = fiscal_year.start_date
@@ -245,10 +242,7 @@ class AccountStatementView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
         # Budget heads loaded via AJAX autocomplete for performance
         
         # Get active fiscal year for default dates
-        fiscal_year = FiscalYear.objects.filter(
-            organization=organization,
-            is_active=True
-        ).first()
+        fiscal_year = FiscalYear.get_current_operating_year()
         
         if fiscal_year:
             context['default_date_from'] = fiscal_year.start_date
@@ -339,7 +333,7 @@ class PendingLiabilitiesView(LoginRequiredMixin, TenantAwareMixin, TemplateView)
         organization = self.request.user.organization
         
         # Get current operating fiscal year
-        fiscal_year = FiscalYear.get_current_operating_year(organization)
+        fiscal_year = FiscalYear.get_current_operating_year()
         
         if not fiscal_year:
             context['no_fiscal_year'] = True

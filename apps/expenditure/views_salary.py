@@ -140,7 +140,7 @@ class SalaryBillPreviewAPI(LoginRequiredMixin, TemplateView):
         year = int(request.GET.get('year', 2026))
         
         org = getattr(request.user, 'organization', None)
-        fiscal_year = FiscalYear.get_current_operating_year(org) if org else None
+        fiscal_year = FiscalYear.get_current_operating_year() if org else None
         
         if not org or not fiscal_year:
             return JsonResponse({'error': 'No active fiscal year'}, status=400)

@@ -998,7 +998,6 @@ class VoucherCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
             # Determine fiscal year from date
             try:
                 fiscal_year = FiscalYear.objects.filter(
-                    organization=org,
                     start_date__lte=form.instance.date,
                     end_date__gte=form.instance.date
                 ).first()
@@ -1333,7 +1332,7 @@ def load_budget_heads_options(request):
             BudgetAllocation = apps.get_model('budgeting', 'BudgetAllocation')
             
             # Get current operating fiscal year
-            fy = FiscalYear.get_current_operating_year(org)
+            fy = FiscalYear.get_current_operating_year()
             if fy:
                 has_allocation = BudgetAllocation.objects.filter(
                     organization=org,

@@ -235,7 +235,7 @@ class Command(BaseCommand):
     
     def _get_current_fiscal_year(self, org: Organization) -> FiscalYear:
         """Get the current operating fiscal year."""
-        fiscal_year = FiscalYear.get_current_operating_year(org)
+        fiscal_year = FiscalYear.get_current_operating_year()
         
         if not fiscal_year:
             raise CommandError(

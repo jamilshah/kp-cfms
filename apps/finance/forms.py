@@ -271,16 +271,13 @@ class BankStatementForm(forms.ModelForm):
                 is_active=True
             ).order_by('title')
             
-            self.fields['year'].queryset = FiscalYear.objects.filter(
-                organization=organization
-            ).order_by('-start_date')
+            self.fields['year'].queryset = FiscalYear.objects.all().order_by('-start_date')
             
             # Set default to current fiscal year
             from django.utils import timezone
             today = timezone.now().date()
             try:
                 current_fy = FiscalYear.objects.filter(
-                    organization=organization,
                     start_date__lte=today,
                     end_date__gte=today
                 ).first()
@@ -518,7 +515,6 @@ class VoucherForm(forms.ModelForm):
         
         # Check if fiscal year exists for the date
         fiscal_year = FiscalYear.objects.filter(
-            organization=self.organization,
             start_date__lte=date,
             end_date__gte=date
         ).first()

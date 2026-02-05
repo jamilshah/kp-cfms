@@ -28,9 +28,7 @@ class ReportDashboardView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
             organization=self.request.user.organization,
             is_active=True
         )
-        context['fiscal_years'] = FiscalYear.objects.filter(
-            organization=self.request.user.organization
-        ).order_by('-start_date')
+        context['fiscal_years'] = FiscalYear.objects.all().order_by('-start_date')
         
         # Current month info
         today = date.today()

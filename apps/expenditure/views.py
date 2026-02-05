@@ -46,7 +46,7 @@ class ExpenditureDashboardView(LoginRequiredMixin, TemplateView):
         org = getattr(user, 'organization', None)
         
         # Get current operating fiscal year (based on today's date)
-        active_fy = FiscalYear.get_current_operating_year(org) if org else None
+        active_fy = FiscalYear.get_current_operating_year() if org else None
         
         if org and active_fy:
             bills_qs = Bill.objects.filter(
@@ -172,9 +172,7 @@ class BillListView(LoginRequiredMixin, ListView):
         context['current_status'] = self.request.GET.get('status', '')
         
         if org:
-            context['fiscal_years'] = FiscalYear.objects.filter(
-                organization=org
-            ).order_by('-start_date')
+            context['fiscal_years'] = FiscalYear.objects.all().order_by('-start_date')
         
         return context
 
@@ -199,7 +197,7 @@ class BillCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
         
         if org:
             # Check if there's a current operating fiscal year
-            active_fy = FiscalYear.get_current_operating_year(org)
+            active_fy = FiscalYear.get_current_operating_year()
             if not active_fy:
                 messages.error(
                     request, 
@@ -224,10 +222,10 @@ class BillCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
         user = self.request.user
         org = getattr(user, 'organization', None)
         if org:
-            context['current_fiscal_year'] = FiscalYear.get_current_operating_year(org)
+            context['current_fiscal_year'] = FiscalYear.get_current_operating_year()
             
         # Get fiscal year for formset
-        fy = FiscalYear.get_current_operating_year(org) if org else None
+        fy = FiscalYear.get_current_operating_year() if org else None
             
         if self.request.POST:
             context['lines'] = BillLineFormSet(

@@ -236,7 +236,10 @@ def get_ara_2022_fallback(bps: int) -> Decimal:
     return Decimal('0.00')
 
 
-class BudgetEmployee(TimeStampedMixin):
+from apps.core.mixins import TimeStampedMixin, TenantAwareMixin
+
+
+class BudgetEmployee(TimeStampedMixin, TenantAwareMixin):
     """
     Individual employee record with direct department and function assignment.
     

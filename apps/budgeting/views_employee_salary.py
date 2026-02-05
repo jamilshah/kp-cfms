@@ -116,6 +116,10 @@ class EmployeeSalaryCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateVie
         schedule_id = self.request.GET.get('schedule') or self.request.POST.get('schedule')
         if schedule_id:
             form.instance.schedule = get_object_or_404(ScheduleOfEstablishment, id=schedule_id)
+            form.instance.organization = form.instance.schedule.organization
+        else:
+            # If no schedule, use user's organization
+            form.instance.organization = self.request.user.organization
         
         messages.success(self.request, f"Employee '{form.instance.name}' created successfully")
         return super().form_valid(form)

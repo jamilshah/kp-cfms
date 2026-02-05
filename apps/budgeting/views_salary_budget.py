@@ -40,7 +40,7 @@ class SalaryBudgetDashboardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        current_fy = FiscalYear.objects.filter(is_active=True).first()
+        current_fy = FiscalYear.get_current_operating_year()
         if not current_fy:
             messages.error(self.request, "No active fiscal year found")
             return context
@@ -137,7 +137,7 @@ class SalaryBudgetDistributionView(FinanceOfficerRequiredMixin, FormView):
         context = super().get_context_data(**kwargs)
         
         # Get employee counts for preview
-        current_fy = FiscalYear.objects.filter(is_active=True).first()
+        current_fy = FiscalYear.get_current_operating_year()
         if current_fy:
             dept_counts = {}
             total_employees = 0
@@ -171,7 +171,7 @@ class DepartmentBudgetDetailView(LoginRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         department = self.object
         
-        current_fy = FiscalYear.objects.filter(is_active=True).first()
+        current_fy = FiscalYear.get_current_operating_year()
         if not current_fy:
             return context
         
@@ -216,7 +216,7 @@ class BudgetUtilizationChartView(LoginRequiredMixin, TemplateView):
     """
     
     def get(self, request, *args, **kwargs):
-        current_fy = FiscalYear.objects.filter(is_active=True).first()
+        current_fy = FiscalYear.get_current_operating_year()
         if not current_fy:
             return JsonResponse({'error': 'No active fiscal year'}, status=400)
         
@@ -246,7 +246,7 @@ class BudgetAlertsWidgetView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        current_fy = FiscalYear.objects.filter(is_active=True).first()
+        current_fy = FiscalYear.get_current_operating_year()
         if current_fy:
             threshold = int(self.request.GET.get('threshold', 80))
 
@@ -344,7 +344,9 @@ class ExportBudgetStatusView(LoginRequiredMixin, TemplateView):
         from django.http import HttpResponse
         
         try:
-            current_fy = FiscalYear.objects.get(is_current=True)
+            current_fy = FiscalYear.get_current_operating_year()
+            if not current_fy:
+                raise FiscalYear.DoesNotExist
         except FiscalYear.DoesNotExist:
             messages.error(request, "No active fiscal year")
             return redirect('budgeting:salary_budget_dashboard')

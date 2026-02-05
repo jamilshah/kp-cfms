@@ -52,7 +52,7 @@ class RevenueDashboardView(LoginRequiredMixin, TemplateView):
         org = getattr(user, 'organization', None)
         
         # Get current operating fiscal year (based on today's date)
-        active_fy = FiscalYear.get_current_operating_year(org) if org else None
+        active_fy = FiscalYear.get_current_operating_year() if org else None
         
         if org and active_fy:
             demands_qs = RevenueDemand.objects.filter(
@@ -268,9 +268,7 @@ class DemandListView(LoginRequiredMixin, ListView):
         context['search_query'] = self.request.GET.get('search', '')
         
         if org:
-            context['fiscal_years'] = FiscalYear.objects.filter(
-                organization=org
-            ).order_by('-start_date')
+            context['fiscal_years'] = FiscalYear.objects.all().order_by('-start_date')
         
         return context
 
@@ -291,7 +289,7 @@ class DemandCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
         org = getattr(user, 'organization', None)
         
         if org:
-            active_fy = FiscalYear.get_current_operating_year(org)
+            active_fy = FiscalYear.get_current_operating_year()
             if not active_fy:
                 messages.error(
                     request, 
@@ -320,7 +318,7 @@ class DemandCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
         user = self.request.user
         org = getattr(user, 'organization', None)
         if org:
-            context['current_fiscal_year'] = FiscalYear.get_current_operating_year(org)
+            context['current_fiscal_year'] = FiscalYear.get_current_operating_year()
         return context
     
     def form_valid(self, form):
@@ -501,7 +499,7 @@ class CollectionCreateView(LoginRequiredMixin, CashierRequiredMixin, CreateView)
         org = getattr(user, 'organization', None)
         
         if org:
-            active_fy = FiscalYear.get_current_operating_year(org)
+            active_fy = FiscalYear.get_current_operating_year()
             if not active_fy:
                 messages.error(
                     request, 
