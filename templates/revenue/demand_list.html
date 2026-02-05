@@ -80,6 +80,8 @@ Description: Revenue Demand List Template
                         <th>Issue Date</th>
                         <th>Payer</th>
                         <th>Revenue Head</th>
+                        <th>Function</th>
+                        <th>Sub-code</th>
                         <th class="text-end">Amount</th>
                         <th>Status</th>
                         <th class="text-end">Actions</th>
@@ -95,6 +97,12 @@ Description: Revenue Demand List Template
                         <td>{{ demand.payer.name|truncatechars:25 }}</td>
                         <td>
                             <small class="text-muted">{{ demand.budget_head.tma_sub_object }}</small>
+                        </td>
+                        <td>
+                            <small>{{ demand.budget_head.function.code|default:"-" }}</small>
+                        </td>
+                        <td>
+                            <small>{{ demand.budget_head.sub_code|default:"-" }}</small>
                         </td>
                         <td class="text-end fw-bold">Rs. {{ demand.amount|intcomma }}</td>
                         <td>

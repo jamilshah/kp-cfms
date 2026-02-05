@@ -392,6 +392,20 @@ class RevenueDemand(AuditLogMixin, TenantAwareMixin):
         self.save(update_fields=[
             'accrual_voucher', 'status', 'posted_at', 'posted_by', 'updated_at'
         ])
+        
+        # Send notification to finance officers
+        from apps.core.services import NotificationService
+        from apps.core.models import NotificationCategory
+        finance_officers = self.organization.users.filter(role='FINANCE_OFFICER')
+        for officer in finance_officers:
+            NotificationService.send_notification(
+                recipient=officer,
+                title=f"Demand Posted: {self.challan_no}",
+                message=f"Revenue demand of Rs. {self.amount:,.2f} from {self.payer.name} has been posted to GL.",
+                link=f"/revenue/demands/{self.pk}/",
+                category=NotificationCategory.WORKFLOW,
+                icon='bi-receipt'
+            )
     
     @transaction.atomic
     def cancel(self, user: 'CustomUser', reason: str) -> None:

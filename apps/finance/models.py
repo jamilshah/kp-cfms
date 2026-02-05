@@ -12,6 +12,7 @@ import re
 from decimal import Decimal
 from typing import Optional
 from django.db import models
+from django.conf import settings
 from django.core.validators import RegexValidator, MinValueValidator
 from django.utils.translation import gettext_lazy as _
 
@@ -700,12 +701,13 @@ class Voucher(AuditLogMixin, TenantAwareMixin):
         """Check if voucher can be posted."""
         return not self.is_posted and self.is_balanced()
     
-    def post_voucher(self, user) -> None:
+    def post_voucher(self, user, reason='') -> None:
         """
         Post the voucher to the General Ledger.
         
         Args:
             user: The user posting the voucher.
+            reason: Optional reason/notes for posting.
             
         Raises:
             ValidationError: If voucher is not balanced or already posted.
@@ -726,10 +728,23 @@ class Voucher(AuditLogMixin, TenantAwareMixin):
         self.posted_at = timezone.now()
         self.posted_by = user
         self.save(update_fields=['is_posted', 'posted_at', 'posted_by', 'updated_at'])
+        
+        # Create audit log entry
+        VoucherAuditLog.objects.create(
+            voucher=self,
+            voucher_no=self.voucher_no,
+            action='POST',
+            user=user,
+            reason=reason
+        )
     
-    def unpost_voucher(self) -> None:
+    def unpost_voucher(self, user, reason='') -> None:
         """
         Unpost the voucher (reverse posting).
+        
+        Args:
+            user: The user unposting the voucher.
+            reason: Reason for unposting (required for audit).
         
         Raises:
             ValidationError: If voucher is not posted.
@@ -743,6 +758,89 @@ class Voucher(AuditLogMixin, TenantAwareMixin):
         self.posted_at = None
         self.posted_by = None
         self.save(update_fields=['is_posted', 'posted_at', 'posted_by', 'updated_at'])
+        
+        # Create audit log entry
+        VoucherAuditLog.objects.create(
+            voucher=self,
+            voucher_no=self.voucher_no,
+            action='UNPOST',
+            user=user,
+            reason=reason
+        )
+
+
+class VoucherAuditLog(models.Model):
+    """
+    Audit trail for voucher actions.
+    
+    Tracks all significant actions: POST, UNPOST, EDIT, DELETE.
+    Maintains complete history for accounting compliance.
+    
+    Attributes:
+        voucher: Parent voucher (nullable for deleted vouchers)
+        voucher_no: Voucher number (preserved even if voucher deleted)
+        action: Type of action performed
+        user: User who performed the action
+        timestamp: When the action occurred
+        reason: Optional reason/notes
+        ip_address: IP address of the user
+    """
+    
+    ACTION_CHOICES = [
+        ('POST', _('Posted to GL')),
+        ('UNPOST', _('Unposted from GL')),
+        ('EDIT', _('Edited')),
+        ('DELETE', _('Deleted')),
+    ]
+    
+    voucher = models.ForeignKey(
+        'Voucher',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='audit_logs',
+        verbose_name=_('Voucher')
+    )
+    voucher_no = models.CharField(
+        max_length=50,
+        verbose_name=_('Voucher Number')
+    )
+    action = models.CharField(
+        max_length=10,
+        choices=ACTION_CHOICES,
+        verbose_name=_('Action')
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        verbose_name=_('User')
+    )
+    timestamp = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('Timestamp')
+    )
+    reason = models.TextField(
+        blank=True,
+        verbose_name=_('Reason/Notes')
+    )
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        verbose_name=_('IP Address')
+    )
+    
+    class Meta:
+        verbose_name = _('Voucher Audit Log')
+        verbose_name_plural = _('Voucher Audit Logs')
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['voucher', '-timestamp']),
+            models.Index(fields=['voucher_no']),
+        ]
+    
+    def __str__(self):
+        return f"{self.voucher_no} - {self.get_action_display()} by {self.user} at {self.timestamp}"
 
 
 class JournalEntry(TimeStampedMixin):

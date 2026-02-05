@@ -124,20 +124,24 @@ class NotificationService:
         ).count()
     
     @staticmethod
-    def get_recent_notifications(user, limit: int = 10):
+    def get_recent_notifications(user, limit: int = 10, unread_only: bool = True):
         """
         Get recent notifications for a user.
         
         Args:
             user: CustomUser instance.
             limit: Maximum number of notifications to return (default: 10).
+            unread_only: If True, only return unread notifications (default: True for dropdown).
         
         Returns:
             QuerySet of recent notifications.
         """
-        return Notification.objects.filter(
-            recipient=user
-        ).order_by('-created_at')[:limit]
+        queryset = Notification.objects.filter(recipient=user)
+        
+        if unread_only:
+            queryset = queryset.filter(is_read=False)
+        
+        return queryset.order_by('-created_at')[:limit]
     
     @staticmethod
     @transaction.atomic

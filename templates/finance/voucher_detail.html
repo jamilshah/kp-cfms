@@ -217,13 +217,40 @@
     </div>
     {% endif %}
 
+    <!-- Unpost Voucher (if posted) -->
+    {% if voucher.is_posted %}
+    <div class="card border-warning mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Unpost Voucher</h5>
+            <p class="card-text">
+                Unpost this voucher to reverse its effect on the General Ledger. Use this to correct errors.
+            </p>
+            <form method="post" action="{% url 'finance:voucher_unpost' voucher.pk %}" onsubmit="return confirm('Are you sure you want to unpost this voucher? This will reverse all GL entries. You will be able to edit or delete it afterwards.');">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="unpostReason" class="form-label">Reason for Unposting <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="unpostReason" name="reason" rows="3" required placeholder="Explain why this voucher is being unposted (e.g., wrong account used, incorrect amount, etc.)"></textarea>
+                    <div class="form-text">This will be recorded in the audit trail.</div>
+                </div>
+                <button type="submit" class="btn btn-warning">
+                    <i class="bi bi-arrow-counterclockwise me-2"></i>Unpost Voucher
+                </button>
+            </form>
+            <p class="text-muted mt-3 mb-0">
+                <i class="bi bi-info-circle me-1"></i>
+                After unposting, you can edit or delete this voucher.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Audit Trail -->
-    <div class="card">
+    <div class="card mb-4">
         <div class="card-header">
             <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Audit Trail</h5>
         </div>
         <div class="card-body">
-            <dl class="row mb-0">
+            <dl class="row mb-3">
                 <dt class="col-sm-3">Created:</dt>
                 <dd class="col-sm-9">{{ voucher.created_at|date:"Y-m-d H:i:s" }} by {{ voucher.created_by }}</dd>
 
@@ -235,6 +262,42 @@
                 <dd class="col-sm-9">{{ voucher.posted_at|date:"Y-m-d H:i:s" }} by {{ voucher.posted_by }}</dd>
                 {% endif %}
             </dl>
+            
+            {% if voucher.audit_logs.exists %}
+            <h6 class="border-top pt-3 mb-3">Action History</h6>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Action</th>
+                            <th>User</th>
+                            <th>Reason/Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in voucher.audit_logs.all %}
+                        <tr>
+                            <td>{{ log.timestamp|date:"Y-m-d H:i:s" }}</td>
+                            <td>
+                                {% if log.action == 'POST' %}
+                                    <span class="badge bg-success">{{ log.get_action_display }}</span>
+                                {% elif log.action == 'UNPOST' %}
+                                    <span class="badge bg-warning">{{ log.get_action_display }}</span>
+                                {% elif log.action == 'EDIT' %}
+                                    <span class="badge bg-info">{{ log.get_action_display }}</span>
+                                {% elif log.action == 'DELETE' %}
+                                    <span class="badge bg-danger">{{ log.get_action_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ log.user }}</td>
+                            <td>{{ log.reason|default:"-" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>

@@ -45,7 +45,12 @@ Description: Notification dropdown list (recent notifications for navbar).
 </div>
 {% else %}
 <div class="text-center p-4 text-muted">
-    <i class="bi bi-bell-slash fs-3"></i>
-    <p class="mb-0 mt-2">No notifications</p>
+    <i class="bi bi-check-circle fs-3"></i>
+    <p class="mb-0 mt-2">No new notifications</p>
+    <small>All caught up!</small>
+</div>
+<div class="dropdown-divider"></div>
+<div class="text-center p-2">
+    <a href="{% url 'core:notification_list' %}" class="btn btn-sm btn-link">View All Notifications</a>
 </div>
 {% endif %}

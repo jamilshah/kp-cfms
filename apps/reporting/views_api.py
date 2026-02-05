@@ -23,25 +23,30 @@ class BudgetHeadAutocompleteView(LoginRequiredMixin, TenantAwareMixin, View):
         if len(query) < 2:
             return JsonResponse({'results': []})
         
-        # Search in code and name
+        # Search in code, name, function, sub-code, and ID
         budget_heads = BudgetHead.objects.filter(
             is_active=True
         ).filter(
+            Q(id__icontains=query) |
             Q(global_head__code__icontains=query) |
             Q(global_head__name__icontains=query) |
-            Q(function__code__icontains=query)
+            Q(function__code__icontains=query) |
+            Q(function__name__icontains=query) |
+            Q(sub_code__icontains=query)
         ).select_related(
             'fund', 'function', 'global_head'
         ).distinct()[:50]  # Limit to 50 results
         
         results = []
         for head in budget_heads:
-            # Show full code with function name to differentiate similar budget heads
-            # e.g., "FGEN-AD-H01105 - Retained Earnings [Admin]"
+            # Show full code with function name and sub-code to differentiate similar budget heads
+            # e.g., "FGEN-AD-H01105-01 - Retained Earnings [Admin] (Sub: 01)"
             function_name = head.function.name if head.function else ""
             display_text = f"{head.code} - {head.global_head.name}"
             if function_name:
                 display_text += f" [{function_name}]"
+            if head.sub_code:
+                display_text += f" (Sub: {head.sub_code})"
             
             results.append({
                 'id': head.id,

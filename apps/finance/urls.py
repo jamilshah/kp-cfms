@@ -35,6 +35,7 @@ from apps.finance.views import (
     VoucherCreateView,
     VoucherDetailView,
     PostVoucherView,
+    UnpostVoucherView,
     
     # AJAX Views
     load_functions,
@@ -76,6 +77,7 @@ urlpatterns = [
     path('vouchers/create/', VoucherCreateView.as_view(), name='voucher_create'),
     path('vouchers/<int:pk>/', VoucherDetailView.as_view(), name='voucher_detail'),
     path('vouchers/<int:pk>/post/', PostVoucherView.as_view(), name='voucher_post'),
+    path('vouchers/<int:pk>/unpost/', UnpostVoucherView.as_view(), name='voucher_unpost'),
     
     # AJAX
     path('ajax/load-functions/', load_functions, name='load_functions'),

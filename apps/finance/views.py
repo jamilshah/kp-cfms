@@ -1134,6 +1134,45 @@ class PostVoucherView(LoginRequiredMixin, View):
         return redirect('finance:voucher_detail', pk=pk)
 
 
+class UnpostVoucherView(LoginRequiredMixin, View):
+    """
+    Unpost a voucher (reverse posting).
+    
+    Only allowed if:
+    - Voucher is currently posted
+    - User has permission to unpost
+    
+    Use case: Correcting errors in posted vouchers
+    """
+    
+    def post(self, request, pk):
+        user = request.user
+        org = getattr(user, 'organization', None)
+        
+        voucher = get_object_or_404(
+            Voucher.objects.filter(organization=org),
+            pk=pk
+        )
+        
+        # Check if already unposted
+        if not voucher.is_posted:
+            messages.warning(request, _('Voucher is already unposted.'))
+            return redirect('finance:voucher_detail', pk=pk)
+        
+        try:
+            with transaction.atomic():
+                reason = request.POST.get('reason', 'Unposted for correction')
+                voucher.unpost_voucher(user=user, reason=reason)
+                messages.success(
+                    request, 
+                    _('Voucher unposted successfully. You can now edit or delete it.')
+                )
+        except Exception as e:
+            messages.error(request, _('Error unposting voucher: ') + str(e))
+        
+        return redirect('finance:voucher_detail', pk=pk)
+
+
 # ============================================================================
 # AJAX Views for Dynamic Filtering
 # ============================================================================

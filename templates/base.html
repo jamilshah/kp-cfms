@@ -357,7 +357,7 @@ Description: Base template with Bootstrap 5 and navigation.
             <div class="accordion-item bg-transparent border-0">
                 <h2 class="accordion-header" id="headingBudgetReports">
                     <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseBudgetReports" aria-expanded="false" aria-controls="collapseBudgetReports">
-                        <i class="bi bi-file-earmark-text me-2"></i> Budget Reports
+                        <i class="bi bi-file-earmark-text me-2"></i> Financial Reports
                     </button>
                 </h2>
                 <div id="collapseBudgetReports" class="accordion-collapse collapse {% if 'sae' in request.resolver_match.url_name %}show{% endif %}" aria-labelledby="headingBudgetReports" data-bs-parent="#sidebarAccordion">
@@ -428,7 +428,7 @@ Description: Base template with Bootstrap 5 and navigation.
             <div class="accordion-item bg-transparent border-0">
                 <h2 class="accordion-header" id="headingReporting">
                     <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseReporting" aria-expanded="false" aria-controls="collapseReporting">
-                        <i class="bi bi-file-earmark-bar-graph me-2"></i> Budget Reports
+                        <i class="bi bi-file-earmark-bar-graph me-2"></i> Financial Reports
                     </button>
                 </h2>
                 <div id="collapseReporting" class="accordion-collapse collapse {% if request.resolver_match.app_name == 'reporting' %}show{% endif %}" aria-labelledby="headingReporting" data-bs-parent="#sidebarAccordion">

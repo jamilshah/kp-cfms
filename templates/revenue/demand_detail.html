@@ -71,7 +71,11 @@ Description: Revenue Demand Detail Template with Collection History
                     <dt class="col-sm-4">Revenue Head</dt>
                     <dd class="col-sm-8">
                         {{ demand.budget_head.tma_sub_object }}<br>
-                        <small class="text-muted">{{ demand.budget_head.tma_description }}</small>
+                        <small class="text-muted">{{ demand.budget_head.tma_description }}</small><br>
+                        <small class="text-muted">
+                            Function: {{ demand.budget_head.function.code }} - {{ demand.budget_head.function.name }}<br>
+                            Sub-code: {{ demand.budget_head.sub_code|default:"-" }}
+                        </small>
                     </dd>
                     
                     <dt class="col-sm-4">Issue Date</dt>
