@@ -257,9 +257,13 @@ class BillLineForm(forms.ModelForm):
         # to allow validation to pass
         if 'data' in kwargs or args:
             # Show all active expenditure budget heads for validation
+            # Match the filters used in load_budget_heads AJAX endpoint
             self.fields['budget_head'].queryset = BudgetHead.objects.filter(
                 global_head__account_type=AccountType.EXPENDITURE,
+                posting_allowed=True,
                 is_active=True
+            ).exclude(
+                global_head__code__startswith='A01'  # Exclude salary heads
             ).order_by('global_head__code')
             self.fields['budget_head'].help_text = ''
         else:

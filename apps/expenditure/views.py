@@ -348,23 +348,36 @@ class BillDetailView(LoginRequiredMixin, DetailView):
         
         context['can_pay'] = bill.status == BillStatus.APPROVED
         
-        # Get budget allocation info for each line
+        # Get budget allocation info aggregated by budget head
         line_allocations = []
         if bill.fiscal_year:
+            # Group lines by budget_head and sum amounts
+            from collections import defaultdict
+            budget_head_totals = defaultdict(Decimal)
+            budget_head_objects = {}
+            
             for line in bill.lines.all():
+                budget_head_totals[line.budget_head.id] += line.amount
+                budget_head_objects[line.budget_head.id] = line.budget_head
+            
+            # Create allocation entries for each unique budget head
+            for budget_head_id, total_amount in budget_head_totals.items():
+                budget_head = budget_head_objects[budget_head_id]
                 try:
                     allocation = BudgetAllocation.objects.get(
                         organization=bill.organization,
                         fiscal_year=bill.fiscal_year,
-                        budget_head=line.budget_head
+                        budget_head=budget_head
                     )
                     line_allocations.append({
-                        'line': line,
+                        'budget_head': budget_head,
+                        'total_amount': total_amount,
                         'allocation': allocation
                     })
                 except BudgetAllocation.DoesNotExist:
                     line_allocations.append({
-                        'line': line,
+                        'budget_head': budget_head,
+                        'total_amount': total_amount,
                         'allocation': None
                     })
         context['line_allocations'] = line_allocations

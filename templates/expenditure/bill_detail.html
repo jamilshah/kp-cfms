@@ -149,11 +149,11 @@ Description: Bill Detail Template with Workflow Actions
                         </thead>
                         <tbody>
                             {% for item in line_allocations %}
-                            {% with alloc=item.allocation line=item.line %}
+                            {% with alloc=item.allocation budget_head=item.budget_head %}
                             <tr>
                                 <td>
-                                    <small class="d-block fw-bold">{{ line.budget_head.code }}</small>
-                                    <small class="text-muted">{{ line.budget_head.name|truncatechars:20 }}</small>
+                                    <small class="d-block fw-bold">{{ budget_head.code }}</small>
+                                    <small class="text-muted">{{ budget_head.name|truncatechars:20 }}</small>
                                 </td>
                                 {% if alloc %}
                                 <td class="text-end align-middle">{{ alloc.revised_allocation|currency }}</td>

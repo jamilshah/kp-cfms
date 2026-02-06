@@ -245,7 +245,7 @@ Description: Bill Create/Edit Form Template
 
 {% block extra_js %}
 <!-- Template for new row (hidden) -->
-<div id="emptyRowTemplate" style="display: none;">
+<script type="text/template" id="emptyRowTemplate">
     <div class="card mb-3 line-row">
         <div class="card-body">
             <div class="row mb-3">
@@ -274,7 +274,7 @@ Description: Bill Create/Edit Form Template
             </div>
         </div>
     </div>
-</div>
+</script>
 
 <!-- Hidden container for HTMX response scripts -->
 <div id="budget-head-options" style="display:none;"></div>
@@ -316,11 +316,21 @@ Description: Bill Create/Edit Form Template
                     
                     // Reinitialize Select2 for function dropdown WITHOUT triggering change
                     if (typeof $ !== 'undefined') {
-                        $(functionSelect).select2('destroy').select2({
+                        // Check if select2 is initialized before destroying
+                        if ($(functionSelect).data('select2')) {
+                            $(functionSelect).select2('destroy');
+                        }
+                        
+                        $(functionSelect).select2({
                             theme: 'bootstrap-5',
                             width: '100%',
                             placeholder: "Select function...",
                             allowClear: true
+                        });
+                        
+                        // Attach change event listener for budget heads
+                        $(functionSelect).off('change').on('change', function() {
+                            loadBudgetHeads();
                         });
                         
                         // Force clear the value in Select2
@@ -334,9 +344,18 @@ Description: Bill Create/Edit Form Template
         
         function clearBudgetHeads() {
             document.querySelectorAll('select[name$="-budget_head"]').forEach(select => {
+                // Skip template row
+                if (select.closest('script')) return; // Check if inside script tag
+                if (select.name.includes('__prefix__')) return;
+
                 select.innerHTML = '<option value="">---------</option>';
                 if (typeof $ !== 'undefined') {
-                    $(select).select2('destroy').select2({
+                     // Check if select2 is initialized before destroying
+                    if ($(select).data('select2')) {
+                        $(select).select2('destroy');
+                    }
+                    
+                    $(select).select2({
                         theme: 'bootstrap-5',
                         width: '100%',
                         placeholder: "Select function first"
@@ -386,6 +405,10 @@ Description: Bill Create/Edit Form Template
                     console.log('Updating', selects.length, 'select elements');
                     
                     selects.forEach(select => {
+                        // Skip template row
+                        if (select.closest('script')) return;
+                        if (select.name.includes('__prefix__')) return;
+
                         const currentValue = select.value; // Preserve selected value
                         select.innerHTML = currentBudgetHeadOptions;
                         
@@ -396,7 +419,12 @@ Description: Bill Create/Edit Form Template
                         
                         // Reinitialize Select2
                         if (typeof $ !== 'undefined') {
-                            $(select).select2('destroy').select2({
+                             // Check if select2 is initialized before destroying
+                            if ($(select).data('select2')) {
+                                $(select).select2('destroy');
+                            }
+                            
+                            $(select).select2({
                                 theme: 'bootstrap-5',
                                 width: '100%',
                                 placeholder: "Search Budget Head...",
@@ -421,14 +449,6 @@ Description: Bill Create/Edit Form Template
                     loadFunctions();
                 }, 100);
             }
-        }
-        
-        if (functionSelect) {
-            functionSelect.addEventListener('change', loadBudgetHeads);
-        }
-        
-        if (functionSelect) {
-            functionSelect.addEventListener('change', loadBudgetHeads);
         }
         
         // --- FormSet Logic ---
@@ -492,6 +512,11 @@ Description: Bill Create/Edit Form Template
              // Initialize Select2
             const select = row.querySelector('select');
             if (select && typeof $ !== 'undefined') {
+                 // Check if select2 is initialized before destroying
+                if ($(select).data('select2')) {
+                    $(select).select2('destroy');
+                }
+                
                  $(select).select2({
                     theme: 'bootstrap-5',
                     width: '100%',
@@ -522,7 +547,7 @@ Description: Bill Create/Edit Form Template
         });
         
         // Initial setup for existing rows
-        document.querySelectorAll('.line-row').forEach(row => {
+        document.querySelectorAll('#linesContainer .line-row').forEach(row => {
             attachRowListeners(row);
         });
         
