@@ -387,13 +387,39 @@ class FinanceWorkspaceView(LoginRequiredMixin, TemplateView):
         from apps.budgeting.models import BudgetAllocation
         from django.db.models import Sum, Q
         
-        # Action Queue: Bills awaiting verification (after pre-audit)
-        # Finance workspace shows AUDITED bills that need verification by TO Finance
-        pending_bills = Bill.objects.filter(
-            organization=organization,
-            fiscal_year=fiscal_year,
-            status=BillStatus.AUDITED  # Bills that passed pre-audit, awaiting verification
-        ).select_related('payee').prefetch_related('lines__budget_head__global_head').order_by('-bill_date')[:10]
+        # Action Queue: Bills awaiting action based on user role
+        # Finance Officer sees SUBMITTED bills (awaiting pre-audit)
+        # TO Finance (Verifier) sees AUDITED bills (awaiting verification)
+        
+        if user.has_any_role(['FINANCE_OFFICER']):
+            # Finance Officer: Show bills awaiting pre-audit
+            pending_bills = Bill.objects.filter(
+                organization=organization,
+                fiscal_year=fiscal_year,
+                status=BillStatus.SUBMITTED
+            ).select_related('payee').prefetch_related('lines__budget_head__global_head').order_by('-bill_date')[:10]
+            context['workspace_role'] = 'Finance Officer'
+            context['workspace_action'] = 'Pre-Audit'
+            
+        elif user.has_any_role(['TOF', 'ACCOUNTANT']):
+            # TO Finance / Accountant: Show bills awaiting verification
+            pending_bills = Bill.objects.filter(
+                organization=organization,
+                fiscal_year=fiscal_year,
+                status=BillStatus.AUDITED
+            ).select_related('payee').prefetch_related('lines__budget_head__global_head').order_by('-bill_date')[:10]
+            context['workspace_role'] = 'TO Finance'
+            context['workspace_action'] = 'Verify'
+            
+        else:
+            # Fallback/Superuser: Show both queues or just default to common view
+            pending_bills = Bill.objects.filter(
+                organization=organization,
+                fiscal_year=fiscal_year,
+                status__in=[BillStatus.SUBMITTED, BillStatus.AUDITED]
+            ).select_related('payee').prefetch_related('lines__budget_head__global_head').order_by('-bill_date')[:10]
+            context['workspace_role'] = 'Finance'
+            context['workspace_action'] = 'Review'
         
         context['pending_bills'] = pending_bills
         context['pending_bills_count'] = pending_bills.count()

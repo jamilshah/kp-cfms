@@ -160,6 +160,7 @@ class MasterDataSeedView(LoginRequiredMixin, SuperAdminRequiredMixin, TemplateVi
             'import_coa': 'import_coa',
             'import_locations': 'import_locations',
             'migrate_roles': 'migrate_roles',
+            'seed_tax_rates': 'seed_tax_rates',  # Tax withholding configuration
         }
         
         if command_name not in allowed_commands:

@@ -439,3 +439,43 @@ class GlobalHeadForm(forms.ModelForm):
             }),
         }
 
+
+from apps.expenditure.models_tax_config import TaxRateConfiguration
+
+class TaxRateConfigurationForm(forms.ModelForm):
+    """Form for editing Tax Rate configurations."""
+    
+    class Meta:
+        model = TaxRateConfiguration
+        fields = '__all__'
+        exclude = ['created_at', 'updated_at', 'created_by', 'updated_by']
+        widgets = {
+            'tax_year': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. 2025-26'}),
+            'effective_from': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'effective_to': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            
+            # Rate inputs
+            'goods_filer_company': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            'goods_filer_individual': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            'goods_nonfiler_company': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            'goods_nonfiler_individual': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            
+            'services_filer': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            'services_nonfiler': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            
+            'works_filer_company': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            'works_filer_individual': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            'works_nonfiler_company': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            'works_nonfiler_individual': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            
+            'sales_tax_goods_filer': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            'sales_tax_goods_nonfiler': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            'sales_tax_services_filer': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            'sales_tax_services_nonfiler': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            'sales_tax_works': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            
+            'stamp_duty_rate': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+            'standard_sales_tax_rate': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001'}),
+        }

@@ -20,3 +20,4 @@ class ExpenditureConfig(AppConfig):
     def ready(self):
         """Import signal handlers when app is ready."""
         import apps.expenditure.signals  # noqa
+        import apps.expenditure.admin_tax_config  # noqa - Register tax config admin

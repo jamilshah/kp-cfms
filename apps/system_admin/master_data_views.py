@@ -19,10 +19,12 @@ from django.urls import reverse_lazy
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 
 from apps.core.models import Division, District, Tehsil, Organization
-from apps.finance.models import Fund, BudgetHead
+from apps.finance.models import Fund, BudgetHead, GlobalHead
 from apps.budgeting.models import Department, DesignationMaster, BPSSalaryScale
 from apps.users.models import Role
 from apps.users.permissions import SuperAdminRequiredMixin
+from apps.expenditure.models_tax_config import TaxRateConfiguration
+from .forms import GlobalHeadForm, TaxRateConfigurationForm
 
 
 # =============================================================================
@@ -170,6 +172,72 @@ class OrganizationsTemplateView(CSVTemplateDownloadView):
         ['TMA Peshawar City', 'Peshawar City', 'TMA', 'DDO-PSH-001', 'PLA-001', 'TRUE'],
         ['TMA Abbottabad', 'Abbottabad', 'TMA', 'DDO-ABT-001', 'PLA-002', 'TRUE'],
     ]
+
+
+# =============================================================================
+# Tax Rate Configuration Views
+# =============================================================================
+
+class TaxRateConfigurationListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
+    """List all tax rate configurations."""
+    model = TaxRateConfiguration
+    template_name = 'system_admin/master_data/tax_rate_list.html'
+    context_object_name = 'configurations'
+    
+    def get_queryset(self):
+        return TaxRateConfiguration.objects.order_by('-is_active', '-effective_from')
+
+
+class TaxRateConfigurationCreateView(LoginRequiredMixin, SuperAdminRequiredMixin, CreateView):
+    """Create a new tax rate configuration."""
+    model = TaxRateConfiguration
+    form_class = TaxRateConfigurationForm
+    template_name = 'system_admin/master_data/tax_rate_form.html'
+    success_url = reverse_lazy('system_admin:tax_rate_list')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Tax Rate Configuration "{form.instance.tax_year}" created successfully.')
+        return super().form_valid(form)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = 'Add Tax Rate Configuration'
+        context['is_edit'] = False
+        return context
+
+
+class TaxRateConfigurationUpdateView(LoginRequiredMixin, SuperAdminRequiredMixin, UpdateView):
+    """Update a tax rate configuration."""
+    model = TaxRateConfiguration
+    form_class = TaxRateConfigurationForm
+    template_name = 'system_admin/master_data/tax_rate_form.html'
+    success_url = reverse_lazy('system_admin:tax_rate_list')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Tax Rate Configuration "{form.instance.tax_year}" updated successfully.')
+        return super().form_valid(form)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = 'Edit Tax Rate Configuration'
+        context['is_edit'] = True
+        return context
+
+
+
+class TaxRateActivateView(LoginRequiredMixin, SuperAdminRequiredMixin, View):
+    """Activate a specific tax rate configuration."""
+    
+    def post(self, request, pk):
+        try:
+            config = TaxRateConfiguration.objects.get(pk=pk)
+            config.is_active = True
+            config.save()  # The model's save() will deactivate others
+            messages.success(request, f'Tax rate configuration "{config.tax_year}" activated successfully.')
+        except TaxRateConfiguration.DoesNotExist:
+            messages.error(request, 'Tax rate configuration not found.')
+        
+        return redirect('system_admin:tax_rate_list')
 
 
 # =============================================================================
@@ -400,9 +468,6 @@ class TehsilDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
 # Global Head CRUD Views
 # =============================================================================
 
-
-from apps.finance.models import GlobalHead
-from .forms import GlobalHeadForm
 
 class GlobalHeadListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
     """List all global heads."""

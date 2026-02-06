@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Tax Rate Configurations - Master Data - CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:dashboard' %}">System Admin</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'system_admin:master_data_seed' %}">Master Data</a></li>
+            <li class="breadcrumb-item active">Tax Rate Configurations</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-percent me-2"></i>Tax Rate Configurations</h2>
+            <p class="text-muted mb-0">Manage tax withholding rates for income tax, sales tax, and stamp duty</p>
+        </div>
+        <a href="{% url 'system_admin:tax_rate_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i> Add Configuration
+        </a>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Data Table -->
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Tax Year</th>
+                            <th>Effective From</th>
+                            <th>Effective To</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th class="text-end pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for config in configurations %}
+                            <tr {% if config.is_active %}class="table-success"{% endif %}>
+                                <td class="ps-4 fw-bold">{{ config.tax_year }}</td>
+                                <td>{{ config.effective_from|date:"M d, Y" }}</td>
+                                <td>
+                                    {% if config.effective_to %}
+                                        {{ config.effective_to|date:"M d, Y" }}
+                                    {% else %}
+                                        <span class="text-muted">Indefinite</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if config.is_active %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle me-1"></i>Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ config.created_at|date:"M d, Y" }}</small>
+                                </td>
+                                <td class="text-end pe-4">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{% url 'system_admin:tax_rate_edit' config.pk %}" 
+                                           class="btn btn-outline-primary" 
+                                           title="Edit">
+                                            <i class="bi bi-pencil"></i> Edit
+                                        </a>
+                                        {% if not config.is_active %}
+                                        <form method="post" action="{% url 'system_admin:tax_rate_activate' config.pk %}" class="d-inline">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-success" title="Activate">
+                                                <i class="bi bi-check-circle"></i> Activate
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-5 text-muted">
+                                    <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                                    No tax rate configurations found.
+                                    <div class="mt-3">
+                                        <a href="{% url 'system_admin:master_data_seed' %}" class="btn btn-primary">
+                                            <i class="bi bi-play-fill me-1"></i> Initialize Default Rates
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Card -->
+    <div class="card shadow-sm mt-4 border-info">
+        <div class="card-header bg-info bg-opacity-10">
+            <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>About Tax Rate Configurations</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="text-primary">What are Tax Rate Configurations?</h6>
+                    <p class="small text-muted">
+                        Tax rate configurations define the withholding rates for income tax (Section 153), 
+                        sales tax, and stamp duty as per FBR and KPRA regulations. These rates are applied 
+                        automatically when creating bills.
+                    </p>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="text-primary">How to Update Rates?</h6>
+                    <p class="small text-muted">
+                        Only one configuration can be active at a time. When FBR/KPRA issues new rates:
+                    </p>
+                    <ol class="small text-muted">
+                        <li>Create a new configuration with updated rates</li>
+                        <li>Set the effective date</li>
+                        <li>Activate it (previous configuration will auto-deactivate)</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

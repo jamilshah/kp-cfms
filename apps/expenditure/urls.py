@@ -15,7 +15,8 @@ from apps.expenditure.views import (
     BillListView, BillCreateView, BillDetailView,
     BillSubmitView, BillPreAuditView, BillVerifyView, BillApproveView,
     PaymentCreateView, PaymentListView,
-    BillAmountAPIView, load_budget_heads, load_functions, load_payees
+    BillAmountAPIView, load_budget_heads, load_functions, load_payees,
+    get_payee_default_budget_head, calculate_taxes_ajax
 )
 from apps.expenditure.views import BankAccountNextChequeAPIView
 from apps.expenditure.views_salary import (
@@ -57,4 +58,6 @@ urlpatterns = [
     path('ajax/load-budget-heads/', load_budget_heads, name='load_budget_heads'),
     path('ajax/load-functions/', load_functions, name='load_functions'),
     path('ajax/load-payees/', load_payees, name='load_payees'),
+    path('ajax/payee-default-head/', get_payee_default_budget_head, name='payee_default_head'),
+    path('ajax/calculate-taxes/', calculate_taxes_ajax, name='calculate_taxes_ajax'),
 ]

@@ -279,16 +279,12 @@ Description: Bill Detail Template with Workflow Actions
                 <div class="card bg-light mb-3">
                     <div class="card-body">
                         <h6 class="card-title">Pre-Audit (Finance Officer)</h6>
-                        <form method="post" action="{% url 'expenditure:bill_pre_audit' bill.pk %}">
-                            {% csrf_token %}
-                            <p class="small text-muted mb-3">
-                                Review bill details and forward to TO for verification.
-                            </p>
-                            <button type="submit" class="btn btn-primary w-100 mb-2" 
-                                    onclick="return confirm('Pre-audit and forward to TO?');">
-                                <i class="bi bi-check-circle"></i> Pre-Audit & Forward
-                            </button>
-                        </form>
+                        <p class="small text-muted mb-3">
+                            Review bill details (budget heads, transaction type, taxes), add observations, and forward to TO for verification.
+                        </p>
+                        <a href="{% url 'expenditure:bill_pre_audit' bill.pk %}" class="btn btn-primary w-100">
+                            <i class="bi bi-clipboard-check"></i> Review & Pre-Audit
+                        </a>
                     </div>
                 </div>
                 {% endif %}

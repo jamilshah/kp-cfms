@@ -188,6 +188,7 @@ class SystemCode(models.TextChoices):
     # Tax Accounts (for expenditure workflow)
     TAX_IT = 'TAX_IT', _('Income Tax Payable')
     TAX_GST = 'TAX_GST', _('GST/Sales Tax Payable')
+    TAX_STAMP = 'TAX_STAMP', _('Stamp Duty Payable')
 
 
 class GlobalHead(TimeStampedMixin):

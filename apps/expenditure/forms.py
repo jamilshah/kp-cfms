@@ -30,7 +30,8 @@ class PayeeForm(forms.ModelForm):
         model = Payee
         fields = [
             'name', 'cnic_ntn', 'address', 'phone', 
-            'email', 'bank_name', 'bank_account'
+            'email', 'bank_name', 'bank_account', 'default_global_head',
+            'tax_status', 'entity_type', 'tax_status_verified_date'  # NEW
         ]
         widgets = {
             'name': forms.TextInput(attrs={
@@ -62,7 +63,46 @@ class PayeeForm(forms.ModelForm):
                 'class': 'form-control',
                 'placeholder': 'Bank account number'
             }),
+            'default_global_head': forms.Select(attrs={
+                'class': 'form-control searchable-select',
+                'placeholder': 'Select default expense type (optional)'
+            }),
+            'tax_status': forms.Select(attrs={
+                'class': 'form-select',
+            }),
+            'entity_type': forms.Select(attrs={
+                'class': 'form-select',
+            }),
+            'tax_status_verified_date': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date'
+            }),
         }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Filter to show only expenditure global heads (excluding salary)
+        from apps.finance.models import GlobalHead, AccountType
+        self.fields['default_global_head'].queryset = GlobalHead.objects.filter(
+            account_type=AccountType.EXPENDITURE
+        ).exclude(
+            code__startswith='A01'  # Exclude salary heads
+        ).order_by('code')
+    
+    def clean(self):
+        """Validate tax-related fields."""
+        cleaned_data = super().clean()
+        cnic_ntn = cleaned_data.get('cnic_ntn')
+        tax_status = cleaned_data.get('tax_status')
+        
+        # If NTN provided, recommend tax status verification
+        if cnic_ntn and len(cnic_ntn) > 0:
+            # This is just a warning, not blocking
+            if not tax_status or tax_status == 'NON_FILER':
+                # Could add a message here if needed
+                pass
+        
+        return cleaned_data
 
 
 class BillForm(forms.ModelForm):
@@ -75,16 +115,29 @@ class BillForm(forms.ModelForm):
     - Auto-calculation of net_amount
     """
     
+    # Tax override reason field (only visible to Pre-Auditor/Verifier)
+    tax_override_reason = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 2,
+            'placeholder': 'Reason for tax override (required if changing calculated amounts)'
+        }),
+        label=_('Tax Override Reason'),
+        help_text=_('Explain why you are changing the system-calculated tax amounts.')
+    )
+    
     class Meta:
         model = Bill
         fields = [
             'payee', 'bill_date',
-            'bill_number', 'description', 
-            'gross_amount', 'tax_amount'
+            'bill_number', 'description',
+            'transaction_type',  # NEW
+            'gross_amount',
+            'income_tax_amount', 'sales_tax_amount', 'stamp_duty_amount',  # NEW (replacing tax_amount)
         ]
         widgets = {
             'payee': forms.Select(attrs={'class': 'form-select searchable-select'}),
-            # 'budget_head': Remove as it is now in lines
             'bill_date': forms.DateInput(attrs={
                 'class': 'form-control',
                 'type': 'date'
@@ -98,17 +151,37 @@ class BillForm(forms.ModelForm):
                 'rows': 3,
                 'placeholder': 'Description of goods/services'
             }),
+            'transaction_type': forms.Select(attrs={
+                'class': 'form-select',
+                'id': 'id_transaction_type'
+            }),
             'gross_amount': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'step': '0.01',
                 'min': '0.01',
-                'placeholder': '0.00'
+                'placeholder': '0.00',
+                'id': 'id_gross_amount'
             }),
-            'tax_amount': forms.NumberInput(attrs={
-                'class': 'form-control',
+            'income_tax_amount': forms.NumberInput(attrs={
+                'class': 'form-control tax-field',
                 'step': '0.01',
                 'min': '0.00',
-                'placeholder': '0.00'
+                'readonly': 'readonly',  # Default read-only, changed based on role
+                'id': 'id_income_tax_amount'
+            }),
+            'sales_tax_amount': forms.NumberInput(attrs={
+                'class': 'form-control tax-field',
+                'step': '0.01',
+                'min': '0.00',
+                'readonly': 'readonly',
+                'id': 'id_sales_tax_amount'
+            }),
+            'stamp_duty_amount': forms.NumberInput(attrs={
+                'class': 'form-control tax-field',
+                'step': '0.01',
+                'min': '0.00',
+                'readonly': 'readonly',
+                'id': 'id_stamp_duty_amount'
             }),
         }
     
@@ -139,10 +212,28 @@ class BillForm(forms.ModelForm):
         
         Args:
             organization: The organization to filter related objects.
-            user: The logged-in user for default department selection.
+            user: The logged-in user for default department selection and role-based permissions.
         """
         super().__init__(*args, **kwargs)
         self._current_fiscal_year = None
+        self.user = user
+        self._calculated_taxes = None  # Store calculated values for comparison
+        
+        # Role-based field permissions for tax fields
+        if user:
+            user_role = getattr(user, 'role', None)
+            
+            if user_role in ['PRE_AUDITOR', 'VERIFIER', 'TO_FINANCE', 'TMO']:
+                # Allow editing tax fields for these roles
+                for field_name in ['income_tax_amount', 'sales_tax_amount', 'stamp_duty_amount']:
+                    if field_name in self.fields:
+                        self.fields[field_name].widget.attrs.pop('readonly', None)
+                        self.fields[field_name].help_text = _(
+                            'System-calculated. You can override if vendor invoice shows different amount.'
+                        )
+            else:
+                # DA/Maker: fields remain read-only, remove override reason field
+                self.fields.pop('tax_override_reason', None)
         
         # Auto-select department based on user profile
         if not self.initial.get('department') and user and getattr(user, 'department', None):
@@ -198,17 +289,16 @@ class BillForm(forms.ModelForm):
     
     def clean(self) -> dict:
         """
-        Validate the form data.
+        Validate the form data and calculate taxes.
         
         Checks:
         - Fiscal year is active and not locked
-        - Budget allocation exists for the selected head
+        - Automatic tax calculation using TaxCalculator
+        - Tax override validation (requires reason if changed)
         """
         cleaned_data = super().clean()
         fiscal_year = cleaned_data.get('fiscal_year')
-        # budget_head = cleaned_data.get('budget_head') # Removed
         gross_amount = cleaned_data.get('gross_amount')
-        tax_amount = cleaned_data.get('tax_amount', Decimal('0.00'))
         
         if fiscal_year:
             if fiscal_year.is_locked:
@@ -223,12 +313,60 @@ class BillForm(forms.ModelForm):
                     'fiscal_year': _('Bills can only be created for the current operating fiscal year.')
                 })
         
-        # Refactored: Budget allocation check moved to Bill.approve() for each line
-        # if budget_head and fiscal_year ...
+        # Calculate expected tax amounts using TaxCalculator
+        if cleaned_data.get('payee') and gross_amount:
+            from apps.expenditure.services_tax import TaxCalculator
+            from apps.expenditure.models import TransactionType
+            
+            # Create temporary bill instance for calculation
+            temp_bill = Bill(
+                payee=cleaned_data['payee'],
+                transaction_type=cleaned_data.get('transaction_type', TransactionType.SERVICES),
+                gross_amount=gross_amount
+            )
+            
+            calculator = TaxCalculator()
+            self._calculated_taxes = calculator.calculate_taxes(temp_bill)
+            
+            # Check if user overrode any tax amounts
+            if self.user and getattr(self.user, 'role', None) in ['PRE_AUDITOR', 'VERIFIER', 'TO_FINANCE', 'TMO']:
+                income_tax = cleaned_data.get('income_tax_amount', Decimal('0.00'))
+                sales_tax = cleaned_data.get('sales_tax_amount', Decimal('0.00'))
+                stamp_duty = cleaned_data.get('stamp_duty_amount', Decimal('0.00'))
+                
+                has_override = (
+                    income_tax != self._calculated_taxes['income_tax'] or
+                    sales_tax != self._calculated_taxes['sales_tax'] or
+                    stamp_duty != self._calculated_taxes['stamp_duty']
+                )
+                
+                if has_override and not cleaned_data.get('tax_override_reason'):
+                    raise forms.ValidationError({
+                        'tax_override_reason': _(
+                            'You must provide a reason when overriding system-calculated tax amounts.'
+                        )
+                    })
+            else:
+                # For DA/Maker: use calculated values (read-only fields)
+                cleaned_data['income_tax_amount'] = self._calculated_taxes['income_tax']
+                cleaned_data['sales_tax_amount'] = self._calculated_taxes['sales_tax']
+                cleaned_data['stamp_duty_amount'] = self._calculated_taxes['stamp_duty']
         
-        # Calculate net amount
-        if gross_amount and tax_amount is not None:
-            cleaned_data['net_amount'] = gross_amount - tax_amount
+        # Calculate total tax and net amount
+        income_tax = cleaned_data.get('income_tax_amount', Decimal('0.00'))
+        sales_tax = cleaned_data.get('sales_tax_amount', Decimal('0.00'))
+        stamp_duty = cleaned_data.get('stamp_duty_amount', Decimal('0.00'))
+        
+        total_tax = income_tax + sales_tax + stamp_duty
+        cleaned_data['tax_amount'] = total_tax
+        
+        # IMPORTANT: Update instance fields to avoid validation error in model.clean()
+        # triggering "ValueError: 'BillForm' has no field named 'tax_amount'"
+        self.instance.tax_amount = total_tax
+        
+        if gross_amount:
+            cleaned_data['net_amount'] = gross_amount - total_tax
+            self.instance.net_amount = gross_amount - total_tax
         
         return cleaned_data
 
@@ -509,5 +647,124 @@ class PaymentForm(forms.ModelForm):
                         f'Please deposit funds or select a different account.'
                     )
                 })
+        
+        return cleaned_data
+
+
+class BillPreAuditForm(forms.Form):
+    """
+    Comprehensive pre-audit form for Finance Officer.
+    Allows review and adjustment of transaction type, taxes, and other bill details.
+    """
+    
+    transaction_type = forms.ChoiceField(
+        label='Transaction Type',
+        help_text='Verify this matches the nature of payment (Goods/Services/Works).',
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    
+    income_tax_amount = forms.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        min_value=Decimal('0.00'),
+        label='Income Tax Amount',
+        help_text='Adjust if vendor provides exemption certificate or special rate applies.',
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'})
+    )
+    
+    sales_tax_amount = forms.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        min_value=Decimal('0.00'),
+        label='Sales Tax Amount',
+        help_text='Adjust based on actual invoice or withholding requirements.',
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'})
+    )
+    
+    stamp_duty_amount = forms.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        min_value=Decimal('0.00'),
+        label='Stamp Duty',
+        help_text='Applicable for works contracts only.',
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'})
+    )
+    
+    audit_notes = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
+        required=False,
+        label='Audit Observations',
+        help_text='Optional notes about budget head selection, documentation, or other concerns.'
+    )
+    
+    adjustment_reason = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
+        required=False,
+        label='Reason for Changes',
+        help_text='Required if you modify transaction type or tax amounts.'
+    )
+    
+    def __init__(self, *args, bill=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.bill = bill
+        
+        if bill:
+            # Import TransactionType from models
+            from apps.expenditure.models import TransactionType
+            
+            # Set transaction type choices
+            self.fields['transaction_type'].choices = TransactionType.choices
+            
+            # Pre-populate with current values
+            self.fields['transaction_type'].initial = bill.transaction_type
+            self.fields['income_tax_amount'].initial = bill.income_tax_amount
+            self.fields['sales_tax_amount'].initial = bill.sales_tax_amount
+            self.fields['stamp_duty_amount'].initial = bill.stamp_duty_amount
+            
+            # Store original values for comparison
+            self.original_transaction_type = bill.transaction_type
+            self.original_income_tax = bill.income_tax_amount
+            self.original_sales_tax = bill.sales_tax_amount
+            self.original_stamp_duty = bill.stamp_duty_amount
+            
+            # Calculate expected values based on current transaction type
+            from apps.expenditure.services_tax import TaxCalculator
+            calculator = TaxCalculator()
+            self.calculated_taxes = calculator.calculate_taxes(bill)
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        
+        if not self.bill:
+            return cleaned_data
+        
+        from apps.expenditure.models import TransactionType
+        from django.core.exceptions import ValidationError
+        
+        transaction_type = cleaned_data.get('transaction_type')
+        income_tax = cleaned_data.get('income_tax_amount', Decimal('0.00'))
+        sales_tax = cleaned_data.get('sales_tax_amount', Decimal('0.00'))
+        stamp_duty = cleaned_data.get('stamp_duty_amount', Decimal('0.00'))
+        reason = cleaned_data.get('adjustment_reason', '').strip()
+        
+        # Check if anything was changed
+        changes_made = (
+            transaction_type != self.original_transaction_type or
+            income_tax != self.original_income_tax or
+            sales_tax != self.original_sales_tax or
+            stamp_duty != self.original_stamp_duty
+        )
+        
+        if changes_made and not reason:
+            raise ValidationError({
+                'adjustment_reason': 'Please provide a reason for making changes to the bill.'
+            })
+        
+        # Validate total doesn't exceed gross amount
+        total_tax = income_tax + sales_tax + stamp_duty
+        if total_tax > self.bill.gross_amount:
+            raise ValidationError(
+                f'Total tax ({total_tax:,.2f}) cannot exceed gross amount ({self.bill.gross_amount:,.2f}).'
+            )
         
         return cleaned_data

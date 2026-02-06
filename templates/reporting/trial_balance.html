@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load humanize %}
 
 {% block title %}Trial Balance - KP-CFMS{% endblock %}
 
@@ -74,14 +75,14 @@
                             </td>
                             <td class="text-end">
                                 {% if account.debit_balance > 0 %}
-                                    {{ account.debit_balance|floatformat:2 }}
+                                    {{ account.debit_balance|floatformat:2|intcomma }}
                                 {% else %}
                                     —
                                 {% endif %}
                             </td>
                             <td class="text-end">
                                 {% if account.credit_balance > 0 %}
-                                    {{ account.credit_balance|floatformat:2 }}
+                                    {{ account.credit_balance|floatformat:2|intcomma }}
                                 {% else %}
                                     —
                                 {% endif %}
@@ -93,10 +94,10 @@
                         <tr>
                             <td colspan="3" class="text-end"><strong>Total:</strong></td>
                             <td class="text-end">
-                                <strong>{{ total_debit_balance|floatformat:2 }}</strong>
+                                <strong>{{ total_debit_balance|floatformat:2|intcomma }}</strong>
                             </td>
                             <td class="text-end">
-                                <strong>{{ total_credit_balance|floatformat:2 }}</strong>
+                                <strong>{{ total_credit_balance|floatformat:2|intcomma }}</strong>
                             </td>
                         </tr>
                         <tr>

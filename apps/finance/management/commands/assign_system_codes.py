@@ -183,6 +183,42 @@ class Command(BaseCommand):
                             else:
                                 self.stdout.write(f"[OK] Verified: {gh_code} is {sys_code}")
                                 verified_count += 1
+                        
+                        # 4. Ensure BudgetHead exists (Auto-create for System Accounts)
+                        # System accounts are usually General Fund (GEN) and specific Function
+                        # We'll use a default function or find a suitable one
+                        if not dry_run:
+                            from apps.finance.models import Fund, BudgetHead, FunctionCode
+                            
+                            # Get General Fund
+                            gen_fund = Fund.objects.filter(code='GEN').first()
+                            if not gen_fund:
+                                # Fallback or create if missing
+                                gen_fund, _ = Fund.objects.get_or_create(code='GEN', defaults={'name': 'General Fund'})
+                            
+                            # Get Default Function (e.g., 'GEN' or '0000' or first active)
+                            # Ideally we should use a specific function for tax (e.g. Finance/Treasury)
+                            # For now, we use the first available function to ensure system stability
+                            func_code = FunctionCode.objects.filter(is_active=True).first()
+                            
+                            if gen_fund and func_code:
+                                bh, bh_created = BudgetHead.objects.get_or_create(
+                                    fund=gen_fund,
+                                    function=func_code,
+                                    global_head=global_head,
+                                    defaults={
+                                        'sub_code': '00',
+                                        'head_type': 'REGULAR',
+                                        'budget_control': False, # System accounts usually don't have hard budget limits
+                                        'posting_allowed': True
+                                    }
+                                )
+                                if bh_created:
+                                    self.stdout.write(f"  --> [OK] Created BudgetHead for {sys_code}")
+                                elif not bh.is_active:
+                                    bh.is_active = True
+                                    bh.save()
+                                    self.stdout.write(f"  --> [!!] Reactivated BudgetHead for {sys_code}")
 
                 except Exception as e:
                     error_msg = f"Error processing {sys_code} ({gh_code}): {str(e)}"

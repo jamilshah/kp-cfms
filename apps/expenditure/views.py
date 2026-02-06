@@ -14,6 +14,7 @@ from django.views.generic import (
     ListView, CreateView, DetailView, UpdateView, TemplateView, View
 )
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
@@ -407,26 +408,97 @@ class BillSubmitView(LoginRequiredMixin, View):
 
 
 class BillPreAuditView(LoginRequiredMixin, View):
-    """View to pre-audit a bill (Finance Officer step)."""
+    """View to pre-audit a bill with comprehensive review (Finance Officer step)."""
     
-    def post(self, request: HttpRequest, pk: int) -> HttpResponse:
+    def get(self, request: HttpRequest, pk: int) -> HttpResponse:
+        """Display pre-audit form."""
+        from apps.expenditure.forms import BillPreAuditForm
+        
         user = request.user
         org = getattr(user, 'organization', None)
         
         bill = get_object_or_404(Bill, pk=pk, organization=org)
         
-        # Check permission (Finance Officer)
+        # Check permission
         if not (user.has_any_role(['FINANCE_OFFICER']) or user.is_superuser):
             messages.error(request, _('Permission denied. Only Finance Officers can pre-audit bills.'))
             return redirect('expenditure:bill_detail', pk=pk)
-            
-        try:
-            bill.pre_audit(user)
-            messages.success(request, _('Bill pre-audited successfully. Forwarded to TO for verification.'))
-        except WorkflowTransitionException as e:
-            messages.error(request, str(e))
         
-        return redirect('expenditure:bill_detail', pk=pk)
+        # Check status
+        if bill.status != BillStatus.SUBMITTED:
+            messages.error(request, _('Bill must be in SUBMITTED status for pre-audit.'))
+            return redirect('expenditure:bill_detail', pk=pk)
+        
+        form = BillPreAuditForm(bill=bill)
+        
+        return render(request, 'expenditure/bill_pre_audit.html', {
+            'bill': bill,
+            'form': form,
+        })
+    
+    def post(self, request: HttpRequest, pk: int) -> HttpResponse:
+        """Process pre-audit with comprehensive review."""
+        from apps.expenditure.forms import BillPreAuditForm
+        from django.utils import timezone
+        
+        user = request.user
+        org = getattr(user, 'organization', None)
+        
+        bill = get_object_or_404(Bill, pk=pk, organization=org)
+        
+        # Check permission
+        if not (user.has_any_role(['FINANCE_OFFICER']) or user.is_superuser):
+            messages.error(request, _('Permission denied.'))
+            return redirect('expenditure:bill_detail', pk=pk)
+        
+        form = BillPreAuditForm(request.POST, bill=bill)
+        
+        if form.is_valid():
+            # Update transaction type if changed
+            bill.transaction_type = form.cleaned_data['transaction_type']
+            
+            # Update tax amounts
+            bill.income_tax_amount = form.cleaned_data['income_tax_amount']
+            bill.sales_tax_amount = form.cleaned_data['sales_tax_amount']
+            bill.stamp_duty_amount = form.cleaned_data['stamp_duty_amount']
+            
+            # Recalculate totals
+            bill.tax_amount = (
+                bill.income_tax_amount + 
+                bill.sales_tax_amount + 
+                bill.stamp_duty_amount
+            )
+            bill.net_amount = bill.gross_amount - bill.tax_amount
+            
+            # Save audit notes and adjustment reason if provided
+            audit_notes = form.cleaned_data.get('audit_notes', '').strip()
+            reason = form.cleaned_data.get('adjustment_reason', '').strip()
+            
+            if audit_notes or reason:
+                # Add to bill description for audit trail
+                audit_log = f"\n\n[FO Pre-Audit by {user.get_full_name()} on {timezone.now().strftime('%d-%b-%Y %H:%M')}]"
+                if audit_notes:
+                    audit_log += f"\nObservations: {audit_notes}"
+                if reason:
+                    audit_log += f"\nChanges Made: {reason}"
+                bill.description += audit_log
+            
+            bill.save()
+            
+            # Move to AUDITED status
+            try:
+                bill.pre_audit(user)
+                messages.success(request, _('Bill pre-audited successfully. Forwarded to TO for verification.'))
+            except WorkflowTransitionException as e:
+                messages.error(request, str(e))
+            
+            return redirect('expenditure:bill_detail', pk=pk)
+        
+        return render(request, 'expenditure/bill_pre_audit.html', {
+            'bill': bill,
+            'form': form,
+        })
+
 
 
 class BillVerifyView(LoginRequiredMixin, View):
@@ -439,7 +511,7 @@ class BillVerifyView(LoginRequiredMixin, View):
         bill = get_object_or_404(Bill, pk=pk, organization=org)
         
         # Check permission (Tehsil Officer Finance or Accountant)
-        if not (user.has_any_role(['TOF', 'TO_FINANCE', 'ACCOUNTANT', 'AC']) or user.is_superuser):
+        if not (user.has_any_role(['TOF', 'ACCOUNTANT']) or user.is_superuser):
             messages.error(request, _('Permission denied. Only Tehsil Officer Finance or Accountant can verify bills.'))
             return redirect('expenditure:bill_detail', pk=pk)
             
@@ -693,6 +765,48 @@ def load_budget_heads(request):
         'department': department
     })
 
+@login_required
+def get_payee_default_budget_head(request):
+    """
+    AJAX endpoint to get the budget head for a payee's default expense type.
+    
+    Takes payee_id and function_id, returns the matching budget head ID.
+    """
+    payee_id = request.GET.get('payee')
+    function_id = request.GET.get('function')
+    
+    if not payee_id or not function_id:
+        return JsonResponse({'budget_head_id': None})
+    
+    try:
+        from apps.expenditure.models import Payee
+        from apps.finance.models import BudgetHead
+        
+        payee = Payee.objects.select_related('default_global_head').get(id=payee_id)
+        
+        # Check if payee has a default global head
+        if not payee.default_global_head:
+            return JsonResponse({'budget_head_id': None})
+        
+        # Find the budget head for this global head + function combination
+        budget_head = BudgetHead.objects.filter(
+            global_head=payee.default_global_head,
+            function_id=function_id,
+            is_active=True
+        ).first()
+        
+        if budget_head:
+            return JsonResponse({
+                'budget_head_id': budget_head.id,
+                'budget_head_code': budget_head.code,
+                'budget_head_name': budget_head.name
+            })
+        else:
+            return JsonResponse({'budget_head_id': None})
+            
+    except (ValueError, TypeError, Payee.DoesNotExist):
+        return JsonResponse({'budget_head_id': None})
+
 class BankAccountNextChequeAPIView(LoginRequiredMixin, View):
     """API view to get next available cheque number for a bank account."""
     
@@ -746,3 +860,59 @@ def load_payees(request):
         payees = Payee.objects.filter(organization=org).order_by('name')
         
     return render(request, 'expenditure/partials/payee_options.html', {'payees': payees})
+
+
+@login_required
+def calculate_taxes_ajax(request):
+    """
+    AJAX endpoint to calculate taxes in real-time.
+    
+    Accepts: payee_id, transaction_type, gross_amount
+    Returns: JSON with calculated tax amounts
+    """
+    try:
+        payee_id = request.GET.get('payee')
+        transaction_type = request.GET.get('transaction_type')
+        gross_amount = request.GET.get('gross_amount')
+        
+        if not all([payee_id, transaction_type, gross_amount]):
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing required parameters'
+            })
+        
+        # Get payee
+        payee = Payee.objects.get(id=payee_id)
+        gross_amount = Decimal(gross_amount)
+        
+        # Create temporary bill for calculation
+        temp_bill = Bill(
+            payee=payee,
+            transaction_type=transaction_type,
+            gross_amount=gross_amount
+        )
+        
+        # Calculate taxes
+        from apps.expenditure.services_tax import TaxCalculator
+        calculator = TaxCalculator()
+        taxes = calculator.calculate_taxes(temp_bill)
+        
+        return JsonResponse({
+            'success': True,
+            'income_tax': str(taxes['income_tax']),
+            'sales_tax': str(taxes['sales_tax']),
+            'stamp_duty': str(taxes['stamp_duty']),
+            'total_tax': str(taxes['total_tax']),
+            'net_amount': str(taxes['net_amount'])
+        })
+        
+    except Payee.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Payee not found'
+        })
+    except (ValueError, TypeError, Exception) as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })

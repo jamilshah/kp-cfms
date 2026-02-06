@@ -1,0 +1,153 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Pre-Audit Form for Finance Officer
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load static %}
+{% load custom_filters %}
+
+{% block title %}Pre-Audit Bill #{{ bill.id }} - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'expenditure:dashboard' %}">Expenditure</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'expenditure:bill_list' %}">Bills</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'expenditure:bill_detail' bill.pk %}">Bill #{{ bill.id }}</a></li>
+        <li class="breadcrumb-item active">Pre-Audit</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-10 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-clipboard-check"></i> Pre-Audit: Bill #{{ bill.id }}
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Bill Summary -->
+                <div class="alert alert-info">
+                    <h6><i class="bi bi-info-circle"></i> Bill Summary</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Payee:</strong> {{ bill.payee.name }}<br>
+                            <strong>Invoice #:</strong> {{ bill.bill_number }}<br>
+                            <strong>Date:</strong> {{ bill.bill_date|date:"d-M-Y" }}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Gross Amount:</strong> Rs. {{ bill.gross_amount|currency }}<br>
+                            <strong>Current Transaction Type:</strong> {{ bill.get_transaction_type_display }}
+                        </div>
+                    </div>
+                    
+                    <!-- Budget Heads Summary -->
+                    <div class="mt-3">
+                        <strong>Budget Heads:</strong>
+                        <ul class="mb-0">
+                            {% for line in bill.lines.all %}
+                            <li>{{ line.budget_head.code }} - {{ line.budget_head.name }}: Rs. {{ line.amount|currency }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Pre-Audit Form -->
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <h6 class="mb-3 mt-4"><i class="bi bi-gear"></i> Transaction Details</h6>
+                    <div class="mb-4">
+                        <label class="form-label">{{ form.transaction_type.label }}</label>
+                        {{ form.transaction_type }}
+                        <small class="form-text text-muted">{{ form.transaction_type.help_text }}</small>
+                        {% if form.transaction_type.errors %}
+                            <div class="invalid-feedback d-block">{{ form.transaction_type.errors }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    <h6 class="mb-3"><i class="bi bi-calculator"></i> Tax Amounts</h6>
+                    <p class="text-muted small">
+                        Review and adjust tax amounts if needed. Adjustments require a reason.
+                    </p>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">{{ form.income_tax_amount.label }}</label>
+                                {{ form.income_tax_amount }}
+                                <small class="form-text text-muted">{{ form.income_tax_amount.help_text }}</small>
+                                {% if form.income_tax_amount.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.income_tax_amount.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">{{ form.sales_tax_amount.label }}</label>
+                                {{ form.sales_tax_amount }}
+                                <small class="form-text text-muted">{{ form.sales_tax_amount.help_text }}</small>
+                                {% if form.sales_tax_amount.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.sales_tax_amount.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">{{ form.stamp_duty_amount.label }}</label>
+                                {{ form.stamp_duty_amount }}
+                                <small class="form-text text-muted">{{ form.stamp_duty_amount.help_text }}</small>
+                                {% if form.stamp_duty_amount.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.stamp_duty_amount.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="mb-3"><i class="bi bi-journal-text"></i> Audit Notes</h6>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">{{ form.audit_notes.label }}</label>
+                        {{ form.audit_notes }}
+                        <small class="form-text text-muted">{{ form.audit_notes.help_text }}</small>
+                        {% if form.audit_notes.errors %}
+                            <div class="invalid-feedback d-block">{{ form.audit_notes.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ form.adjustment_reason.label }}</label>
+                        {{ form.adjustment_reason }}
+                        <small class="form-text text-muted">{{ form.adjustment_reason.help_text }}</small>
+                        {% if form.adjustment_reason.errors %}
+                            <div class="invalid-feedback d-block">{{ form.adjustment_reason.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'expenditure:bill_detail' bill.pk %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary" onclick="return confirm('Pre-audit and forward this bill to TO Finance?');">
+                            <i class="bi bi-check-circle"></i> Pre-Audit & Forward
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

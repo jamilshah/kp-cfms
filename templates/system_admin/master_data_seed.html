@@ -379,6 +379,35 @@
             </div>
         </div>
         
+        <!-- Tax Rate Configuration Card (NEW) -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-percent me-2"></i>Tax Rate Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-muted small">
+                        Initialize tax withholding rates for income tax, sales tax, and stamp duty as per FBR/KPRA regulations.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'system_admin:tax_rate_list' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-list-ul me-1"></i> View & Manage Tax Rates
+                        </a>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="command" value="seed_tax_rates">
+                        <button type="submit" class="btn btn-success btn-sm w-100">
+                            <i class="bi bi-play-fill me-1"></i> Initialize Default Rates
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        
         <!-- Organizations Card -->
         <div class="col-md-6 col-lg-4 mb-4">
             <div class="card h-100 shadow-sm">

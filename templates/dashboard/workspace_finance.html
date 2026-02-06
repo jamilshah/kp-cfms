@@ -9,6 +9,7 @@ Description: Finance Officer / Accountant Workspace
 -->
 {% extends 'base.html' %}
 {% load static %}
+{% load humanize %}
 
 {% block title %}Finance Workspace - KP-CFMS{% endblock %}
 
@@ -59,7 +60,7 @@ Description: Finance Officer / Accountant Workspace
             <div class="card stat-card h-100">
                 <div class="card-body">
                     <div class="stat-label">Revised Budget</div>
-                    <div class="stat-value text-muted">Rs. {{ budget_metrics.total_revised|floatformat:2 }}</div>
+                    <div class="stat-value text-muted">Rs. {{ budget_metrics.total_revised|floatformat:2|intcomma }}</div>
                 </div>
             </div>
         </div>
@@ -67,7 +68,7 @@ Description: Finance Officer / Accountant Workspace
             <div class="card stat-card h-100" style="border-left: 4px solid var(--bs-primary);">
                 <div class="card-body">
                     <div class="stat-label">Released Budget</div>
-                    <div class="stat-value">Rs. {{ budget_metrics.total_released|floatformat:2 }}</div>
+                    <div class="stat-value">Rs. {{ budget_metrics.total_released|floatformat:2|intcomma }}</div>
                     <small class="text-muted">Available for spending</small>
                 </div>
             </div>
@@ -76,7 +77,7 @@ Description: Finance Officer / Accountant Workspace
             <div class="card stat-card success h-100">
                 <div class="card-body">
                     <div class="stat-label">Spent</div>
-                    <div class="stat-value">Rs. {{ budget_metrics.total_spent|floatformat:2 }}</div>
+                    <div class="stat-value">Rs. {{ budget_metrics.total_spent|floatformat:2|intcomma }}</div>
                 </div>
             </div>
         </div>
@@ -84,7 +85,7 @@ Description: Finance Officer / Accountant Workspace
             <div class="card stat-card warning h-100">
                 <div class="card-body">
                     <div class="stat-label">Available</div>
-                    <div class="stat-value">Rs. {{ budget_metrics.available|floatformat:2 }}</div>
+                    <div class="stat-value">Rs. {{ budget_metrics.available|floatformat:2|intcomma }}</div>
                     <small class="text-muted">Released - Spent</small>
                 </div>
             </div>
@@ -135,12 +136,12 @@ Description: Finance Officer / Accountant Workspace
                                     {% endif %}
                                 {% endwith %}
                             </td>
-                            <td><strong>Rs. {{ bill.net_amount|floatformat:2 }}</strong></td>
+                            <td><strong>Rs. {{ bill.net_amount|floatformat:2|intcomma }}</strong></td>
                             <td>{{ bill.submitted_by.get_full_name }}</td>
                             <td>
                                 <a href="{% url 'expenditure:bill_detail' bill.pk %}" 
                                    class="btn btn-sm btn-primary">
-                                    <i class="bi bi-eye"></i> Review
+                                    <i class="bi bi-pencil-square"></i> {{ workspace_action|default:"Review" }}
                                 </a>
                             </td>
                         </tr>
@@ -165,7 +166,7 @@ Description: Finance Officer / Accountant Workspace
                     <div class="card-body text-center">
                         <i class="bi bi-cash-stack fs-1 text-danger mb-3"></i>
                         <h5 class="text-dark">Pending Liabilities</h5>
-                        <p class="stat-value text-danger">Rs. {{ pending_liabilities|floatformat:2 }}</p>
+                        <p class="stat-value text-danger">Rs. {{ pending_liabilities|floatformat:2|intcomma }}</p>
                         <p class="text-muted small">Unpaid Bills & Withheld Taxes</p>
                     </div>
                 </div>

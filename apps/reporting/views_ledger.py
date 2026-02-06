@@ -75,8 +75,8 @@ class GeneralLedgerView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
                     entries_query = entries_query.filter(voucher__date__lte=date_to)
                     context['filter_date_to'] = date_to
                 
-                # Order by date and voucher
-                entries = entries_query.order_by('voucher__date', 'voucher__id')
+                # Order by date and voucher descending
+                entries = entries_query.order_by('-voucher__date', '-voucher__id')
                 
                 # Calculate running balance
                 entries_with_balance = []
@@ -116,8 +116,8 @@ class GeneralLedgerView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
                 entries_query = entries_query.filter(voucher__date__lte=date_to)
                 context['filter_date_to'] = date_to
             
-            # Order by date and voucher
-            entries = entries_query.order_by('voucher__date', 'voucher__id')
+            # Order by date and voucher descending
+            entries = entries_query.order_by('-voucher__date', '-voucher__id')
             
             # For multi-account view, no running balance
             context['entries'] = [{'entry': entry} for entry in entries]

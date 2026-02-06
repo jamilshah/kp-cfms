@@ -68,6 +68,12 @@ urlpatterns = [
     path('master-data/global-heads/<int:pk>/edit/', md_views.GlobalHeadUpdateView.as_view(), name='global_head_edit'),
     path('master-data/global-heads/<int:pk>/delete/', md_views.GlobalHeadDeleteView.as_view(), name='global_head_delete'),
     
+    # Tax Rate Configurations
+    path('master-data/tax-rates/', md_views.TaxRateConfigurationListView.as_view(), name='tax_rate_list'),
+    path('master-data/tax-rates/create/', md_views.TaxRateConfigurationCreateView.as_view(), name='tax_rate_create'),
+    path('master-data/tax-rates/<int:pk>/edit/', md_views.TaxRateConfigurationUpdateView.as_view(), name='tax_rate_edit'),
+    path('master-data/tax-rates/<int:pk>/activate/', md_views.TaxRateActivateView.as_view(), name='tax_rate_activate'),
+    
     # ==========================================================================
     # Master Data CRUD - CSV Templates
     # ==========================================================================

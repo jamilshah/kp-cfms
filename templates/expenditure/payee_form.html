@@ -102,6 +102,50 @@ Description: Payee Create/Edit Form Template
                         {% endif %}
                     </div>
                     
+                    <!-- Tax Information (NEW) -->
+                    <h6 class="text-muted mb-3 mt-4">Tax Information</h6>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label for="{{ form.tax_status.id_for_label }}" class="form-label">
+                                Tax Status <span class="text-danger">*</span>
+                            </label>
+                            {{ form.tax_status }}
+                            {% if form.tax_status.errors %}
+                            <div class="invalid-feedback d-block">{{ form.tax_status.errors.0 }}</div>
+                            {% endif %}
+                            <small class="text-muted">Verify against FBR Active Taxpayers List</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.entity_type.id_for_label }}" class="form-label">
+                                Entity Type <span class="text-danger">*</span>
+                            </label>
+                            {{ form.entity_type }}
+                            {% if form.entity_type.errors %}
+                            <div class="invalid-feedback d-block">{{ form.entity_type.errors.0 }}</div>
+                            {% endif %}
+                            <small class="text-muted">Company or Individual</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="{{ form.tax_status_verified_date.id_for_label }}" class="form-label">
+                            Tax Status Verified Date
+                        </label>
+                        {{ form.tax_status_verified_date }}
+                        {% if form.tax_status_verified_date.errors %}
+                        <div class="invalid-feedback d-block">{{ form.tax_status_verified_date.errors.0 }}</div>
+                        {% endif %}
+                        <small class="text-muted">Date when tax status was last verified with FBR</small>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Tax Withholding:</strong> The tax status and entity type determine the applicable tax rates for this payee. 
+                        Active Filers receive lower tax rates as per FBR regulations.
+                    </div>
+                    
+                    
                     <!-- Bank Information -->
                     <h6 class="text-muted mb-3 mt-4">Bank Information</h6>
                     
@@ -124,6 +168,23 @@ Description: Payee Create/Edit Form Template
                             <div class="invalid-feedback d-block">{{ form.bank_account.errors.0 }}</div>
                             {% endif %}
                         </div>
+                    </div>
+                    
+                    <!-- Default Expense Type -->
+                    <h6 class="text-muted mb-3 mt-4">Default Expense Type (Optional)</h6>
+                    
+                    <div class="mb-4">
+                        <label for="{{ form.default_global_head.id_for_label }}" class="form-label">
+                            Default Expense Type
+                        </label>
+                        {{ form.default_global_head }}
+                        {% if form.default_global_head.errors %}
+                        <div class="invalid-feedback d-block">{{ form.default_global_head.errors.0 }}</div>
+                        {% endif %}
+                        <small class="text-muted">
+                            Select a default expense type for this payee. For example: PESCO → Electricity, PSO → POL, PTCL → Telephone.
+                            The system will automatically find the correct budget head for your department.
+                        </small>
                     </div>
                     
                     <div class="d-flex justify-content-between">

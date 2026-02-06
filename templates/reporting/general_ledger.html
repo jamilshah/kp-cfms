@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load humanize %}
 
 {% block title %}General Ledger - KP-CFMS{% endblock %}
 
@@ -93,20 +94,20 @@
                             <td>{{ item.entry.description|truncatewords:15 }}</td>
                             <td class="text-end">
                                 {% if item.entry.debit > 0 %}
-                                    {{ item.entry.debit|floatformat:2 }}
+                                    {{ item.entry.debit|floatformat:2|intcomma }}
                                 {% else %}
                                     —
                                 {% endif %}
                             </td>
                             <td class="text-end">
                                 {% if item.entry.credit > 0 %}
-                                    {{ item.entry.credit|floatformat:2 }}
+                                    {{ item.entry.credit|floatformat:2|intcomma }}
                                 {% else %}
                                     —
                                 {% endif %}
                             </td>
                             <td class="text-end">
-                                <strong>{{ item.balance|floatformat:2 }}</strong>
+                                <strong>{{ item.balance|floatformat:2|intcomma }}</strong>
                             </td>
                         </tr>
                         {% endfor %}
@@ -116,7 +117,7 @@
                             <td colspan="5" class="text-end"><strong>Final Balance:</strong></td>
                             <td class="text-end">
                                 <strong class="{% if final_balance < 0 %}text-danger{% endif %}">
-                                    {{ final_balance|floatformat:2 }}
+                                    {{ final_balance|floatformat:2|intcomma }}
                                 </strong>
                             </td>
                         </tr>
@@ -176,14 +177,14 @@
                             <td>{{ item.entry.description|truncatewords:12 }}</td>
                             <td class="text-end">
                                 {% if item.entry.debit > 0 %}
-                                    {{ item.entry.debit|floatformat:2 }}
+                                    {{ item.entry.debit|floatformat:2|intcomma }}
                                 {% else %}
                                     —
                                 {% endif %}
                             </td>
                             <td class="text-end">
                                 {% if item.entry.credit > 0 %}
-                                    {{ item.entry.credit|floatformat:2 }}
+                                    {{ item.entry.credit|floatformat:2|intcomma }}
                                 {% else %}
                                     —
                                 {% endif %}
@@ -194,8 +195,8 @@
                     <tfoot class="table-secondary">
                         <tr>
                             <td colspan="4" class="text-end"><strong>Totals:</strong></td>
-                            <td class="text-end"><strong>{{ total_debit|floatformat:2 }}</strong></td>
-                            <td class="text-end"><strong>{{ total_credit|floatformat:2 }}</strong></td>
+                            <td class="text-end"><strong>{{ total_debit|floatformat:2|intcomma }}</strong></td>
+                            <td class="text-end"><strong>{{ total_credit|floatformat:2|intcomma }}</strong></td>
                         </tr>
                     </tfoot>
                 </table>

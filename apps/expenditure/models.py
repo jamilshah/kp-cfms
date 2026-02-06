@@ -48,9 +48,36 @@ class BillStatus(models.TextChoices):
     RETURNED = 'RETURNED', _('Returned for Corrections')
 
 
+class PayeeTaxStatus(models.TextChoices):
+    """
+    Tax filing status for vendors as per FBR Active Taxpayers List.
+    """
+    ACTIVE_FILER = 'FILER', _('Active Filer')
+    NON_FILER = 'NON_FILER', _('Non-Filer')
+    EXEMPT = 'EXEMPT', _('Tax Exempt')
+
+
+class PayeeEntityType(models.TextChoices):
+    """
+    Entity type for tax rate determination.
+    """
+    COMPANY = 'COMPANY', _('Company')
+    INDIVIDUAL = 'INDIVIDUAL', _('Individual/AOP')
+
+
 class BillType(models.TextChoices):
     REGULAR = 'REGULAR', _('Regular Bill')
     SALARY = 'SALARY', _('Monthly Salary')
+
+
+class TransactionType(models.TextChoices):
+    """
+    Transaction type for tax calculation.
+    Determines applicable tax rates and withholding rules.
+    """
+    GOODS = 'GOODS', _('Supply of Goods')
+    SERVICES = 'SERVICES', _('Services')
+    WORKS = 'WORKS', _('Works Contracts')
 
 
 class Payee(AuditLogMixin, StatusMixin, TenantAwareMixin):
@@ -111,6 +138,37 @@ class Payee(AuditLogMixin, StatusMixin, TenantAwareMixin):
         blank=True,
         verbose_name=_('Bank Account'),
         help_text=_('Bank account number for payment.')
+    )
+    default_global_head = models.ForeignKey(
+        'finance.GlobalHead',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name=_('Default Expense Type'),
+        help_text=_('Default expense type for this payee (e.g., PESCO → Electricity, PSO → POL). '
+                    'The system will automatically select the correct budget head based on your department.')
+    )
+    
+    # Tax-related fields
+    tax_status = models.CharField(
+        max_length=20,
+        choices=PayeeTaxStatus.choices,
+        default=PayeeTaxStatus.NON_FILER,
+        verbose_name=_('Tax Status'),
+        help_text=_('Filer status as per FBR Active Taxpayers List.')
+    )
+    entity_type = models.CharField(
+        max_length=20,
+        choices=PayeeEntityType.choices,
+        default=PayeeEntityType.INDIVIDUAL,
+        verbose_name=_('Entity Type'),
+        help_text=_('Company or Individual/AOP for tax rate determination.')
+    )
+    tax_status_verified_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name=_('Tax Status Verified Date'),
+        help_text=_('Last date when tax status was verified from FBR list.')
     )
     
     class Meta:
@@ -232,13 +290,49 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         verbose_name=_('Gross Amount'),
         help_text=_('Total bill amount before tax deduction.')
     )
+    
+    # Transaction type for tax calculation
+    transaction_type = models.CharField(
+        max_length=20,
+        choices=TransactionType.choices,
+        default=TransactionType.SERVICES,
+        verbose_name=_('Transaction Type'),
+        help_text=_('Type of transaction determines applicable tax rates.')
+    )
+    
+    # Tax breakdown fields
+    income_tax_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Income Tax (FBR)'),
+        help_text=_('Income tax withheld under Section 153.')
+    )
+    sales_tax_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Sales Tax (FBR/KPRA)'),
+        help_text=_('Sales tax withheld (1/5th or whole).')
+    )
+    stamp_duty_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Stamp Duty (Provincial)'),
+        help_text=_('Stamp duty for works contracts (1% of contract value).')
+    )
+    
     tax_amount = models.DecimalField(
         max_digits=15,
         decimal_places=2,
         default=Decimal('0.00'),
         validators=[MinValueValidator(Decimal('0.00'))],
-        verbose_name=_('Tax Amount'),
-        help_text=_('Total tax deducted (Income Tax + GST).')
+        verbose_name=_('Total Tax Amount'),
+        help_text=_('Total tax deducted (Income Tax + Sales Tax + Stamp Duty).')
     )
     net_amount = models.DecimalField(
         max_digits=15,
@@ -392,23 +486,50 @@ class Bill(AuditLogMixin, TenantAwareMixin):
     
     def clean(self) -> None:
         """
-        Validate that net_amount + tax_amount equals gross_amount.
+        Validate tax breakdown and net_amount calculation.
         """
-        if self.gross_amount and self.tax_amount is not None and self.net_amount:
-            expected_net = self.gross_amount - self.tax_amount
-            if self.net_amount != expected_net:
+        if self.gross_amount and self.tax_amount is not None:
+            # Validate tax breakdown: tax_amount must equal sum of components
+            calculated_total_tax = (
+                self.income_tax_amount + 
+                self.sales_tax_amount + 
+                self.stamp_duty_amount
+            )
+            
+            if self.tax_amount != calculated_total_tax:
                 raise ValidationError({
-                    'net_amount': _(
-                        f'Net amount ({self.net_amount}) must equal '
-                        f'Gross amount ({self.gross_amount}) - Tax amount ({self.tax_amount}) = {expected_net}'
+                    'tax_amount': _(
+                        f'Total tax ({self.tax_amount}) must equal sum of '
+                        f'Income Tax ({self.income_tax_amount}) + '
+                        f'Sales Tax ({self.sales_tax_amount}) + '
+                        f'Stamp Duty ({self.stamp_duty_amount}) = {calculated_total_tax}'
                     )
                 })
+            
+            # Validate net_amount
+            if self.net_amount:
+                expected_net = self.gross_amount - self.tax_amount
+                if self.net_amount != expected_net:
+                    raise ValidationError({
+                        'net_amount': _(
+                            f'Net amount ({self.net_amount}) must equal '
+                            f'Gross amount ({self.gross_amount}) - Tax amount ({self.tax_amount}) = {expected_net}'
+                        )
+                    })
     
     def save(self, *args, **kwargs) -> None:
-        """Auto-calculate net_amount if not set."""
+        """Auto-calculate tax_amount and net_amount if not set."""
+        # Auto-calculate total tax from components
+        self.tax_amount = (
+            self.income_tax_amount + 
+            self.sales_tax_amount + 
+            self.stamp_duty_amount
+        )
+        
+        # Auto-calculate net_amount
         if self.gross_amount and self.tax_amount is not None:
-            if not self.net_amount or self.net_amount == Decimal('0.00'):
-                self.net_amount = self.gross_amount - self.tax_amount
+            self.net_amount = self.gross_amount - self.tax_amount
+        
         self.clean()
         super().save(*args, **kwargs)
     
@@ -581,21 +702,60 @@ class Bill(AuditLogMixin, TenantAwareMixin):
                 is_active=True
             ).first()
         
-        tax_head = None
-        if self.tax_amount > Decimal('0.00'):
+        
+        # Get tax system accounts (only if applicable)
+        income_tax_head = None
+        sales_tax_head = None
+        stamp_duty_head = None
+        
+        if self.income_tax_amount > Decimal('0.00'):
             try:
-                tax_head = BudgetHead.objects.get(
+                income_tax_head = BudgetHead.objects.get(
                     global_head__system_code='TAX_IT',
                     is_active=True
                 )
             except BudgetHead.DoesNotExist:
                 raise ValidationError(
-                    "System account 'Income Tax' (TAX_IT) not configured. "
+                    "System account 'Income Tax Payable' (TAX_IT) not configured. "
                     "Please run 'python manage.py assign_system_codes' and create BudgetHead for TAX_IT."
                 )
             except BudgetHead.MultipleObjectsReturned:
-                tax_head = BudgetHead.objects.filter(
+                income_tax_head = BudgetHead.objects.filter(
                     global_head__system_code='TAX_IT',
+                    is_active=True
+                ).first()
+        
+        if self.sales_tax_amount > Decimal('0.00'):
+            try:
+                sales_tax_head = BudgetHead.objects.get(
+                    global_head__system_code='TAX_GST',
+                    is_active=True
+                )
+            except BudgetHead.DoesNotExist:
+                raise ValidationError(
+                    "System account 'Sales Tax Payable' (TAX_GST) not configured. "
+                    "Please run 'python manage.py assign_system_codes' and create BudgetHead for TAX_GST."
+                )
+            except BudgetHead.MultipleObjectsReturned:
+                sales_tax_head = BudgetHead.objects.filter(
+                    global_head__system_code='TAX_GST',
+                    is_active=True
+                ).first()
+        
+        if self.stamp_duty_amount > Decimal('0.00'):
+            try:
+                stamp_duty_head = BudgetHead.objects.get(
+                    global_head__system_code='TAX_STAMP',
+                    is_active=True
+                )
+            except BudgetHead.DoesNotExist:
+                raise ValidationError(
+                    "System account 'Stamp Duty Payable' (TAX_STAMP) not configured. "
+                    "Please run 'python manage.py assign_system_codes' and create BudgetHead for TAX_STAMP."
+                )
+            except BudgetHead.MultipleObjectsReturned:
+                stamp_duty_head = BudgetHead.objects.filter(
+                    global_head__system_code='TAX_STAMP',
                     is_active=True
                 ).first()
         
@@ -639,14 +799,34 @@ class Bill(AuditLogMixin, TenantAwareMixin):
             credit=self.net_amount
         )
         
-        # Credit: Tax Head (tax_amount) - only if tax is applicable
-        if tax_head and self.tax_amount > Decimal('0.00'):
+        # Credit: Income Tax Payable (income_tax_amount)
+        if income_tax_head and self.income_tax_amount > Decimal('0.00'):
             JournalEntry.objects.create(
                 voucher=voucher,
-                budget_head=tax_head,
-                description=f"Tax withheld: Bill #{self.id}",
+                budget_head=income_tax_head,
+                description=f"Income tax withheld: Bill #{self.id} ({self.get_transaction_type_display()})",
                 debit=Decimal('0.00'),
-                credit=self.tax_amount
+                credit=self.income_tax_amount
+            )
+        
+        # Credit: Sales Tax Payable (sales_tax_amount)
+        if sales_tax_head and self.sales_tax_amount > Decimal('0.00'):
+            JournalEntry.objects.create(
+                voucher=voucher,
+                budget_head=sales_tax_head,
+                description=f"Sales tax withheld: Bill #{self.id} ({self.get_transaction_type_display()})",
+                debit=Decimal('0.00'),
+                credit=self.sales_tax_amount
+            )
+        
+        # Credit: Stamp Duty Payable (stamp_duty_amount)
+        if stamp_duty_head and self.stamp_duty_amount > Decimal('0.00'):
+            JournalEntry.objects.create(
+                voucher=voucher,
+                budget_head=stamp_duty_head,
+                description=f"Stamp duty: Bill #{self.id} (Works Contract)",
+                debit=Decimal('0.00'),
+                credit=self.stamp_duty_amount
             )
         
         # Post the voucher
@@ -1045,3 +1225,74 @@ class Payment(AuditLogMixin, TenantAwareMixin):
         # Update bill status to PAID
         self.bill.status = BillStatus.PAID
         self.bill.save(update_fields=['status', 'updated_at'])
+ 
+
+
+class BillTaxOverride(AuditLogMixin):
+    """
+    Audit trail for manual tax amount overrides.
+    
+    When a Pre-Auditor/Verifier changes system-calculated tax amounts,
+    this record captures the change for accountability and compliance.
+    
+    Attributes:
+        bill: The bill whose tax was overridden
+        field_name: Which tax field was changed (income_tax/sales_tax/stamp_duty)
+        original_value: System-calculated value
+        overridden_value: Manual override value
+        reason: Explanation for the override
+        overridden_by: User who made the override
+        overridden_at: Timestamp of override
+    """
+    
+    bill = models.ForeignKey(
+        Bill,
+        on_delete=models.CASCADE,
+        related_name='tax_overrides',
+        verbose_name=_('Bill')
+    )
+    field_name = models.CharField(
+        max_length=50,
+        choices=[
+            ('income_tax_amount', _('Income Tax')),
+            ('sales_tax_amount', _('Sales Tax')),
+            ('stamp_duty_amount', _('Stamp Duty'))
+        ],
+        verbose_name=_('Tax Field')
+    )
+    original_value = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        verbose_name=_('System Calculated Value')
+    )
+    overridden_value = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        verbose_name=_('Manual Override Value')
+    )
+    reason = models.TextField(
+        verbose_name=_('Reason for Override'),
+        help_text=_('Explain why the system calculation was incorrect.')
+    )
+    overridden_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.PROTECT,
+        verbose_name=_('Overridden By')
+    )
+    overridden_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('Override Timestamp')
+    )
+    
+    class Meta:
+        verbose_name = _('Bill Tax Override')
+        verbose_name_plural = _('Bill Tax Overrides')
+        ordering = ['-overridden_at']
+        indexes = [
+            models.Index(fields=['bill']),
+            models.Index(fields=['overridden_at']),
+        ]
+    
+    def __str__(self) -> str:
+        return f"Bill #{self.bill.id} - {self.get_field_name_display()} Override"
+from apps.expenditure.models_tax_config import TaxRateConfiguration  # noqa 
