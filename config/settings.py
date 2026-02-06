@@ -32,7 +32,7 @@ DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
-CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=['http://175.107.59.132', 'http://127.0.0.1'])
 
 
 # Application definition
@@ -145,7 +145,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = env('STATIC_URL', default='static/')
+FORCE_SCRIPT_NAME = env('FORCE_SCRIPT_NAME', default=None)
 
 # Login/Logout Configuration
 LOGIN_URL = 'login'

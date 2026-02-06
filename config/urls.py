@@ -35,6 +35,6 @@ urlpatterns = [
     path('finance/', include('apps.finance.urls')),
     path('reports/', include('apps.reporting.urls')),
     path('system-admin/', include('apps.system_admin.urls')),
-    path('', RedirectView.as_view(url='/dashboard/', permanent=False), name='home'),
+    path('', RedirectView.as_view(pattern_name='dashboard:index', permanent=False), name='home'),
 ]
 
