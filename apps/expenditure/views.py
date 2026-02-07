@@ -19,6 +19,7 @@ from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
 from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 
@@ -261,10 +262,6 @@ class BillCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
             self.object = form.save(commit=False)
             
             # --- Auto-calculate Gross Amount from Lines ---
-            # Use line amounts to set gross_amount, ignoring the field input if necessary, 
-            # OR validate they match. For strictness/UX, let's override gross_amount with sum of lines.
-            
-            # Access cleaned_data of lines (list of dicts)
             total_amount = Decimal('0.00')
             for line_form in lines.forms:
                 if line_form.cleaned_data and not line_form.cleaned_data.get('DELETE', False):
@@ -274,10 +271,27 @@ class BillCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
             
             self.object.gross_amount = total_amount
             
-            # Recalculate Net Amount
-            tax = form.cleaned_data.get('tax_amount', Decimal('0.00'))
-            self.object.tax_amount = tax
-            self.object.net_amount = total_amount - tax
+            # --- Recalculate taxes based on actual gross from lines ---
+            if total_amount > 0 and self.object.payee:
+                from apps.expenditure.services_tax import TaxCalculator
+                calculator = TaxCalculator()
+                temp_bill = Bill(
+                    payee=self.object.payee,
+                    transaction_type=self.object.transaction_type,
+                    gross_amount=total_amount
+                )
+                # Pass vendor invoice GST if provided
+                invoice_gst = self.object.sales_tax_invoice_amount
+                taxes = calculator.calculate_taxes(temp_bill, sales_tax_invoice_amount=invoice_gst)
+                
+                self.object.income_tax_amount = taxes['income_tax']
+                self.object.sales_tax_amount = taxes['sales_tax']
+                self.object.stamp_duty_amount = taxes['stamp_duty']
+                self.object.tax_amount = taxes['total_tax']
+                self.object.net_amount = taxes['net_amount']
+            else:
+                self.object.tax_amount = Decimal('0.00')
+                self.object.net_amount = total_amount
             
             self.object.save()
             
@@ -556,8 +570,19 @@ class BillApproveView(LoginRequiredMixin, View):
                     messages.warning(request, _('Bill rejected.'))
             except (WorkflowTransitionException, BudgetExceededException) as e:
                 messages.error(request, str(e))
+            except ValidationError as e:
+                # Extract clean message from ValidationError
+                if hasattr(e, 'message_dict'):
+                    for field_errors in e.message_dict.values():
+                        for err in field_errors:
+                            messages.error(request, err)
+                elif hasattr(e, 'messages'):
+                    for msg in e.messages:
+                        messages.error(request, msg)
+                else:
+                    messages.error(request, str(e))
             except Exception as e:
-                messages.error(request, _('An error occurred: ') + str(e))
+                messages.error(request, _('An unexpected error occurred. Please contact your System Administrator.'))
         else:
             for error in form.errors.values():
                 messages.error(request, error)
@@ -874,6 +899,7 @@ def calculate_taxes_ajax(request):
         payee_id = request.GET.get('payee')
         transaction_type = request.GET.get('transaction_type')
         gross_amount = request.GET.get('gross_amount')
+        sales_tax_invoice = request.GET.get('sales_tax_invoice_amount')
         
         if not all([payee_id, transaction_type, gross_amount]):
             return JsonResponse({
@@ -884,6 +910,7 @@ def calculate_taxes_ajax(request):
         # Get payee
         payee = Payee.objects.get(id=payee_id)
         gross_amount = Decimal(gross_amount)
+        sales_tax_invoice_amount = Decimal(sales_tax_invoice) if sales_tax_invoice else None
         
         # Create temporary bill for calculation
         temp_bill = Bill(
@@ -895,7 +922,7 @@ def calculate_taxes_ajax(request):
         # Calculate taxes
         from apps.expenditure.services_tax import TaxCalculator
         calculator = TaxCalculator()
-        taxes = calculator.calculate_taxes(temp_bill)
+        taxes = calculator.calculate_taxes(temp_bill, sales_tax_invoice_amount=sales_tax_invoice_amount)
         
         return JsonResponse({
             'success': True,

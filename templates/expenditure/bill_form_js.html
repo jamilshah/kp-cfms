@@ -1,0 +1,337 @@
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- Department Filter ---
+        const departmentSelect = document.querySelector('select[name="department"]');
+        const functionSelect = document.getElementById('{{ form.function.id_for_label }}');
+        const payeeSelect = document.getElementById('{{ form.payee.id_for_label }}');
+        const transactionTypeSelect = document.getElementById('{{ form.transaction_type.id_for_label }}');
+        
+        // --- Tax Calculation Elements ---
+        const grossAmountInput = document.getElementById('{{ form.gross_amount.id_for_label }}');
+        
+        const incomeTaxInput = document.getElementById('{{ form.income_tax_amount.id_for_label }}');
+        const salesTaxInput = document.getElementById('{{ form.sales_tax_amount.id_for_label }}');
+        const stampDutyInput = document.getElementById('{{ form.stamp_duty_amount.id_for_label }}');
+        
+        const totalTaxDisplay = document.getElementById('total_tax_display');
+        const totalTaxInput = document.getElementById('id_tax_amount');
+        const netAmountDisplay = document.getElementById('net_amount_display');
+        
+        // --- Function Loading ---
+        function loadFunctions() {
+            const departmentId = departmentSelect.value;
+            
+            // Clear function dropdown
+            functionSelect.innerHTML = '<option value="">---------</option>';
+            functionSelect.value = '';
+            
+            // Clear budget heads
+            clearBudgetHeads();
+            
+            if (!departmentId) {
+                return;
+            }
+            
+            const url = `{% url 'finance:load_functions' %}?department=${departmentId}`;
+            
+            fetch(url)
+                .then(response => response.text())
+                .then(html => {
+                    functionSelect.innerHTML = html;
+                    functionSelect.value = '';
+                    
+                    if (typeof $ !== 'undefined') {
+                        $(functionSelect).select2('destroy').select2({
+                            theme: 'bootstrap-5',
+                            width: '100%',
+                            placeholder: "Select function...",
+                            allowClear: true
+                        });
+                        $(functionSelect).val(null).trigger('change.select2');
+                    }
+                })
+                .catch(error => console.error('Error loading functions:', error));
+        }
+        
+        function clearBudgetHeads() {
+            const selects = document.querySelectorAll('select[name$="-budget_head"]');
+            selects.forEach(select => {
+                select.innerHTML = '<option value="">---------</option>';
+                if (typeof $ !== 'undefined') {
+                    $(select).val(null).trigger('change.select2'); 
+                }
+            });
+            currentBudgetHeadOptions = '<option value="">---------</option>';
+        }
+        
+        // --- Budget Head Loading ---
+        function loadBudgetHeads() {
+            const functionId = functionSelect.value;
+            
+            if (!functionId) {
+                clearBudgetHeads();
+                return;
+            }
+            
+            const url = `{% url 'expenditure:load_budget_heads' %}?function=${functionId}`;
+            
+            fetch(url)
+                .then(response => response.text())
+                .then(html => {
+                    // Create minimal options string
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const options = doc.querySelectorAll('option');
+                    
+                    let optionsHtml = '<option value="">---------</option>';
+                    options.forEach(opt => {
+                        optionsHtml += `<option value="${opt.value}">${opt.textContent}</option>`;
+                    });
+                    currentBudgetHeadOptions = optionsHtml;
+                    
+                    // Update all budget head dropdowns
+                    const selects = document.querySelectorAll('select[name$="-budget_head"]');
+                    selects.forEach(select => {
+                        const currentValue = select.value;
+                        select.innerHTML = currentBudgetHeadOptions;
+                        
+                        if (currentValue) {
+                            select.value = currentValue;
+                        }
+                        
+                        // Reinitialize select2
+                        if (typeof $ !== 'undefined') {
+                             // Preserve selection if valid, otherwise clear
+                             if (!select.querySelector(`option[value="${currentValue}"]`)) {
+                                 $(select).val(null).trigger('change.select2');
+                             } else {
+                                 $(select).trigger('change.select2');
+                             }
+                        }
+                    });
+                    
+                    // Attempt to auto-select budget head if payee is selected
+                    fetchPayeeDefaultHead();
+                })
+                .catch(error => console.error('Error loading budget heads:', error));
+        }
+        
+        // --- Payee Default Budget Head Logic ---
+        function fetchPayeeDefaultHead() {
+            const payeeId = payeeSelect.value;
+            const functionId = functionSelect.value;
+            
+            if (!payeeId || !functionId) return;
+            
+            const url = `{% url 'expenditure:payee_default_head' %}?payee=${payeeId}&function=${functionId}`;
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.budget_head_id) {
+                        // Find the first visible budget head input
+                        const firstLineSelect = document.querySelector('select[name="lines-0-budget_head"]');
+                        if (firstLineSelect) {
+                            // Check if line is empty/new
+                            if (!firstLineSelect.value) {
+                                firstLineSelect.value = data.budget_head_id;
+                                if (typeof $ !== 'undefined') {
+                                    $(firstLineSelect).trigger('change');
+                                }
+                                console.log('Auto-selected budget head:', data.budget_head_id);
+                            }
+                        }
+                    }
+                })
+                .catch(error => console.error('Error fetching payee default head:', error));
+        }
+        
+        // --- Server-Side Tax Calculation ---
+        function calculateTaxes() {
+            const payeeId = payeeSelect.value;
+            const transactionType = transactionTypeSelect ? transactionTypeSelect.value : '';
+            const grossAmount = grossAmountInput.value;
+            
+            // Only calculate if we have minimal required data
+            if (!payeeId || !grossAmount || parseFloat(grossAmount) <= 0) {
+                // If logic not met, just sum current fields in case of manual entry
+                updateNetPayableDisplay();
+                return;
+            }
+            
+            // Check for optional sales tax invoice amount
+            const salesTaxInvoiceInput = document.getElementById('id_sales_tax_invoice_amount');
+            const salesTaxInvoice = salesTaxInvoiceInput ? salesTaxInvoiceInput.value : '';
+            
+            // Construct URL
+            let url = `{% url 'expenditure:calculate_taxes_ajax' %}?payee=${payeeId}&transaction_type=${transactionType}&gross_amount=${grossAmount}`;
+            if (salesTaxInvoice && parseFloat(salesTaxInvoice) > 0) {
+                url += `&sales_tax_invoice_amount=${salesTaxInvoice}`;
+            }
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update fields
+                        incomeTaxInput.value = data.income_tax;
+                        salesTaxInput.value = data.sales_tax;
+                        stampDutyInput.value = data.stamp_duty;
+                        
+                        // Update displays
+                        updateNetPayableDisplay();
+                    } else {
+                        console.error('Tax calculation error:', data.error);
+                    }
+                })
+                .catch(error => console.error('Error calculating taxes:', error));
+        }
+
+        // --- Event Listeners for Filters ---
+        if (departmentSelect) {
+            departmentSelect.addEventListener('change', loadFunctions);
+            // Initial load check
+            if (departmentSelect.value) {
+                // If prepopulated, wait briefly then load functions
+                setTimeout(loadFunctions, 100); 
+            }
+        }
+        
+        if (functionSelect) {
+            // Use change event (works with Select2 if configured or standard select)
+            $(functionSelect).on('change', loadBudgetHeads);
+        }
+        
+        if (payeeSelect) {
+            $(payeeSelect).on('change', function() {
+                fetchPayeeDefaultHead();
+                calculateTaxes();
+            });
+        }
+        
+        if (transactionTypeSelect) {
+            transactionTypeSelect.addEventListener('change', calculateTaxes);
+        }
+        
+        
+        // --- FormSet Logic ---
+        const linesContainer = document.getElementById('linesContainer');
+        const addLineBtn = document.getElementById('addLineBtn');
+        const totalFormsInput = document.querySelector('#id_lines-TOTAL_FORMS');
+        let currentBudgetHeadOptions = '<option value="">---------</option>';
+        
+        // --- Tax Calculation Helper ---
+        function updateNetPayableDisplay() {
+            const gross = parseFloat(grossAmountInput.value) || 0;
+            
+            // Sum tax components
+            const it = parseFloat(incomeTaxInput.value) || 0;
+            const st = parseFloat(salesTaxInput.value) || 0;
+            const stamp = parseFloat(stampDutyInput.value) || 0;
+            
+            const totalTax = it + st + stamp;
+            
+            // Update displays
+            totalTaxDisplay.textContent = 'Rs. ' + totalTax.toFixed(2);
+            totalTaxInput.value = totalTax.toFixed(2);
+            
+            const net = gross - totalTax;
+            netAmountDisplay.textContent = 'Rs. ' + net.toFixed(2);
+        }
+        
+        function updateGrossTotal() {
+            let total = 0;
+            document.querySelectorAll('.line-row').forEach(row => {
+                const deleteInput = row.querySelector('input[name$="-DELETE"]');
+                if (deleteInput && deleteInput.checked) return;
+                
+                const amountInput = row.querySelector('input[name$="-amount"]');
+                if (amountInput) {
+                     total += parseFloat(amountInput.value) || 0;
+                }
+            });
+            
+            grossAmountInput.value = total.toFixed(2);
+            // Trigger server-side calc
+            calculateTaxes();
+        }
+        
+        // Attach listeners
+        [grossAmountInput, incomeTaxInput, salesTaxInput, stampDutyInput].forEach(el => {
+            if (el) el.addEventListener('input', updateNetPayableDisplay);
+        });
+        
+        // Debounce for gross amount input to avoid too many requests
+        let debounceTimer;
+        grossAmountInput.addEventListener('input', function() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(calculateTaxes, 500);
+        });
+        
+        // Recalculate when sales tax invoice amount changes
+        const salesTaxInvoiceInput = document.getElementById('id_sales_tax_invoice_amount');
+        if (salesTaxInvoiceInput) {
+            salesTaxInvoiceInput.addEventListener('input', function() {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(calculateTaxes, 500);
+            });
+        }
+        
+        function attachRowListeners(row) {
+             const amountInput = row.querySelector('input[name$="-amount"]');
+             if (amountInput) {
+                 amountInput.addEventListener('input', updateGrossTotal);
+             }
+             
+             const deleteBtn = row.querySelector('.delete-row');
+             if (deleteBtn) {
+                 deleteBtn.addEventListener('click', function() {
+                     const deleteInput = row.querySelector('input[name$="-DELETE"]');
+                     if (deleteInput) {
+                         deleteInput.checked = true;
+                         row.style.display = 'none';
+                     } else {
+                         row.remove();
+                     }
+                     updateGrossTotal();
+                 });
+             }
+             
+             // Initialize Select2 in new row
+             const select = row.querySelector('select');
+             if (select && typeof $ !== 'undefined') {
+                 $(select).select2({
+                    theme: 'bootstrap-5',
+                    width: '100%',
+                    placeholder: "Search Budget Head...",
+                    allowClear: true
+                });
+             }
+        }
+        
+        // Add Line Handler
+        addLineBtn.addEventListener('click', function() {
+            const currentFormCount = parseInt(totalFormsInput.value);
+            const template = document.getElementById('emptyRowTemplate').innerHTML;
+            const newHtml = template.replace(/__prefix__/g, currentFormCount);
+            
+            linesContainer.insertAdjacentHTML('beforeend', newHtml);
+            totalFormsInput.value = currentFormCount + 1;
+            
+            const newRow = linesContainer.lastElementChild;
+            const newSelect = newRow.querySelector('select[name$="-budget_head"]');
+            if (newSelect) {
+                newSelect.innerHTML = currentBudgetHeadOptions;
+            }
+            attachRowListeners(newRow);
+        });
+        
+        // Initial setup for existing rows
+        document.querySelectorAll('.line-row').forEach(row => {
+            attachRowListeners(row);
+        });
+        
+        // Initial Calculation
+        updateGrossTotal();
+    });
+</script>

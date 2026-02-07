@@ -45,6 +45,25 @@ Description: Bill Create/Edit Form Template
                     </div>
                     {% endif %}
                     
+                    <!-- Department & Function Filters -->
+                    <div class="row mb-4 p-3 rounded border" style="background-color: #e3f2fd;">
+                        <h6 class="text-primary mb-3"><i class="bi bi-funnel"></i> Department & Function</h6>
+                        <div class="col-md-6">
+                            <label for="{{ form.department.id_for_label }}" class="form-label">
+                                {{ form.department.label }}
+                            </label>
+                            {{ form.department }}
+                            <div class="form-text">{{ form.department.help_text }}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.function.id_for_label }}" class="form-label">
+                                {{ form.function.label }}
+                            </label>
+                            {{ form.function }}
+                            <div class="form-text">{{ form.function.help_text }}</div>
+                        </div>
+                    </div>
+                    
                     <!-- Header Information -->
                     <div class="row mb-4">
                         <div class="col-md-6">
@@ -97,24 +116,21 @@ Description: Bill Create/Edit Form Template
                         </div>
                     </div>
                     
-                    <!-- Filters -->
-                    <div class="row mb-3 p-3 bg-light rounded border">
-                        <h6 class="text-muted mb-3"><i class="bi bi-funnel"></i> Filter Budget Heads</h6>
+                    <!-- Transaction Type -->
+                    <div class="row mb-4">
                         <div class="col-md-6">
-                            <label for="{{ form.department.id_for_label }}" class="form-label">
-                                {{ form.department.label }}
+                            <label for="{{ form.transaction_type.id_for_label }}" class="form-label">
+                                Transaction Type <span class="text-danger">*</span>
                             </label>
-                            {{ form.department }}
-                            <div class="form-text">{{ form.department.help_text }}</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="{{ form.function.id_for_label }}" class="form-label">
-                                {{ form.function.label }}
-                            </label>
-                            {{ form.function }}
-                            <div class="form-text">{{ form.function.help_text }}</div>
+                            {{ form.transaction_type }}
+                            {% if form.transaction_type.errors %}
+                            <div class="invalid-feedback d-block">{{ form.transaction_type.errors.0 }}</div>
+                            {% endif %}
+                            <small class="text-muted">Determines applicable tax rates</small>
                         </div>
                     </div>
+                    
+
 
                     <!-- Single Budget Head Removed -->
                     
@@ -190,42 +206,112 @@ Description: Bill Create/Edit Form Template
                         </div>
                     </div>
 
-                    <!-- Amount Section -->
+                    <!-- Amount & Tax Section -->
                     <div class="card bg-light mb-4">
                         <div class="card-header">
-                            <h6 class="mb-0"><i class="bi bi-calculator"></i> Amount Details</h6>
+                            <h6 class="mb-0"><i class="bi bi-calculator"></i> Amount & Tax Details</h6>
                         </div>
                         <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-4">
-                                    <label for="{{ form.gross_amount.id_for_label }}" class="form-label">
+                            <!-- Gross Amount Row (with optional Sales Tax on Invoice) -->
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="{{ form.gross_amount.id_for_label }}" class="form-label fw-bold">
                                         Gross Amount (Rs.) <span class="text-danger">*</span>
                                     </label>
                                     {{ form.gross_amount }}
-                                    <small class="text-muted">Auto-calculated from lines</small>
+                                    <small class="text-muted">Auto-calculated from line items</small>
                                     {% if form.gross_amount.errors %}
                                     <div class="invalid-feedback d-block">{{ form.gross_amount.errors.0 }}</div>
                                     {% endif %}
                                 </div>
-                                <div class="col-md-4">
-                                    <label for="{{ form.tax_amount.id_for_label }}" class="form-label">
-                                        Tax Deduction (Rs.)
+                                <div class="col-md-6">
+                                    <label for="{{ form.sales_tax_invoice_amount.id_for_label }}" class="form-label fw-bold">
+                                        Sales Tax on Vendor Invoice (Rs.)
                                     </label>
-                                    {{ form.tax_amount }}
-                                    {% if form.tax_amount.errors %}
-                                    <div class="invalid-feedback d-block">{{ form.tax_amount.errors.0 }}</div>
+                                    {{ form.sales_tax_invoice_amount }}
+                                    {% if form.sales_tax_invoice_amount.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.sales_tax_invoice_amount.errors.0 }}</div>
                                     {% endif %}
-                                    <small class="text-muted">Income Tax + GST</small>
+                                    <small class="text-muted">Optional — leave blank to use standard 18% rate</small>
+                                </div>
+                            </div>
+                            
+                            <!-- Tax Breakdown -->
+                            <hr>
+                            <h6 class="text-muted mb-3"><i class="bi bi-percent"></i> Tax Withholding Breakdown</h6>
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label for="{{ form.income_tax_amount.id_for_label }}" class="form-label">
+                                        Income Tax (FBR) <i class="bi bi-lock-fill text-muted" title="Auto-calculated"></i>
+                                    </label>
+                                    {{ form.income_tax_amount }}
+                                    {% if form.income_tax_amount.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.income_tax_amount.errors.0 }}</div>
+                                    {% endif %}
+                                    <small class="text-muted">Section 153</small>
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="form-label">Net Payable (Rs.)</label>
-                                    <input type="text" id="net_amount_display" class="form-control" readonly 
-                                           value="0.00" style="background-color: #e9ecef; font-weight: bold;">
-                                    <small class="text-muted">Auto-calculated</small>
+                                    <label for="{{ form.sales_tax_amount.id_for_label }}" class="form-label">
+                                        Sales Tax (FBR/KPRA) <i class="bi bi-lock-fill text-muted" title="Auto-calculated"></i>
+                                    </label>
+                                    {{ form.sales_tax_amount }}
+                                    {% if form.sales_tax_amount.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.sales_tax_amount.errors.0 }}</div>
+                                    {% endif %}
+                                    <small class="text-muted">Withholding</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.stamp_duty_amount.id_for_label }}" class="form-label">
+                                        Stamp Duty (Provincial) <i class="bi bi-lock-fill text-muted" title="Auto-calculated"></i>
+                                    </label>
+                                    {{ form.stamp_duty_amount }}
+                                    {% if form.stamp_duty_amount.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.stamp_duty_amount.errors.0 }}</div>
+                                    {% endif %}
+                                    <small class="text-muted">Works contracts only</small>
+                                </div>
+                            </div>
+                            
+                            <!-- Hidden field for total tax_amount (computed) -->
+                            <input type="hidden" name="tax_amount" id="id_tax_amount" value="0.00">
+                            
+                            <!-- Totals Row -->
+                            <hr>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Total Tax Deduction</label>
+                                    <div id="total_tax_display" class="form-control bg-white" style="font-weight: bold; color: #dc3545;">
+                                        Rs. 0.00
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Net Payable (Rs.)</label>
+                                    <div id="net_amount_display" class="form-control bg-white" style="font-weight: bold; color: #198754;">
+                                        Rs. 0.00
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
+                    
+                    <!-- Tax Override Reason (only shown for Pre-Auditor/Verifier roles) -->
+                    {% if form.tax_override_reason %}
+                    <div class="card mb-4 border-warning">
+                        <div class="card-header bg-warning bg-opacity-10">
+                            <h6 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Tax Override</h6>
+                        </div>
+                        <div class="card-body">
+                            <label for="{{ form.tax_override_reason.id_for_label }}" class="form-label">
+                                {{ form.tax_override_reason.label }}
+                            </label>
+                            {{ form.tax_override_reason }}
+                            {% if form.tax_override_reason.errors %}
+                            <div class="invalid-feedback d-block">{{ form.tax_override_reason.errors.0 }}</div>
+                            {% endif %}
+                            <small class="text-muted">{{ form.tax_override_reason.help_text }}</small>
+                        </div>
+                    </div>
+                    {% endif %}
                     
                     <div class="d-flex justify-content-between">
                         <a href="{% url 'expenditure:bill_list' %}" class="btn btn-secondary">
@@ -279,258 +365,5 @@ Description: Bill Create/Edit Form Template
 <!-- Hidden container for HTMX response scripts -->
 <div id="budget-head-options" style="display:none;"></div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // --- Department Filter ---
-        const departmentSelect = document.querySelector('select[name="department"]');
-        const functionSelect = document.getElementById('{{ form.function.id_for_label }}');
-        
-        // Function to load functions for selected department
-        function loadFunctions() {
-            const departmentId = departmentSelect.value;
-            console.log('Department selected:', departmentId);
-            
-            // Clear function dropdown and its value
-            functionSelect.innerHTML = '<option value="">---------</option>';
-            functionSelect.value = ''; // Ensure no value is selected
-            
-            // Clear budget heads
-            clearBudgetHeads();
-            
-            if (!departmentId) {
-                functionSelect.innerHTML = '<option value="">Select department first...</option>';
-                return;
-            }
-            
-            // Fetch functions for selected department
-            const url = `{% url 'finance:load_functions' %}?department=${departmentId}`;
-            console.log('Fetching functions from:', url);
-            
-            fetch(url)
-                .then(response => response.text())
-                .then(html => {
-                    functionSelect.innerHTML = html;
-                    
-                    // Important: Clear the value after loading options
-                    functionSelect.value = '';
-                    
-                    // Reinitialize Select2 for function dropdown WITHOUT triggering change
-                    if (typeof $ !== 'undefined') {
-                        $(functionSelect).select2('destroy').select2({
-                            theme: 'bootstrap-5',
-                            width: '100%',
-                            placeholder: "Select function...",
-                            allowClear: true
-                        });
-                        
-                        // Force clear the value in Select2
-                        $(functionSelect).val(null).trigger('change.select2');
-                    }
-                    
-                    console.log('Functions loaded successfully');
-                })
-                .catch(error => console.error('Error loading functions:', error));
-        }
-        
-        function clearBudgetHeads() {
-            document.querySelectorAll('select[name$="-budget_head"]').forEach(select => {
-                select.innerHTML = '<option value="">---------</option>';
-                if (typeof $ !== 'undefined') {
-                    $(select).select2('destroy').select2({
-                        theme: 'bootstrap-5',
-                        width: '100%',
-                        placeholder: "Select function first"
-                    });
-                }
-            });
-            currentBudgetHeadOptions = '<option value="">---------</option>';
-        }
-        
-        // Function to load budget heads for selected function
-        function loadBudgetHeads() {
-            const functionId = functionSelect.value;
-            console.log('loadBudgetHeads called with function:', functionId);
-            
-            if (!functionId) {
-                clearBudgetHeads();
-                return;
-            }
-            
-            // Fetch budget heads for selected function
-            const url = `{% url 'expenditure:load_budget_heads' %}?function=${functionId}`;
-            console.log('Fetching from:', url);
-            
-            fetch(url)
-                .then(response => {
-                    console.log('Response status:', response.status);
-                    return response.text();
-                })
-                .then(html => {
-                    console.log('Response HTML length:', html.length);
-                    
-                    // Extract options from the response
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    const options = doc.querySelectorAll('option');
-                    console.log('Options found:', options.length);
-                    
-                    // Store options HTML for new rows
-                    let optionsHtml = '<option value="">---------</option>';
-                    options.forEach(opt => {
-                        optionsHtml += `<option value="${opt.value}">${opt.textContent}</option>`;
-                    });
-                    currentBudgetHeadOptions = optionsHtml;
-                    
-                    // Update all budget head dropdowns
-                    const selects = document.querySelectorAll('select[name$="-budget_head"]');
-                    console.log('Updating', selects.length, 'select elements');
-                    
-                    selects.forEach(select => {
-                        const currentValue = select.value; // Preserve selected value
-                        select.innerHTML = currentBudgetHeadOptions;
-                        
-                        // Restore selected value if it's still in the list
-                        if (currentValue) {
-                            select.value = currentValue;
-                        }
-                        
-                        // Reinitialize Select2
-                        if (typeof $ !== 'undefined') {
-                            $(select).select2('destroy').select2({
-                                theme: 'bootstrap-5',
-                                width: '100%',
-                                placeholder: "Search Budget Head...",
-                                allowClear: true
-                            });
-                        }
-                    });
-                    
-                    console.log('Budget heads updated successfully');
-                })
-                .catch(error => console.error('Error loading budget heads:', error));
-        }
-        
-        // Set up cascade: Department -> Functions -> Budget Heads
-        if (departmentSelect) {
-            departmentSelect.addEventListener('change', loadFunctions);
-            
-            // Also load on page load if department is already selected
-            if (departmentSelect.value) {
-                setTimeout(function() {
-                    console.log('Triggering department filter for:', departmentSelect.value);
-                    loadFunctions();
-                }, 100);
-            }
-        }
-        
-        if (functionSelect) {
-            functionSelect.addEventListener('change', loadBudgetHeads);
-        }
-        
-        if (functionSelect) {
-            functionSelect.addEventListener('change', loadBudgetHeads);
-        }
-        
-        // --- FormSet Logic ---
-        const linesContainer = document.getElementById('linesContainer');
-        const addLineBtn = document.getElementById('addLineBtn');
-        const totalFormsInput = document.querySelector('#id_lines-TOTAL_FORMS');
-        const grossAmountInput = document.getElementById('{{ form.gross_amount.id_for_label }}');
-        const taxAmountInput = document.getElementById('{{ form.tax_amount.id_for_label }}');
-        const netAmountDisplay = document.getElementById('net_amount_display');
-        
-        // Store current budget head options
-        let currentBudgetHeadOptions = '<option value="">---------</option>';
-        
-        // Function to update totals
-        function updateTotals() {
-            let total = 0;
-            document.querySelectorAll('.line-row').forEach(row => {
-                // Check if deleted
-                const deleteInput = row.querySelector('input[name$="-DELETE"]');
-                if (deleteInput && deleteInput.checked) return; // Skip deleted rows
-                
-                // Find amount input
-                const amountInput = row.querySelector('input[name$="-amount"]');
-                if (amountInput) {
-                     total += parseFloat(amountInput.value) || 0;
-                }
-            });
-            
-            // Update Gross Amount
-            grossAmountInput.value = total.toFixed(2);
-            
-            // Update Net Amount
-            const tax = parseFloat(taxAmountInput.value) || 0;
-            const net = total - tax;
-            netAmountDisplay.value = net.toFixed(2);
-        }
-        
-        // Attach listeners to a row
-        function attachRowListeners(row) {
-            const amountInput = row.querySelector('input[name$="-amount"]');
-            if (amountInput) {
-                amountInput.addEventListener('input', updateTotals);
-            }
-            
-            const deleteBtn = row.querySelector('.delete-row');
-            if (deleteBtn) {
-                deleteBtn.addEventListener('click', function() {
-                    const deleteInput = row.querySelector('input[name$="-DELETE"]');
-                    if (deleteInput) {
-                        // For existing rows: mark for deletion via Django formset
-                        deleteInput.checked = true;
-                        row.style.display = 'none';
-                    } else {
-                        // For new dynamic rows: just remove
-                        row.remove();
-                    }
-                    updateTotals();
-                });
-            }
-            
-             // Initialize Select2
-            const select = row.querySelector('select');
-            if (select && typeof $ !== 'undefined') {
-                 $(select).select2({
-                    theme: 'bootstrap-5',
-                    width: '100%',
-                    placeholder: "Search Budget Head...",
-                    allowClear: true
-                });
-            }
-        }
-        
-        // Add Line Handler
-        addLineBtn.addEventListener('click', function() {
-            const currentFormCount = parseInt(totalFormsInput.value);
-            const template = document.getElementById('emptyRowTemplate').innerHTML;
-            const newHtml = template.replace(/__prefix__/g, currentFormCount);
-            
-            linesContainer.insertAdjacentHTML('beforeend', newHtml);
-            totalFormsInput.value = currentFormCount + 1;
-            
-            const newRow = linesContainer.lastElementChild;
-            
-            // Apply current filtered options to the new row's select
-            const newSelect = newRow.querySelector('select[name$="-budget_head"]');
-            if (newSelect) {
-                newSelect.innerHTML = currentBudgetHeadOptions;
-            }
-            
-            attachRowListeners(newRow);
-        });
-        
-        // Initial setup for existing rows
-        document.querySelectorAll('.line-row').forEach(row => {
-            attachRowListeners(row);
-        });
-        
-        // Global tax listener
-        taxAmountInput.addEventListener('input', updateTotals);
-        
-        // Initial Calculation
-        updateTotals();
-    });
-</script>
+{% include 'expenditure/bill_form_js.html' %}
 {% endblock %}

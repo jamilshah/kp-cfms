@@ -134,6 +134,7 @@ class BillForm(forms.ModelForm):
             'bill_number', 'description',
             'transaction_type',  # NEW
             'gross_amount',
+            'sales_tax_invoice_amount',  # Optional: vendor invoice GST
             'income_tax_amount', 'sales_tax_amount', 'stamp_duty_amount',  # NEW (replacing tax_amount)
         ]
         widgets = {
@@ -161,6 +162,13 @@ class BillForm(forms.ModelForm):
                 'min': '0.01',
                 'placeholder': '0.00',
                 'id': 'id_gross_amount'
+            }),
+            'sales_tax_invoice_amount': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0.00',
+                'placeholder': 'Leave blank for 18% default',
+                'id': 'id_sales_tax_invoice_amount'
             }),
             'income_tax_amount': forms.NumberInput(attrs={
                 'class': 'form-control tax-field',
@@ -282,10 +290,6 @@ class BillForm(forms.ModelForm):
                 self.fields['function'].queryset = dept.related_functions.all().order_by('code')
             except (ValueError, TypeError, Department.DoesNotExist):
                 pass
-
-        # Set default tax amount
-        if not self.instance.pk:
-            self.initial['tax_amount'] = Decimal('0.00')
     
     def clean(self) -> dict:
         """

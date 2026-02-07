@@ -309,6 +309,15 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         verbose_name=_('Income Tax (FBR)'),
         help_text=_('Income tax withheld under Section 153.')
     )
+    sales_tax_invoice_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name=_('Sales Tax on Invoice'),
+        help_text=_('GST amount shown on vendor invoice. Leave blank to auto-calculate at 18%.')
+    )
     sales_tax_amount = models.DecimalField(
         max_digits=15,
         decimal_places=2,
@@ -555,7 +564,6 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         self.save(update_fields=['status', 'submitted_at', 'submitted_by', 'updated_at'])
 
     @transaction.atomic
-    @transaction.atomic
     def pre_audit(self, user: 'CustomUser') -> None:
         """
         Pre-Audit the bill (Finance Officer Step).
@@ -692,8 +700,8 @@ class Bill(AuditLogMixin, TenantAwareMixin):
             )
         except BudgetHead.DoesNotExist:
             raise ValidationError(
-                "System account 'Accounts Payable' (AP) not configured. "
-                "Please run 'python manage.py assign_system_codes' and create BudgetHead for AP."
+                _("Accounts Payable (AP) system account is not configured. "
+                  "Please contact your System Administrator.")
             )
         except BudgetHead.MultipleObjectsReturned:
             # If multiple AP heads exist, get first active one
@@ -716,8 +724,8 @@ class Bill(AuditLogMixin, TenantAwareMixin):
                 )
             except BudgetHead.DoesNotExist:
                 raise ValidationError(
-                    "System account 'Income Tax Payable' (TAX_IT) not configured. "
-                    "Please run 'python manage.py assign_system_codes' and create BudgetHead for TAX_IT."
+                    _("Income Tax Payable (TAX_IT) system account is not configured. "
+                      "Please contact your System Administrator.")
                 )
             except BudgetHead.MultipleObjectsReturned:
                 income_tax_head = BudgetHead.objects.filter(
@@ -733,8 +741,8 @@ class Bill(AuditLogMixin, TenantAwareMixin):
                 )
             except BudgetHead.DoesNotExist:
                 raise ValidationError(
-                    "System account 'Sales Tax Payable' (TAX_GST) not configured. "
-                    "Please run 'python manage.py assign_system_codes' and create BudgetHead for TAX_GST."
+                    _("Sales Tax Payable (TAX_GST) system account is not configured. "
+                      "Please contact your System Administrator.")
                 )
             except BudgetHead.MultipleObjectsReturned:
                 sales_tax_head = BudgetHead.objects.filter(
@@ -750,8 +758,8 @@ class Bill(AuditLogMixin, TenantAwareMixin):
                 )
             except BudgetHead.DoesNotExist:
                 raise ValidationError(
-                    "System account 'Stamp Duty Payable' (TAX_STAMP) not configured. "
-                    "Please run 'python manage.py assign_system_codes' and create BudgetHead for TAX_STAMP."
+                    _("Stamp Duty Payable (TAX_STAMP) system account is not configured. "
+                      "Please contact your System Administrator.")
                 )
             except BudgetHead.MultipleObjectsReturned:
                 stamp_duty_head = BudgetHead.objects.filter(

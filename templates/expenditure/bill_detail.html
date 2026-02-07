@@ -103,13 +103,18 @@ Description: Bill Detail Template with Workflow Actions
                     <strong>Description:</strong><br>
                     {{ bill.description }}
                 </div>
+                
+                <div class="mb-3">
+                    <strong>Transaction Type:</strong>
+                    <span class="badge bg-info">{{ bill.get_transaction_type_display }}</span>
+                </div>
             </div>
         </div>
         
         <!-- Amount Details -->
         <div class="card mb-4">
             <div class="card-header">
-                <h6 class="mb-0"><i class="bi bi-calculator"></i> Amount Details</h6>
+                <h6 class="mb-0"><i class="bi bi-calculator"></i> Amount & Tax Details</h6>
             </div>
             <div class="card-body">
                 <table class="table table-bordered mb-0">
@@ -118,8 +123,20 @@ Description: Bill Detail Template with Workflow Actions
                         <td class="text-end">Rs. {{ bill.gross_amount|currency }}</td>
                     </tr>
                     <tr>
-                        <th>Tax Deduction</th>
-                        <td class="text-end text-danger">(-) Rs. {{ bill.tax_amount|currency }}</td>
+                        <th>Income Tax (FBR - Section 153)</th>
+                        <td class="text-end text-danger">(-) Rs. {{ bill.income_tax_amount|currency }}</td>
+                    </tr>
+                    <tr>
+                        <th>Sales Tax (FBR/KPRA Withholding)</th>
+                        <td class="text-end text-danger">(-) Rs. {{ bill.sales_tax_amount|currency }}</td>
+                    </tr>
+                    <tr>
+                        <th>Stamp Duty (Provincial)</th>
+                        <td class="text-end text-danger">(-) Rs. {{ bill.stamp_duty_amount|currency }}</td>
+                    </tr>
+                    <tr class="table-warning">
+                        <th>Total Tax Deduction</th>
+                        <td class="text-end fw-bold text-danger">(-) Rs. {{ bill.tax_amount|currency }}</td>
                     </tr>
                     <tr class="table-success">
                         <th>Net Payable</th>
