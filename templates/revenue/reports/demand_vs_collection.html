@@ -1,0 +1,160 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Demand vs Collection Comparison Report
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Demand vs Collection - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'revenue:dashboard' %}">Revenue</a></li>
+        <li class="breadcrumb-item active">Demand vs Collection</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">
+        <i class="bi bi-arrow-left-right"></i> Demand vs Collection Comparison
+    </h2>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Fiscal Year</label>
+                <select name="fiscal_year" class="form-select" onchange="this.form.submit()">
+                    {% for fy in fiscal_years %}
+                    <option value="{{ fy.id }}" {% if selected_fiscal_year.id == fy.id %}selected{% endif %}>
+                        {{ fy.year_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Group By</label>
+                <select name="group_by" class="form-select" onchange="this.form.submit()">
+                    <option value="month" {% if group_by == 'month' %}selected{% endif %}>Monthly</option>
+                    <option value="head" {% if group_by == 'head' %}selected{% endif %}>By Budget Head</option>
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if selected_fiscal_year and report_data %}
+<div class="alert alert-info mb-4">
+    <i class="bi bi-info-circle"></i> Comparing demands vs collections for <strong>{{ report_data.fiscal_year.year_name }}</strong>
+    {% if group_by == 'month' %}(Monthly breakdown){% else %}(By budget head){% endif %}
+</div>
+
+{% if group_by == 'month' %}
+<!-- Monthly Comparison -->
+<div class="card">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Monthly Comparison</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Period</th>
+                        <th class="text-end">Demands Issued</th>
+                        <th class="text-center">Count</th>
+                        <th class="text-end">Collections Received</th>
+                        <th class="text-center">Count</th>
+                        <th class="text-end">Variance</th>
+                        <th class="text-center">Collection %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report_data.data %}
+                    <tr>
+                        <td><strong>{{ item.period }}</strong></td>
+                        <td class="text-end">Rs. {{ item.demands_issued|intcomma }}</td>
+                        <td class="text-center">{{ item.demand_count }}</td>
+                        <td class="text-end text-success">Rs. {{ item.collections_received|intcomma }}</td>
+                        <td class="text-center">{{ item.collection_count }}</td>
+                        <td class="text-end {% if item.variance < 0 %}text-success{% else %}text-danger{% endif %}">
+                            Rs. {{ item.variance|intcomma }}
+                        </td>
+                        <td class="text-center">
+                            {% if item.demands_issued > 0 %}
+                                {% widthratio item.collections_received item.demands_issued 100 as col_pct %}
+                                <span class="badge {% if col_pct >= 80 %}bg-success{% elif col_pct >= 50 %}bg-warning{% else %}bg-danger{% endif %}">
+                                    {{ col_pct }}%
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary">N/A</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% elif group_by == 'head' %}
+<!-- By Budget Head Comparison -->
+<div class="card">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Comparison by Budget Head</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Revenue Head</th>
+                        <th class="text-end">Total Demanded</th>
+                        <th class="text-end">Total Collected</th>
+                        <th class="text-end">Outstanding</th>
+                        <th class="text-center">Collection Rate</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report_data.data %}
+                    <tr>
+                        <td><strong>{{ item.head_name }}</strong> <br><small class="text-muted">{{ item.head_code }}</small></td>
+                        <td class="text-end">Rs. {{ item.total_demanded|intcomma }}</td>
+                        <td class="text-end text-success">Rs. {{ item.total_collected|intcomma }}</td>
+                        <td class="text-end {% if item.outstanding > 0 %}text-danger{% endif %}">Rs. {{ item.outstanding|intcomma }}</td>
+                        <td class="text-center">
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar {% if item.collection_rate >= 80 %}bg-success{% elif item.collection_rate >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                     style="width: {{ item.collection_rate }}%;">
+                                    {{ item.collection_rate }}%
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> No comparison data available for the selected fiscal year.
+</div>
+{% endif %}
+
+{% endblock %}

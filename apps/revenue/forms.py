@@ -66,7 +66,8 @@ class DemandForm(forms.ModelForm):
         model = RevenueDemand
         fields = [
             'payer', 'budget_head', 'issue_date', 'due_date',
-            'amount', 'period_description', 'description'
+            'amount', 'apply_penalty', 'penalty_rate', 'grace_period_days',
+            'max_penalty_percent', 'period_description', 'description'
         ]
         widgets = {
             'payer': forms.Select(attrs={
@@ -88,6 +89,33 @@ class DemandForm(forms.ModelForm):
                 'step': '0.01',
                 'min': '0.01',
                 'placeholder': '0.00'
+            }),
+            'apply_penalty': forms.CheckboxInput(attrs={
+                'class': 'form-check-input',
+                'id': 'id_apply_penalty'
+            }),
+            'penalty_rate': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0.00',
+                'max': '100.00',
+                'placeholder': '0.00',
+                'id': 'id_penalty_rate'
+            }),
+            'grace_period_days': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': '0',
+                'max': '365',
+                'placeholder': '0',
+                'id': 'id_grace_period_days'
+            }),
+            'max_penalty_percent': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '1',
+                'min': '0',
+                'max': '500',
+                'placeholder': '100',
+                'id': 'id_max_penalty_percent'
             }),
             'period_description': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -145,10 +173,9 @@ class DemandForm(forms.ModelForm):
         ).order_by('global_head__name', 'global_head__code')
 
         if organization:
-            # Get current operating fiscal year
+            # Get current operating fiscal year (FiscalYear is global, no organization filter)
             today = timezone.now().date()
             self._current_fiscal_year = FiscalYear.objects.filter(
-                organization=organization,
                 start_date__lte=today,
                 end_date__gte=today
             ).first()
@@ -212,9 +239,26 @@ class DemandForm(forms.ModelForm):
         issue_date = cleaned_data.get('issue_date')
         due_date = cleaned_data.get('due_date')
         
+        # Validate due date is after issue date
         if issue_date and due_date and due_date < issue_date:
             raise forms.ValidationError({
                 'due_date': _('Due date cannot be before issue date.')
+            })
+        
+        # Validate issue date is within current fiscal year only
+        if issue_date and self._current_fiscal_year:
+            if not (self._current_fiscal_year.start_date <= issue_date <= self._current_fiscal_year.end_date):
+                raise forms.ValidationError({
+                    'issue_date': _(
+                        f'Issue date must fall within the current fiscal year '
+                        f'{self._current_fiscal_year.year_name} '
+                        f'({self._current_fiscal_year.start_date} to {self._current_fiscal_year.end_date}). '
+                        f'Backdating demands to previous fiscal years is not allowed.'
+                    )
+                })
+        elif issue_date and not self._current_fiscal_year:
+            raise forms.ValidationError({
+                'issue_date': _('No active fiscal year found. Please contact your administrator.')
             })
         
         return cleaned_data
@@ -232,7 +276,8 @@ class CollectionForm(forms.ModelForm):
         model = RevenueCollection
         fields = [
             'demand', 'bank_account', 'receipt_date',
-            'instrument_type', 'instrument_no', 'amount_received', 'remarks'
+            'instrument_type', 'instrument_no', 'amount_received',
+            'penalty_collected', 'remarks'
         ]
         widgets = {
             'demand': forms.Select(attrs={
@@ -256,7 +301,16 @@ class CollectionForm(forms.ModelForm):
                 'class': 'form-control',
                 'step': '0.01',
                 'min': '0.01',
-                'placeholder': '0.00'
+                'placeholder': '0.00',
+                'id': 'id_amount_received'
+            }),
+            'penalty_collected': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0.00',
+                'placeholder': '0.00',
+                'id': 'id_penalty_collected',
+                'readonly': False
             }),
             'remarks': forms.Textarea(attrs={
                 'class': 'form-control',

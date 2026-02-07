@@ -28,6 +28,7 @@ urlpatterns = [
     path('demands/<int:pk>/', views.DemandDetailView.as_view(), name='demand_detail'),
     path('demands/<int:pk>/post/', views.DemandPostView.as_view(), name='demand_post'),
     path('demands/<int:pk>/cancel/', views.DemandCancelView.as_view(), name='demand_cancel'),
+    path('demands/<int:pk>/waive-penalty/', views.DemandWaivePenaltyView.as_view(), name='demand_waive_penalty'),
     
     # Collections
     path('collections/', views.CollectionListView.as_view(), name='collection_list'),
@@ -38,6 +39,18 @@ urlpatterns = [
     
     # API
     path('api/demands/<int:pk>/outstanding/', views.DemandOutstandingAPIView.as_view(), name='demand_outstanding_api'),
+    
+    # Export
+    path('demands/export/', views.DemandExportView.as_view(), name='demand_export'),
+    path('collections/export/', views.CollectionExportView.as_view(), name='collection_export'),
+    
+    # Reports
+    path('reports/outstanding-receivables/', views.OutstandingReceivablesReportView.as_view(), name='report_outstanding_receivables'),
+    path('reports/revenue-by-head/', views.RevenueByHeadReportView.as_view(), name='report_revenue_by_head'),
+    path('reports/payer-wise-summary/', views.PayerWiseSummaryView.as_view(), name='report_payer_wise'),
+    path('reports/collection-efficiency/', views.CollectionEfficiencyReportView.as_view(), name='report_collection_efficiency'),
+    path('reports/overdue-demands/', views.OverdueDemandsReportView.as_view(), name='report_overdue_demands'),
+    path('reports/demand-vs-collection/', views.DemandVsCollectionComparisonView.as_view(), name='report_demand_vs_collection'),
     
     # AJAX
     path('ajax/load-functions/', views.load_functions, name='load_functions'),

@@ -10,10 +10,10 @@ Description: Revenue models for Demand (Challan) and Collection (Receipt)
 -------------------------------------------------------------------------
 """
 from decimal import Decimal
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from django.db import models, transaction
 from django.db.models import Sum
-from django.core.validators import MinValueValidator, RegexValidator
+from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
@@ -83,6 +83,7 @@ class Payer(AuditLogMixin, StatusMixin, TenantAwareMixin):
     cnic_ntn = models.CharField(
         max_length=20,
         blank=True,
+        validators=[cnic_ntn_validator],
         verbose_name=_('CNIC/NTN'),
         help_text=_('CNIC for individuals or NTN for companies.')
     )
@@ -194,9 +195,78 @@ class RevenueDemand(AuditLogMixin, TenantAwareMixin):
     amount = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.01'))],
+        validators=[
+            MinValueValidator(Decimal('0.01')),
+            MaxValueValidator(Decimal('9999999999999.99'))  # Max for 15 digits, 2 decimals
+        ],
         verbose_name=_('Demand Amount'),
-        help_text=_('Total amount due.')
+        help_text=_('Principal demand amount (excluding penalty).')
+    )
+    apply_penalty = models.BooleanField(
+        default=False,
+        verbose_name=_('Apply Late Payment Penalty'),
+        help_text=_('Whether to calculate penalty for late payment.')
+    )
+    penalty_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[
+            MinValueValidator(Decimal('0.00')),
+            MaxValueValidator(Decimal('100.00'))
+        ],
+        verbose_name=_('Penalty Rate (% per day)'),
+        help_text=_('Daily penalty rate as percentage of principal amount.')
+    )
+    penalty_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[
+            MinValueValidator(Decimal('0.00')),
+            MaxValueValidator(Decimal('9999999999999.99'))
+        ],
+        verbose_name=_('Penalty Amount'),
+        help_text=_('Calculated late payment penalty.')
+    )
+    grace_period_days = models.PositiveIntegerField(
+        default=0,
+        validators=[MaxValueValidator(365)],
+        verbose_name=_('Grace Period (Days)'),
+        help_text=_('Number of days after due date before penalty starts (0 = no grace period).')
+    )
+    max_penalty_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('100.00'),
+        validators=[
+            MinValueValidator(Decimal('0.00')),
+            MaxValueValidator(Decimal('500.00'))
+        ],
+        verbose_name=_('Max Penalty (% of Principal)'),
+        help_text=_('Maximum penalty as percentage of principal amount (e.g., 50 = penalty cannot exceed 50% of principal).')
+    )
+    penalty_waived = models.BooleanField(
+        default=False,
+        verbose_name=_('Penalty Waived'),
+        help_text=_('Whether penalty has been waived by management.')
+    )
+    waived_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='waived_demand_penalties',
+        verbose_name=_('Waived By')
+    )
+    waived_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Waived At')
+    )
+    waiver_reason = models.TextField(
+        blank=True,
+        verbose_name=_('Waiver Reason')
     )
     period_description = models.CharField(
         max_length=100,
@@ -266,29 +336,71 @@ class RevenueDemand(AuditLogMixin, TenantAwareMixin):
             models.Index(fields=['issue_date']),
             models.Index(fields=['payer']),
             models.Index(fields=['challan_no']),
+            models.Index(fields=['budget_head']),
+            models.Index(fields=['posted_at']),
+            models.Index(fields=['due_date']),
         ]
     
     def __str__(self) -> str:
         return f"Challan {self.challan_no} - {self.payer.name} - Rs. {self.amount}"
     
     def clean(self) -> None:
-        """Validate that budget_head is a revenue account."""
+        """Enhanced validation for revenue demands."""
+        super().clean()
         from apps.finance.models import AccountType
         
+        # 1. Budget head validation
         if self.budget_head and self.budget_head.account_type != AccountType.REVENUE:
             raise ValidationError({
                 'budget_head': _('Budget head must be a Revenue account type.')
             })
         
+        # 2. Date validation
         if self.due_date and self.issue_date and self.due_date < self.issue_date:
             raise ValidationError({
                 'due_date': _('Due date cannot be before issue date.')
             })
+        
+        # 3. Fiscal year validation
+        if self.issue_date and self.fiscal_year:
+            if not (self.fiscal_year.start_date <= self.issue_date <= self.fiscal_year.end_date):
+                raise ValidationError({
+                    'issue_date': _(f'Issue date must be within fiscal year {self.fiscal_year.year_name}.')
+                })
+        
+        # 4. Amount validation
+        if self.amount and self.amount <= Decimal('0'):
+            raise ValidationError({
+                'amount': _('Amount must be greater than zero.')
+            })
+        
+        # 5. Payer active status validation
+        if self.payer and not self.payer.is_active:
+            raise ValidationError({
+                'payer': _('Cannot create demand for inactive payer.')
+            })
     
     def save(self, *args, **kwargs) -> None:
-        """Validate before saving."""
+        """Validate before saving and create audit trail."""
+        is_new = self.pk is None
+        old_status = None
+        
+        if not is_new:
+            # Track status changes for audit
+            try:
+                old_instance = RevenueDemand.objects.get(pk=self.pk)
+                old_status = old_instance.status
+            except RevenueDemand.DoesNotExist:
+                pass
+        
         self.clean()
         super().save(*args, **kwargs)
+        
+        # Create audit trail entry
+        if is_new:
+            # New demand created
+            from apps.revenue.notifications import RevenueNotifications
+            RevenueNotifications.notify_demand_created(self)
     
     def get_total_collected(self) -> Decimal:
         """Get total amount collected against this demand."""
@@ -298,12 +410,183 @@ class RevenueDemand(AuditLogMixin, TenantAwareMixin):
         return result['total'] or Decimal('0.00')
     
     def get_outstanding_balance(self) -> Decimal:
-        """Get remaining balance to be collected."""
+        """Get remaining balance to be collected (principal only)."""
         return self.amount - self.get_total_collected()
     
+    def get_days_overdue(self, as_of_date=None) -> int:
+        """
+        Get number of days the demand is overdue.
+        
+        Args:
+            as_of_date: Date to calculate from (defaults to today)
+            
+        Returns:
+            Number of days overdue (0 if not overdue)
+        """
+        if not as_of_date:
+            as_of_date = timezone.now().date()
+        
+        if self.status not in [DemandStatus.POSTED, DemandStatus.PARTIAL]:
+            return 0
+        
+        if as_of_date <= self.due_date:
+            return 0
+        
+        return (as_of_date - self.due_date).days
+    
+    def calculate_penalty(self, as_of_date=None) -> Decimal:
+        """
+        Calculate late payment penalty based on days overdue with grace period and cap.
+        
+        Formula: penalty = (principal × penalty_rate × penalty_days) / 100
+        Where penalty_days = days_overdue - grace_period_days
+        
+        Args:
+            as_of_date: Date to calculate from (defaults to today)
+            
+        Returns:
+            Calculated penalty amount (capped if max_penalty_percent is set)
+        """
+        # If penalty is waived, return 0
+        if self.penalty_waived:
+            return Decimal('0.00')
+        
+        # If penalty not enabled or rate is 0
+        if not self.apply_penalty or self.penalty_rate <= Decimal('0'):
+            return Decimal('0.00')
+        
+        days_overdue = self.get_days_overdue(as_of_date)
+        if days_overdue <= 0:
+            return Decimal('0.00')
+        
+        # Apply grace period
+        penalty_days = days_overdue - self.grace_period_days
+        if penalty_days <= 0:
+            return Decimal('0.00')
+        
+        # Calculate penalty: (amount × rate × penalty_days) / 100
+        penalty = (self.amount * self.penalty_rate * Decimal(str(penalty_days))) / Decimal('100')
+        penalty = penalty.quantize(Decimal('0.01'))
+        
+        # Apply penalty cap
+        max_penalty = (self.amount * self.max_penalty_percent) / Decimal('100')
+        max_penalty = max_penalty.quantize(Decimal('0.01'))
+        
+        if penalty > max_penalty:
+            penalty = max_penalty
+        
+        return penalty
+    
+    def update_penalty_amount(self, save=True) -> Decimal:
+        """
+        Update the stored penalty_amount field with current calculation.
+        
+        Args:
+            save: Whether to save the model after updating
+            
+        Returns:
+            Updated penalty amount
+        """
+        self.penalty_amount = self.calculate_penalty()
+        if save:
+            self.save(update_fields=['penalty_amount', 'updated_at'])
+        return self.penalty_amount
+    
+    def get_total_amount_due(self, as_of_date=None) -> Decimal:
+        """
+        Get total amount due including principal and penalty.
+        
+        Args:
+            as_of_date: Date to calculate penalty from (defaults to today)
+            
+        Returns:
+            Total due (principal - collected + penalty)
+        """
+        outstanding_principal = self.get_outstanding_balance()
+        current_penalty = self.calculate_penalty(as_of_date)
+        return outstanding_principal + current_penalty
+    
     def is_fully_paid(self) -> bool:
-        """Check if demand is fully paid."""
+        """Check if demand is fully paid (principal only)."""
         return self.get_total_collected() >= self.amount
+    
+    @transaction.atomic
+    def waive_penalty(self, user: 'CustomUser', reason: str) -> None:
+        """
+        Waive the penalty for this demand.
+        
+        Args:
+            user: The user authorizing the waiver
+            reason: Reason for waiving the penalty
+            
+        Raises:
+            ValidationError: If penalty is not applicable or already waived
+        """
+        if not self.apply_penalty:
+            raise ValidationError(_('This demand does not have penalty enabled.'))
+        
+        if self.penalty_waived:
+            raise ValidationError(_('Penalty has already been waived for this demand.'))
+        
+        self.penalty_waived = True
+        self.waived_by = user
+        self.waived_at = timezone.now()
+        self.waiver_reason = reason
+        self.penalty_amount = Decimal('0.00')
+        
+        self.save(update_fields=[
+            'penalty_waived', 'waived_by', 'waived_at', 
+            'waiver_reason', 'penalty_amount', 'updated_at'
+        ])
+        
+        # Log the waiver
+        from apps.revenue.logging import RevenueLogger
+        RevenueLogger.log_penalty_waived(self, user, reason)
+    
+    def get_penalty_info(self, as_of_date=None) -> Dict[str, Any]:
+        """
+        Get comprehensive penalty information.
+        
+        Args:
+            as_of_date: Date to calculate from (defaults to today)
+            
+        Returns:
+            Dictionary with penalty details
+        """
+        days_overdue = self.get_days_overdue(as_of_date)
+        penalty_amount = self.calculate_penalty(as_of_date)
+        
+        # Calculate penalty days (after grace period)
+        penalty_days = max(0, days_overdue - self.grace_period_days)
+        
+        # Calculate max penalty
+        max_penalty = (self.amount * self.max_penalty_percent) / Decimal('100')
+        max_penalty = max_penalty.quantize(Decimal('0.01'))
+        
+        # Check if penalty is capped
+        uncapped_penalty = Decimal('0.00')
+        is_capped = False
+        if penalty_days > 0 and self.apply_penalty and self.penalty_rate > 0:
+            uncapped_penalty = (self.amount * self.penalty_rate * Decimal(str(penalty_days))) / Decimal('100')
+            uncapped_penalty = uncapped_penalty.quantize(Decimal('0.01'))
+            is_capped = uncapped_penalty > max_penalty
+        
+        return {
+            'enabled': self.apply_penalty,
+            'rate': self.penalty_rate,
+            'days_overdue': days_overdue,
+            'grace_period': self.grace_period_days,
+            'penalty_days': penalty_days,
+            'penalty_amount': penalty_amount,
+            'max_penalty': max_penalty,
+            'max_penalty_percent': self.max_penalty_percent,
+            'is_capped': is_capped,
+            'uncapped_amount': uncapped_penalty,
+            'waived': self.penalty_waived,
+            'waived_by': self.waived_by,
+            'waived_at': self.waived_at,
+            'waiver_reason': self.waiver_reason,
+        }
     
     @transaction.atomic
     def post(self, user: 'CustomUser') -> None:
@@ -393,19 +676,13 @@ class RevenueDemand(AuditLogMixin, TenantAwareMixin):
             'accrual_voucher', 'status', 'posted_at', 'posted_by', 'updated_at'
         ])
         
-        # Send notification to finance officers
-        from apps.core.services import NotificationService
-        from apps.core.models import NotificationCategory
-        finance_officers = self.organization.users.filter(role='FINANCE_OFFICER')
-        for officer in finance_officers:
-            NotificationService.send_notification(
-                recipient=officer,
-                title=f"Demand Posted: {self.challan_no}",
-                message=f"Revenue demand of Rs. {self.amount:,.2f} from {self.payer.name} has been posted to GL.",
-                link=f"/revenue/demands/{self.pk}/",
-                category=NotificationCategory.WORKFLOW,
-                icon='bi-receipt'
-            )
+        # Log the posting
+        from apps.revenue.logging import RevenueLogger
+        RevenueLogger.log_demand_posted(self, user)
+        
+        # Create audit trail
+        from apps.revenue.notifications import RevenueNotifications
+        RevenueNotifications.notify_demand_posted(self)
     
     @transaction.atomic
     def cancel(self, user: 'CustomUser', reason: str) -> None:
@@ -448,6 +725,14 @@ class RevenueDemand(AuditLogMixin, TenantAwareMixin):
             'status', 'cancelled_at', 'cancelled_by', 
             'cancellation_reason', 'updated_at'
         ])
+        
+        # Log the cancellation
+        from apps.revenue.logging import RevenueLogger
+        RevenueLogger.log_demand_cancelled(self, user, reason)
+        
+        # Send cancellation notifications
+        from apps.revenue.notifications import RevenueNotifications
+        RevenueNotifications.notify_demand_cancelled(self, reason)
 
 
 class RevenueCollection(AuditLogMixin, TenantAwareMixin):
@@ -516,9 +801,23 @@ class RevenueCollection(AuditLogMixin, TenantAwareMixin):
     amount_received = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.01'))],
-        verbose_name=_('Amount Received'),
-        help_text=_('Amount collected.')
+        validators=[
+            MinValueValidator(Decimal('0.01')),
+            MaxValueValidator(Decimal('9999999999999.99'))  # Max for 15 digits, 2 decimals
+        ],
+        verbose_name=_('Amount Received (Principal)'),
+        help_text=_('Principal amount collected against demand.')
+    )
+    penalty_collected = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[
+            MinValueValidator(Decimal('0.00')),
+            MaxValueValidator(Decimal('9999999999999.99'))
+        ],
+        verbose_name=_('Penalty Collected'),
+        help_text=_('Late payment penalty collected.')
     )
     remarks = models.TextField(
         blank=True,
@@ -564,10 +863,19 @@ class RevenueCollection(AuditLogMixin, TenantAwareMixin):
             models.Index(fields=['status']),
             models.Index(fields=['demand']),
             models.Index(fields=['receipt_no']),
+            models.Index(fields=['posted_at']),
+            models.Index(fields=['bank_account']),
         ]
     
     def __str__(self) -> str:
+        total = self.amount_received + self.penalty_collected
+        if self.penalty_collected > Decimal('0'):
+            return f"Receipt {self.receipt_no} - Rs. {total} (Principal: {self.amount_received}, Penalty: {self.penalty_collected})"
         return f"Receipt {self.receipt_no} - Rs. {self.amount_received}"
+    
+    def get_total_collection(self) -> Decimal:
+        """Get total amount collected (principal + penalty)."""
+        return self.amount_received + self.penalty_collected
     
     def clean(self) -> None:
         """Validate collection amount."""
@@ -587,11 +895,18 @@ class RevenueCollection(AuditLogMixin, TenantAwareMixin):
                 })
     
     def save(self, *args, **kwargs) -> None:
-        """Set organization from demand and validate."""
+        """Set organization from demand, validate, and create audit trail."""
+        is_new = self.pk is None
+        
         if self.demand and not self.organization_id:
             self.organization = self.demand.organization
         self.clean()
         super().save(*args, **kwargs)
+        
+        # Notify about new collection
+        if is_new:
+            from apps.revenue.notifications import RevenueNotifications
+            RevenueNotifications.notify_collection_received(self)
     
     @transaction.atomic
     def post(self, user: 'CustomUser') -> None:
@@ -699,6 +1014,14 @@ class RevenueCollection(AuditLogMixin, TenantAwareMixin):
         else:
             self.demand.status = DemandStatus.PARTIAL
         self.demand.save(update_fields=['status', 'updated_at'])
+        
+        # Log the posting
+        from apps.revenue.logging import RevenueLogger
+        RevenueLogger.log_collection_posted(self, user)
+        
+        # Send notifications
+        from apps.revenue.notifications import RevenueNotifications
+        RevenueNotifications.notify_collection_posted(self)
     
     @transaction.atomic
     def cancel(self, user: 'CustomUser', reason: str = '') -> None:
@@ -732,3 +1055,194 @@ class RevenueCollection(AuditLogMixin, TenantAwareMixin):
         else:
             self.demand.status = DemandStatus.PARTIAL
         self.demand.save(update_fields=['status', 'updated_at'])
+        
+        # Log the cancellation
+        from apps.revenue.logging import RevenueLogger
+        RevenueLogger.log_collection_cancelled(self, user)
+        
+        # Send cancellation notifications
+        from apps.revenue.notifications import RevenueNotifications
+        RevenueNotifications.notify_collection_cancelled(self, reason)
+
+
+class RevenueDemandAudit(TimeStampedMixin):
+    """
+    Audit trail for demand changes.
+    
+    Tracks all modifications to demands including creation, updates,
+    posting, and cancellation with full user context.
+    
+    Attributes:
+        demand: The demand being tracked
+        action: Type of action (CREATED, UPDATED, POSTED, CANCELLED)
+        old_status: Previous status before change
+        new_status: New status after change
+        changed_fields: JSON dictionary of changed field values
+        changed_by: User who made the change
+        changed_at: Timestamp of change
+        ip_address: IP address of request
+        user_agent: Browser/client user agent
+        remarks: Optional notes about the change
+    """
+    
+    class AuditAction(models.TextChoices):
+        """Types of audit actions."""
+        CREATED = 'CREATED', _('Created')
+        UPDATED = 'UPDATED', _('Updated')
+        POSTED = 'POSTED', _('Posted')
+        CANCELLED = 'CANCELLED', _('Cancelled')
+    
+    demand = models.ForeignKey(
+        RevenueDemand,
+        on_delete=models.CASCADE,
+        related_name='audit_trail',
+        verbose_name=_('Demand')
+    )
+    action = models.CharField(
+        max_length=20,
+        choices=AuditAction.choices,
+        verbose_name=_('Action')
+    )
+    old_status = models.CharField(
+        max_length=15,
+        blank=True,
+        verbose_name=_('Old Status')
+    )
+    new_status = models.CharField(
+        max_length=15,
+        blank=True,
+        verbose_name=_('New Status')
+    )
+    changed_fields = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_('Changed Fields'),
+        help_text=_('Dictionary of field names and their new values.')
+    )
+    changed_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.PROTECT,
+        related_name='revenue_demand_audits',
+        verbose_name=_('Changed By')
+    )
+    changed_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('Changed At')
+    )
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        verbose_name=_('IP Address')
+    )
+    user_agent = models.TextField(
+        blank=True,
+        verbose_name=_('User Agent'),
+        help_text=_('Browser/client identifier.')
+    )
+    remarks = models.TextField(
+        blank=True,
+        verbose_name=_('Remarks'),
+        help_text=_('Additional notes about this change.')
+    )
+    
+    class Meta:
+        verbose_name = _('Revenue Demand Audit')
+        verbose_name_plural = _('Revenue Demand Audits')
+        ordering = ['-changed_at']
+        indexes = [
+            models.Index(fields=['demand', '-changed_at']),
+            models.Index(fields=['changed_by', '-changed_at']),
+            models.Index(fields=['action', '-changed_at']),
+        ]
+    
+    def __str__(self) -> str:
+        return (
+            f"{self.get_action_display()} - "
+            f"Demand {self.demand.challan_no} - "
+            f"{self.changed_by.get_full_name()} - "
+            f"{self.changed_at.strftime('%Y-%m-%d %H:%M')}"
+        )
+
+
+class RevenueCollectionAudit(TimeStampedMixin):
+    """
+    Audit trail for collection changes.
+    
+    Tracks all modifications to collections including creation, posting,
+    and cancellation.
+    """
+    
+    class AuditAction(models.TextChoices):
+        """Types of audit actions."""
+        CREATED = 'CREATED', _('Created')
+        UPDATED = 'UPDATED', _('Updated')
+        POSTED = 'POSTED', _('Posted')
+        CANCELLED = 'CANCELLED', _('Cancelled')
+    
+    collection = models.ForeignKey(
+        RevenueCollection,
+        on_delete=models.CASCADE,
+        related_name='audit_trail',
+        verbose_name=_('Collection')
+    )
+    action = models.CharField(
+        max_length=20,
+        choices=AuditAction.choices,
+        verbose_name=_('Action')
+    )
+    old_status = models.CharField(
+        max_length=15,
+        blank=True,
+        verbose_name=_('Old Status')
+    )
+    new_status = models.CharField(
+        max_length=15,
+        blank=True,
+        verbose_name=_('New Status')
+    )
+    changed_fields = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_('Changed Fields')
+    )
+    changed_by = models.ForeignKey(
+        'users.CustomUser',
+        on_delete=models.PROTECT,
+        related_name='revenue_collection_audits',
+        verbose_name=_('Changed By')
+    )
+    changed_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('Changed At')
+    )
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        verbose_name=_('IP Address')
+    )
+    user_agent = models.TextField(
+        blank=True,
+        verbose_name=_('User Agent')
+    )
+    remarks = models.TextField(
+        blank=True,
+        verbose_name=_('Remarks')
+    )
+    
+    class Meta:
+        verbose_name = _('Revenue Collection Audit')
+        verbose_name_plural = _('Revenue Collection Audits')
+        ordering = ['-changed_at']
+        indexes = [
+            models.Index(fields=['collection', '-changed_at']),
+            models.Index(fields=['changed_by', '-changed_at']),
+            models.Index(fields=['action', '-changed_at']),
+        ]
+    
+    def __str__(self) -> str:
+        return (
+            f"{self.get_action_display()} - "
+            f"Receipt {self.collection.receipt_no} - "
+            f"{self.changed_by.get_full_name()} - "
+            f"{self.changed_at.strftime('%Y-%m-%d %H:%M')}"
+        )

@@ -10,6 +10,7 @@ Description: Views for the Revenue module including Payer, Demand,
 """
 from typing import Any, Dict
 import json
+import csv
 from decimal import Decimal
 from django.views.generic import (
     ListView, CreateView, DetailView, UpdateView, TemplateView, View
@@ -20,7 +21,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy, reverse
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.db import transaction
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count, Q, Max
+from django.core.exceptions import ValidationError
+from django.views.decorators.csrf import csrf_protect
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 
@@ -33,6 +36,7 @@ from apps.revenue.forms import (
     PayerForm, DemandForm, CollectionForm,
     DemandPostForm, CollectionPostForm, DemandCancelForm
 )
+from apps.revenue.reports import RevenueReports
 from apps.budgeting.models import FiscalYear, Department
 from apps.finance.models import BudgetHead, AccountType, FunctionCode
 from apps.core.exceptions import WorkflowTransitionException
@@ -236,7 +240,16 @@ class DemandListView(LoginRequiredMixin, ListView):
         queryset = RevenueDemand.objects.filter(
             organization=org
         ).select_related(
-            'payer', 'budget_head', 'fiscal_year'
+            'payer',
+            'budget_head',
+            'budget_head__global_head',
+            'budget_head__function',
+            'fiscal_year',
+            'posted_by',
+            'cancelled_by',
+            'accrual_voucher'
+        ).prefetch_related(
+            'collections'
         ).order_by('-issue_date', '-created_at')
         
         # Filter by status
@@ -297,13 +310,6 @@ class DemandCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
                       'Please contact your administrator to set up a fiscal year.')
                 )
                 return redirect('revenue:dashboard')
-            
-            if active_fy.is_locked:
-                messages.error(
-                    request,
-                    _('The current fiscal year is locked. No new demands can be created.')
-                )
-                return redirect('revenue:dashboard')
         
         return super().dispatch(request, *args, **kwargs)
     
@@ -332,16 +338,31 @@ class DemandCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
         if form._current_fiscal_year:
             form.instance.fiscal_year = form._current_fiscal_year
         
-        # Generate challan number
-        fy = form.instance.fiscal_year
-        challan_count = RevenueDemand.objects.filter(
-            organization=org,
-            fiscal_year=fy
-        ).count()
-        form.instance.challan_no = f"CH-{fy.year_name}-{challan_count + 1:04d}"
-        
-        messages.success(self.request, _('Demand created successfully.'))
-        return super().form_valid(form)
+        # Generate challan number with transaction lock to prevent race conditions
+        with transaction.atomic():
+            fy = form.instance.fiscal_year
+            
+            # Get the max challan number for this fiscal year with lock
+            last_demand = RevenueDemand.objects.select_for_update().filter(
+                organization=org,
+                fiscal_year=fy
+            ).aggregate(Max('challan_no'))
+            
+            # Extract counter from last challan number
+            if last_demand['challan_no__max']:
+                # Parse CH-2025-26-0001 → get 0001 → increment
+                parts = last_demand['challan_no__max'].split('-')
+                try:
+                    counter = int(parts[-1]) + 1
+                except (ValueError, IndexError):
+                    counter = 1
+            else:
+                counter = 1
+            
+            form.instance.challan_no = f"CH-{fy.year_name}-{counter:04d}"
+            
+            messages.success(self.request, _('Demand created successfully.'))
+            return super().form_valid(form)
     
     def get_success_url(self) -> str:
         return reverse('revenue:demand_detail', kwargs={'pk': self.object.pk})
@@ -380,41 +401,66 @@ class DemandDetailView(LoginRequiredMixin, DetailView):
         ] and not self.object.collections.filter(
             status=CollectionStatus.POSTED
         ).exists()
+        # Can waive penalty if: penalty enabled, not yet waived, and demand is overdue
+        context['can_waive_penalty'] = (
+            self.object.apply_penalty and 
+            not self.object.penalty_waived and
+            self.object.status in [DemandStatus.POSTED, DemandStatus.PARTIAL] and
+            self.object.get_days_overdue() > 0
+        )
         return context
 
 
-class DemandPostView(LoginRequiredMixin, View):
-    """View for posting a demand to GL."""
+class DemandPostView(LoginRequiredMixin, CheckerRequiredMixin, View):
+    """View for posting a demand to GL.
+    
+    Requires Finance Officer/Checker role to post demands.
+    """
     
     def post(self, request, pk):
         user = request.user
         org = getattr(user, 'organization', None)
         
         demand = get_object_or_404(
-            RevenueDemand.objects.filter(organization=org),
+            RevenueDemand.objects.select_for_update().filter(organization=org),
             pk=pk
         )
         
+        # Idempotency check
+        if demand.status != DemandStatus.DRAFT:
+            messages.warning(request, _('Demand has already been posted.'))
+            return redirect('revenue:demand_detail', pk=pk)
+        
         try:
             demand.post(user)
-            messages.success(request, _('Demand posted successfully.'))
+            messages.success(
+                request,
+                _(f'Demand {demand.challan_no} posted successfully. '
+                  f'Voucher {demand.accrual_voucher.voucher_no} created.')
+            )
         except WorkflowTransitionException as e:
-            messages.error(request, str(e))
+            messages.error(request, f'Workflow Error: {str(e)}')
+        except ValidationError as e:
+            error_msg = ', '.join([f"{k}: {v}" for k, v in e.message_dict.items()])
+            messages.error(request, f'Validation Error: {error_msg}')
         except Exception as e:
             messages.error(request, _('Error posting demand: ') + str(e))
         
         return redirect('revenue:demand_detail', pk=pk)
 
 
-class DemandCancelView(LoginRequiredMixin, View):
-    """View for cancelling a demand."""
+class DemandCancelView(LoginRequiredMixin, MakerRequiredMixin, View):
+    """View for cancelling a demand.
+    
+    Requires Maker role or higher to cancel demands.
+    """
     
     def post(self, request, pk):
         user = request.user
         org = getattr(user, 'organization', None)
         
         demand = get_object_or_404(
-            RevenueDemand.objects.filter(organization=org),
+            RevenueDemand.objects.select_for_update().filter(organization=org),
             pk=pk
         )
         
@@ -427,9 +473,50 @@ class DemandCancelView(LoginRequiredMixin, View):
             demand.cancel(user, reason)
             messages.success(request, _('Demand cancelled successfully.'))
         except WorkflowTransitionException as e:
-            messages.error(request, str(e))
+            messages.error(request, f'Workflow Error: {str(e)}')
+        except ValidationError as e:
+            error_msg = ', '.join([f"{k}: {v}" for k, v in e.message_dict.items()])
+            messages.error(request, f'Validation Error: {error_msg}')
         except Exception as e:
             messages.error(request, _('Error cancelling demand: ') + str(e))
+        
+        return redirect('revenue:demand_detail', pk=pk)
+
+
+class DemandWaivePenaltyView(LoginRequiredMixin, CheckerRequiredMixin, View):
+    """View for waiving penalty on a demand.
+    
+    Requires Checker/Finance Officer role to waive penalties.
+    """
+    
+    def post(self, request, pk):
+        user = request.user
+        org = getattr(user, 'organization', None)
+        
+        demand = get_object_or_404(
+            RevenueDemand.objects.select_for_update().filter(organization=org),
+            pk=pk
+        )
+        
+        # Get waiver reason
+        reason = request.POST.get('reason', '').strip()
+        if not reason:
+            messages.error(request, _('Waiver reason is required.'))
+            return redirect('revenue:demand_detail', pk=pk)
+        
+        try:
+            demand.waive_penalty(user, reason)
+            messages.success(
+                request, 
+                _(f'Penalty for demand {demand.challan_no} has been waived.')
+            )
+        except ValidationError as e:
+            if hasattr(e, 'message'):
+                messages.error(request, e.message)
+            else:
+                messages.error(request, str(e))
+        except Exception as e:
+            messages.error(request, _('Error waiving penalty: ') + str(e))
         
         return redirect('revenue:demand_detail', pk=pk)
 
@@ -456,7 +543,15 @@ class CollectionListView(LoginRequiredMixin, ListView):
         queryset = RevenueCollection.objects.filter(
             organization=org
         ).select_related(
-            'demand', 'demand__payer', 'bank_account'
+            'demand',
+            'demand__payer',
+            'demand__budget_head',
+            'demand__budget_head__global_head',
+            'demand__fiscal_year',
+            'bank_account',
+            'bank_account__gl_code',
+            'posted_by',
+            'receipt_voucher'
         ).order_by('-receipt_date', '-created_at')
         
         # Filter by status
@@ -547,15 +642,31 @@ class CollectionCreateView(LoginRequiredMixin, CashierRequiredMixin, CreateView)
         form.instance.organization = org
         form.instance.created_by = user
         
-        # Generate receipt number
-        receipt_count = RevenueCollection.objects.filter(
-            organization=org
-        ).count()
-        fy = form.cleaned_data['demand'].fiscal_year
-        form.instance.receipt_no = f"REC-{fy.year_name}-{receipt_count + 1:04d}"
-        
-        messages.success(self.request, _('Collection recorded successfully.'))
-        return super().form_valid(form)
+        # Generate receipt number with transaction lock to prevent race conditions
+        with transaction.atomic():
+            fy = form.cleaned_data['demand'].fiscal_year
+            
+            # Get the max receipt number for this fiscal year with lock
+            last_receipt = RevenueCollection.objects.select_for_update().filter(
+                organization=org,
+                demand__fiscal_year=fy
+            ).aggregate(Max('receipt_no'))
+            
+            # Extract counter from last receipt number
+            if last_receipt['receipt_no__max']:
+                # Parse REC-2025-26-0001 → get 0001 → increment
+                parts = last_receipt['receipt_no__max'].split('-')
+                try:
+                    counter = int(parts[-1]) + 1
+                except (ValueError, IndexError):
+                    counter = 1
+            else:
+                counter = 1
+            
+            form.instance.receipt_no = f"REC-{fy.year_name}-{counter:04d}"
+            
+            messages.success(self.request, _('Collection recorded successfully.'))
+            return super().form_valid(form)
     
     def get_success_url(self) -> str:
         return reverse('revenue:collection_detail', kwargs={'pk': self.object.pk})
@@ -589,38 +700,56 @@ class CollectionDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-class CollectionPostView(LoginRequiredMixin, View):
-    """View for posting a collection to GL."""
+class CollectionPostView(LoginRequiredMixin, CheckerRequiredMixin, View):
+    """View for posting a collection to GL.
+    
+    Requires Finance Officer/Checker role to post collections.
+    """
     
     def post(self, request, pk):
         user = request.user
         org = getattr(user, 'organization', None)
         
         collection = get_object_or_404(
-            RevenueCollection.objects.filter(organization=org),
+            RevenueCollection.objects.select_for_update().filter(organization=org),
             pk=pk
         )
         
+        # Idempotency check
+        if collection.status != CollectionStatus.DRAFT:
+            messages.warning(request, _('Collection has already been posted.'))
+            return redirect('revenue:collection_detail', pk=pk)
+        
         try:
             collection.post(user)
-            messages.success(request, _('Collection posted successfully.'))
+            messages.success(
+                request,
+                _(f'Collection {collection.receipt_no} posted successfully. '
+                  f'Voucher {collection.receipt_voucher.voucher_no} created.')
+            )
         except WorkflowTransitionException as e:
-            messages.error(request, str(e))
+            messages.error(request, f'Workflow Error: {str(e)}')
+        except ValidationError as e:
+            error_msg = ', '.join([f"{k}: {v}" for k, v in e.message_dict.items()])
+            messages.error(request, f'Validation Error: {error_msg}')
         except Exception as e:
             messages.error(request, _('Error posting collection: ') + str(e))
         
         return redirect('revenue:collection_detail', pk=pk)
 
 
-class CollectionCancelView(LoginRequiredMixin, View):
-    """View for cancelling a collection."""
+class CollectionCancelView(LoginRequiredMixin, CheckerRequiredMixin, View):
+    """View for cancelling a collection.
+    
+    Requires Finance Officer/Checker role to cancel collections.
+    """
     
     def post(self, request, pk):
         user = request.user
         org = getattr(user, 'organization', None)
         
         collection = get_object_or_404(
-            RevenueCollection.objects.filter(organization=org),
+            RevenueCollection.objects.select_for_update().filter(organization=org),
             pk=pk
         )
         
@@ -628,7 +757,10 @@ class CollectionCancelView(LoginRequiredMixin, View):
             collection.cancel(user)
             messages.success(request, _('Collection cancelled successfully.'))
         except WorkflowTransitionException as e:
-            messages.error(request, str(e))
+            messages.error(request, f'Workflow Error: {str(e)}')
+        except ValidationError as e:
+            error_msg = ', '.join([f"{k}: {v}" for k, v in e.message_dict.items()])
+            messages.error(request, f'Validation Error: {error_msg}')
         except Exception as e:
             messages.error(request, _('Error cancelling collection: ') + str(e))
         
@@ -659,6 +791,7 @@ class DemandOutstandingAPIView(LoginRequiredMixin, View):
             return JsonResponse({'error': 'Demand not found'}, status=404)
 
 
+@csrf_protect
 def load_functions(request):
     """
     AJAX view to load functions filtered by department.
@@ -670,11 +803,13 @@ def load_functions(request):
     
     if department_id:
         try:
-            dept = Department.objects.get(id=department_id)
+            # Explicit integer validation to prevent SQL injection
+            dept_id = int(department_id)
+            dept = Department.objects.get(id=dept_id)
             functions = dept.related_functions.all().order_by('code')
             default_id = dept.default_function_id if dept.default_function else None
         except (ValueError, TypeError, Department.DoesNotExist):
-            pass
+            pass  # Return empty queryset
             
     # Reuse expenditure partial as it is generic and compatible
     return render(request, 'expenditure/partials/function_options.html', {
@@ -683,6 +818,7 @@ def load_functions(request):
     })
 
 
+@csrf_protect
 def load_revenue_heads(request):
     """
     AJAX view to load revenue budget heads filtered by department and/or function.
@@ -698,13 +834,611 @@ def load_revenue_heads(request):
     ).order_by('global_head__name', 'global_head__code')
     
     if function_id:
-        budget_heads = budget_heads.filter(function_id=function_id)
+        try:
+            # Explicit integer validation to prevent SQL injection
+            func_id = int(function_id)
+            budget_heads = budget_heads.filter(function_id=func_id)
+        except (ValueError, TypeError):
+            pass  # Return base queryset
     elif department_id:
         try:
-            dept = Department.objects.get(id=department_id)
+            # Explicit integer validation to prevent SQL injection
+            dept_id = int(department_id)
+            dept = Department.objects.get(id=dept_id)
             budget_heads = budget_heads.filter(function__in=dept.related_functions.all())
         except (ValueError, TypeError, Department.DoesNotExist):
-            pass
+            pass  # Return base queryset
             
     # Reuse expenditure partial as it is generic (uses 'budget_heads' context)
     return render(request, 'expenditure/partials/budget_head_options.html', {'budget_heads': budget_heads})
+
+
+# =============================================================================
+# EXPORT VIEWS (CSV/Excel)
+# =============================================================================
+
+class DemandExportView(LoginRequiredMixin, View):
+    """
+    Export demands to CSV or Excel format.
+    
+    Supports filtering by:
+    - Fiscal year
+    - Date range
+    - Status
+    - Payer
+    - Budget head
+    """
+    
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Handle export request."""
+        org = getattr(request.user, 'organization', None)
+        if not org:
+            messages.error(request, _('No organization found for user.'))
+            return redirect('revenue:demand_list')
+        
+        export_format = request.GET.get('format', 'csv')
+        
+        # Build queryset with filters
+        demands = RevenueDemand.objects.filter(
+            organization=org
+        ).select_related(
+            'payer',
+            'budget_head',
+            'budget_head__global_head',
+            'fiscal_year',
+            'posted_by'
+        ).order_by('-issue_date')
+        
+        # Apply filters
+        fiscal_year_id = request.GET.get('fiscal_year')
+        if fiscal_year_id:
+            demands = demands.filter(fiscal_year_id=fiscal_year_id)
+        
+        status = request.GET.get('status')
+        if status:
+            demands = demands.filter(status=status)
+        
+        payer_id = request.GET.get('payer')
+        if payer_id:
+            demands = demands.filter(payer_id=payer_id)
+        
+        if export_format == 'excel':
+            return self._export_excel(demands, org)
+        else:
+            return self._export_csv(demands, org)
+    
+    def _export_csv(self, demands, organization) -> HttpResponse:
+        """Export demands to CSV format."""
+        timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'revenue_demands_{organization.name}_{timestamp}.csv'
+        
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        # Add UTF-8 BOM for Excel compatibility
+        response.write('\ufeff')
+        
+        writer = csv.writer(response)
+        
+        # Header row
+        writer.writerow([
+            'Challan No',
+            'Fiscal Year',
+            'Payer Name',
+            'CNIC/NTN',
+            'Revenue Head Code',
+            'Revenue Head Name',
+            'Issue Date',
+            'Due Date',
+            'Amount (Rs)',
+            'Total Collected (Rs)',
+            'Outstanding (Rs)',
+            'Status',
+            'Period Description',
+            'Posted Date',
+            'Posted By'
+        ])
+        
+        # Data rows
+        for demand in demands:
+            writer.writerow([
+                demand.challan_no,
+                demand.fiscal_year.year_name,
+                demand.payer.name,
+                demand.payer.cnic_ntn or '',
+                demand.budget_head.global_head.code,
+                demand.budget_head.global_head.name,
+                demand.issue_date.strftime('%Y-%m-%d'),
+                demand.due_date.strftime('%Y-%m-%d'),
+                float(demand.amount),
+                float(demand.get_total_collected()),
+                float(demand.get_outstanding_balance()),
+                demand.get_status_display(),
+                demand.period_description or '',
+                demand.posted_at.strftime('%Y-%m-%d %H:%M') if demand.posted_at else '',
+                demand.posted_by.get_full_name() if demand.posted_by else ''
+            ])
+        
+        return response
+    
+    def _export_excel(self, demands, organization) -> HttpResponse:
+        """Export demands to Excel format."""
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, Alignment, PatternFill
+            from openpyxl.utils import get_column_letter
+        except ImportError:
+            messages.error(
+                self.request,
+                _('Excel export requires openpyxl. Please use CSV format.')
+            )
+            return redirect('revenue:demand_list')
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Revenue Demands"
+        
+        # Header row with formatting
+        headers = [
+            'Challan No', 'Fiscal Year', 'Payer Name', 'CNIC/NTN',
+            'Revenue Head Code', 'Revenue Head Name', 'Issue Date', 'Due Date',
+            'Amount (Rs)', 'Total Collected (Rs)', 'Outstanding (Rs)',
+            'Status', 'Period Description', 'Posted Date', 'Posted By'
+        ]
+        
+        header_fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Data rows
+        for row_num, demand in enumerate(demands, 2):
+            ws.cell(row=row_num, column=1).value = demand.challan_no
+            ws.cell(row=row_num, column=2).value = demand.fiscal_year.year_name
+            ws.cell(row=row_num, column=3).value = demand.payer.name
+            ws.cell(row=row_num, column=4).value = demand.payer.cnic_ntn or ''
+            ws.cell(row=row_num, column=5).value = demand.budget_head.global_head.code
+            ws.cell(row=row_num, column=6).value = demand.budget_head.global_head.name
+            ws.cell(row=row_num, column=7).value = demand.issue_date
+            ws.cell(row=row_num, column=8).value = demand.due_date
+            ws.cell(row=row_num, column=9).value = float(demand.amount)
+            ws.cell(row=row_num, column=10).value = float(demand.get_total_collected())
+            ws.cell(row=row_num, column=11).value = float(demand.get_outstanding_balance())
+            ws.cell(row=row_num, column=12).value = demand.get_status_display()
+            ws.cell(row=row_num, column=13).value = demand.period_description or ''
+            ws.cell(row=row_num, column=14).value = (
+                demand.posted_at.strftime('%Y-%m-%d %H:%M') if demand.posted_at else ''
+            )
+            ws.cell(row=row_num, column=15).value = (
+                demand.posted_by.get_full_name() if demand.posted_by else ''
+            )
+        
+        # Auto-adjust column widths
+        for col_num in range(1, len(headers) + 1):
+            ws.column_dimensions[get_column_letter(col_num)].width = 15
+        
+        # Prepare response
+        timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'revenue_demands_{organization.name}_{timestamp}.xlsx'
+        
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        wb.save(response)
+        return response
+
+
+class CollectionExportView(LoginRequiredMixin, View):
+    """
+    Export collections to CSV or Excel format.
+    
+    Supports filtering by:
+    - Fiscal year
+    - Date range
+    - Status
+    - Bank account
+    """
+    
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Handle export request."""
+        org = getattr(request.user, 'organization', None)
+        if not org:
+            messages.error(request, _('No organization found for user.'))
+            return redirect('revenue:collection_list')
+        
+        export_format = request.GET.get('format', 'csv')
+        
+        # Build queryset with filters
+        collections = RevenueCollection.objects.filter(
+            organization=org
+        ).select_related(
+            'demand',
+            'demand__payer',
+            'demand__budget_head',
+            'demand__budget_head__global_head',
+            'demand__fiscal_year',
+            'bank_account',
+            'posted_by'
+        ).order_by('-receipt_date')
+        
+        # Apply filters
+        fiscal_year_id = request.GET.get('fiscal_year')
+        if fiscal_year_id:
+            collections = collections.filter(demand__fiscal_year_id=fiscal_year_id)
+        
+        status = request.GET.get('status')
+        if status:
+            collections = collections.filter(status=status)
+        
+        bank_account_id = request.GET.get('bank_account')
+        if bank_account_id:
+            collections = collections.filter(bank_account_id=bank_account_id)
+        
+        if export_format == 'excel':
+            return self._export_excel(collections, org)
+        else:
+            return self._export_csv(collections, org)
+    
+    def _export_csv(self, collections, organization) -> HttpResponse:
+        """Export collections to CSV format."""
+        timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'revenue_collections_{organization.name}_{timestamp}.csv'
+        
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        # Add UTF-8 BOM
+        response.write('\ufeff')
+        
+        writer = csv.writer(response)
+        
+        # Header row
+        writer.writerow([
+            'Receipt No',
+            'Receipt Date',
+            'Challan No',
+            'Payer Name',
+            'Revenue Head',
+            'Bank Account',
+            'Instrument Type',
+            'Instrument No',
+            'Amount Received (Rs)',
+            'Status',
+            'Posted Date',
+            'Posted By',
+            'Remarks'
+        ])
+        
+        # Data rows
+        for collection in collections:
+            writer.writerow([
+                collection.receipt_no,
+                collection.receipt_date.strftime('%Y-%m-%d'),
+                collection.demand.challan_no,
+                collection.demand.payer.name,
+                collection.demand.budget_head.global_head.name,
+                collection.bank_account.title,
+                collection.get_instrument_type_display(),
+                collection.instrument_no or '',
+                float(collection.amount_received),
+                collection.get_status_display(),
+                collection.posted_at.strftime('%Y-%m-%d %H:%M') if collection.posted_at else '',
+                collection.posted_by.get_full_name() if collection.posted_by else '',
+                collection.remarks or ''
+            ])
+        
+        return response
+    
+    def _export_excel(self, collections, organization) -> HttpResponse:
+        """Export collections to Excel format."""
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, Alignment, PatternFill
+            from openpyxl.utils import get_column_letter
+        except ImportError:
+            messages.error(
+                self.request,
+                _('Excel export requires openpyxl. Please use CSV format.')
+            )
+            return redirect('revenue:collection_list')
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Revenue Collections"
+        
+        # Header row with formatting
+        headers = [
+            'Receipt No', 'Receipt Date', 'Challan No', 'Payer Name',
+            'Revenue Head', 'Bank Account', 'Instrument Type', 'Instrument No',
+            'Amount Received (Rs)', 'Status', 'Posted Date', 'Posted By', 'Remarks'
+        ]
+        
+        header_fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF')
+        
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Data rows
+        for row_num, collection in enumerate(collections, 2):
+            ws.cell(row=row_num, column=1).value = collection.receipt_no
+            ws.cell(row=row_num, column=2).value = collection.receipt_date
+            ws.cell(row=row_num, column=3).value = collection.demand.challan_no
+            ws.cell(row=row_num, column=4).value = collection.demand.payer.name
+            ws.cell(row=row_num, column=5).value = collection.demand.budget_head.global_head.name
+            ws.cell(row=row_num, column=6).value = collection.bank_account.title
+            ws.cell(row=row_num, column=7).value = collection.get_instrument_type_display()
+            ws.cell(row=row_num, column=8).value = collection.instrument_no or ''
+            ws.cell(row=row_num, column=9).value = float(collection.amount_received)
+            ws.cell(row=row_num, column=10).value = collection.get_status_display()
+            ws.cell(row=row_num, column=11).value = (
+                collection.posted_at.strftime('%Y-%m-%d %H:%M') if collection.posted_at else ''
+            )
+            ws.cell(row=row_num, column=12).value = (
+                collection.posted_by.get_full_name() if collection.posted_by else ''
+            )
+            ws.cell(row=row_num, column=13).value = collection.remarks or ''
+        
+        # Auto-adjust column widths
+        for col_num in range(1, len(headers) + 1):
+            ws.column_dimensions[get_column_letter(col_num)].width = 15
+        
+        # Prepare response
+        timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'revenue_collections_{organization.name}_{timestamp}.xlsx'
+        
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        wb.save(response)
+        return response
+
+
+# =============================================================================
+# REPORT VIEWS
+# =============================================================================
+
+class OutstandingReceivablesReportView(LoginRequiredMixin, TemplateView):
+    """
+    Aging analysis report for outstanding receivables.
+    
+    Shows demands categorized by age: 0-30, 31-60, 61-90, 90+ days
+    """
+    template_name = 'revenue/reports/outstanding_receivables.html'
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        org = getattr(self.request.user, 'organization', None)
+        
+        if not org:
+            return context
+        
+        # Get fiscal year from request or use current
+        fiscal_year_id = self.request.GET.get('fiscal_year')
+        if fiscal_year_id:
+            fiscal_year = FiscalYear.objects.filter(id=fiscal_year_id).first()
+        else:
+            fiscal_year = FiscalYear.get_current_operating_year()
+        
+        # Generate aging report
+        report_data = RevenueReports.outstanding_receivables_aging(
+            organization=org,
+            fiscal_year=fiscal_year
+        )
+        
+        context.update({
+            'report_data': report_data,
+            'fiscal_years': FiscalYear.objects.all().order_by('-start_date'),
+            'selected_fiscal_year': fiscal_year
+        })
+        
+        return context
+
+
+class RevenueByHeadReportView(LoginRequiredMixin, TemplateView):
+    """
+    Revenue summary by budget head.
+    
+    Shows demanded, collected, and outstanding amounts for each revenue head.
+    """
+    template_name = 'revenue/reports/revenue_by_head.html'
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        org = getattr(self.request.user, 'organization', None)
+        
+        if not org:
+            return context
+        
+        # Get fiscal year from request or use current
+        fiscal_year_id = self.request.GET.get('fiscal_year')
+        if fiscal_year_id:
+            fiscal_year = FiscalYear.objects.filter(id=fiscal_year_id).first()
+        else:
+            fiscal_year = FiscalYear.get_current_operating_year()
+        
+        if not fiscal_year:
+            return context
+        
+        # Generate report
+        report_data = RevenueReports.revenue_by_head_summary(
+            organization=org,
+            fiscal_year=fiscal_year
+        )
+        
+        # Calculate totals
+        totals = {
+            'total_demanded': sum(item['total_demanded'] for item in report_data),
+            'demand_count': sum(item['demand_count'] for item in report_data),
+            'total_collected': sum(item['total_collected'] for item in report_data),
+            'collection_count': sum(item['collection_count'] for item in report_data),
+            'outstanding': sum(item['outstanding'] for item in report_data)
+        }
+        
+        context.update({
+            'report_data': report_data,
+            'totals': totals,
+            'fiscal_years': FiscalYear.objects.all().order_by('-start_date'),
+            'selected_fiscal_year': fiscal_year
+        })
+        
+        return context
+
+
+class PayerWiseSummaryView(LoginRequiredMixin, TemplateView):
+    """
+    Payer-wise revenue summary.
+    
+    Shows total demands, collections, and outstanding for each payer.
+    """
+    template_name = 'revenue/reports/payer_wise_summary.html'
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        org = getattr(self.request.user, 'organization', None)
+        
+        if not org:
+            return context
+        
+        # Get fiscal year from request
+        fiscal_year_id = self.request.GET.get('fiscal_year')
+        fiscal_year = None
+        if fiscal_year_id:
+            fiscal_year = FiscalYear.objects.filter(id=fiscal_year_id).first()
+        
+        # Generate report
+        report_data = RevenueReports.payer_wise_summary(
+            organization=org,
+            fiscal_year=fiscal_year
+        )
+        
+        context.update({
+            'report_data': report_data,
+            'fiscal_years': FiscalYear.objects.all().order_by('-start_date'),
+            'selected_fiscal_year': fiscal_year
+        })
+        
+        return context
+
+
+class CollectionEfficiencyReportView(LoginRequiredMixin, TemplateView):
+    """
+    Collection efficiency metrics report.
+    
+    Shows collection rate, average days to collect, on-time vs late payments.
+    """
+    template_name = 'revenue/reports/collection_efficiency.html'
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        org = getattr(self.request.user, 'organization', None)
+        
+        if not org:
+            return context
+        
+        # Get fiscal year from request or use current
+        fiscal_year_id = self.request.GET.get('fiscal_year')
+        if fiscal_year_id:
+            fiscal_year = FiscalYear.objects.filter(id=fiscal_year_id).first()
+        else:
+            fiscal_year = FiscalYear.get_current_operating_year()
+        
+        if not fiscal_year:
+            return context
+        
+        # Generate report
+        report_data = RevenueReports.collection_efficiency_report(
+            organization=org,
+            fiscal_year=fiscal_year
+        )
+        
+        context.update({
+            'report_data': report_data,
+            'fiscal_years': FiscalYear.objects.all().order_by('-start_date'),
+            'selected_fiscal_year': fiscal_year
+        })
+        
+        return context
+
+
+class OverdueDemandsReportView(LoginRequiredMixin, TemplateView):
+    """
+    Overdue demands report.
+    
+    Lists all demands past their due date with outstanding balances.
+    """
+    template_name = 'revenue/reports/overdue_demands.html'
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        org = getattr(self.request.user, 'organization', None)
+        
+        if not org:
+            return context
+        
+        # Generate report
+        report_data = RevenueReports.overdue_demands_report(organization=org)
+        
+        context.update({
+            'report_data': report_data
+        })
+        
+        return context
+
+
+class DemandVsCollectionComparisonView(LoginRequiredMixin, TemplateView):
+    """
+    Demand vs Collection comparison report.
+    
+    Compares demands issued vs collections received by month or budget head.
+    """
+    template_name = 'revenue/reports/demand_vs_collection.html'
+    
+    def get_context_data(self, **kwargs) -> Dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        org = getattr(self.request.user, 'organization', None)
+        
+        if not org:
+            return context
+        
+        # Get fiscal year from request or use current
+        fiscal_year_id = self.request.GET.get('fiscal_year')
+        if fiscal_year_id:
+            fiscal_year = FiscalYear.objects.filter(id=fiscal_year_id).first()
+        else:
+            fiscal_year = FiscalYear.get_current_operating_year()
+        
+        if not fiscal_year:
+            return context
+        
+        # Get grouping method
+        group_by = self.request.GET.get('group_by', 'month')
+        
+        # Generate report
+        report_data = RevenueReports.demand_vs_collection_comparison(
+            organization=org,
+            fiscal_year=fiscal_year,
+            group_by=group_by
+        )
+        
+        context.update({
+            'report_data': report_data,
+            'fiscal_years': FiscalYear.objects.all().order_by('-start_date'),
+            'selected_fiscal_year': fiscal_year,
+            'group_by': group_by
+        })
+        
+        return context

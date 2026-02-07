@@ -147,6 +147,67 @@ Description: Revenue Demand Create/Edit Form Template
                         </div>
                     </div>
                     
+                    <!-- Late Payment Penalty Section -->
+                    <div class="card mb-4 border-warning">
+                        <div class="card-header bg-warning bg-opacity-10">
+                            <h6 class="mb-0"><i class="bi bi-exclamation-triangle text-warning"></i> Late Payment Penalty Configuration</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        {{ form.apply_penalty }}
+                                        <label class="form-check-label" for="{{ form.apply_penalty.id_for_label }}">
+                                            <strong>Apply late payment penalty</strong>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label for="{{ form.penalty_rate.id_for_label }}" class="form-label">
+                                        Penalty Rate (% per day)
+                                    </label>
+                                    {{ form.penalty_rate }}
+                                    {% if form.penalty_rate.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.penalty_rate.errors.0 }}</div>
+                                    {% endif %}
+                                    <small class="text-muted d-block">Daily penalty as % of principal</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.grace_period_days.id_for_label }}" class="form-label">
+                                        Grace Period (Days)
+                                    </label>
+                                    {{ form.grace_period_days }}
+                                    {% if form.grace_period_days.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.grace_period_days.errors.0 }}</div>
+                                    {% endif %}
+                                    <small class="text-muted d-block">Days after due date before penalty starts</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.max_penalty_percent.id_for_label }}" class="form-label">
+                                        Max Penalty (% of Principal)
+                                    </label>
+                                    {{ form.max_penalty_percent }}
+                                    {% if form.max_penalty_percent.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.max_penalty_percent.errors.0 }}</div>
+                                    {% endif %}
+                                    <small class="text-muted d-block">Maximum penalty cap (default 100%)</small>
+                                </div>
+                            </div>
+                            
+                            <div class="alert alert-info mb-0">
+                                <small>
+                                    <i class="bi bi-info-circle"></i> <strong>Example:</strong><br>
+                                    • Principal: Rs. 10,000 | Rate: 0.1% per day | Grace: 7 days | Cap: 50%<br>
+                                    • After 37 days overdue (30 penalty days): Rs. 10,000 × 0.1% × 30 = Rs. 300<br>
+                                    • Max penalty: Rs. 10,000 × 50% = Rs. 5,000 (penalty capped at Rs. 5,000)
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="mb-4">
                         <label for="{{ form.description.id_for_label }}" class="form-label">
                             Additional Notes

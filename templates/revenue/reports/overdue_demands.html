@@ -1,0 +1,133 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Overdue Demands Report
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Overdue Demands - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'revenue:dashboard' %}">Revenue</a></li>
+        <li class="breadcrumb-item active">Overdue Demands</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">
+        <i class="bi bi-exclamation-triangle text-danger"></i> Overdue Demands Report
+    </h2>
+    <div>
+        <a href="{% url 'revenue:demand_export' %}?format=excel&status=POSTED" class="btn btn-success">
+            <i class="bi bi-file-excel"></i> Export
+        </a>
+    </div>
+</div>
+
+{% if report_data %}
+<!-- Summary Card -->
+<div class="card mb-4 border-danger">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h3 class="text-danger mb-0">Rs. {{ report_data.total_overdue_amount|intcomma }}</h3>
+                <small class="text-muted">TOTAL OVERDUE AMOUNT</small>
+            </div>
+            <div class="col-md-6 text-end">
+                <h3 class="mb-0">{{ report_data.count }}</h3>
+                <small class="text-muted">OVERDUE DEMANDS</small>
+            </div>
+        </div>
+        <div class="mt-3">
+            <small class="text-muted"><i class="bi bi-calendar"></i> As of {{ report_data.as_of_date }}</small>
+        </div>
+    </div>
+</div>
+
+<!-- Overdue Demands Table -->
+<div class="card">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">All Overdue Demands</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Challan No</th>
+                        <th>Payer</th>
+                        <th>Contact</th>
+                        <th>Revenue Head</th>
+                        <th>Issue Date</th>
+                        <th>Due Date</th>
+                        <th class="text-center">Days Overdue</th>
+                        <th class="text-end">Total Amount</th>
+                        <th class="text-end">Collected</th>
+                        <th class="text-end">Outstanding</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report_data.overdue_demands %}
+                    <tr class="{% if item.days_overdue > 90 %}table-danger{% elif item.days_overdue > 60 %}table-warning{% endif %}">
+                        <td><a href="{% url 'revenue:demand_detail' item.demand_id %}">{{ item.challan_no }}</a></td>
+                        <td>{{ item.payer_name }}</td>
+                        <td>{{ item.payer_contact|default:"-" }}</td>
+                        <td><small>{{ item.budget_head }}</small></td>
+                        <td>{{ item.issue_date }}</td>
+                        <td>{{ item.due_date }}</td>
+                        <td class="text-center">
+                            <span class="badge {% if item.days_overdue > 90 %}bg-danger{% elif item.days_overdue > 60 %}bg-warning{% else %}bg-secondary{% endif %}">
+                                {{ item.days_overdue }} days
+                            </span>
+                        </td>
+                        <td class="text-end">Rs. {{ item.total_amount|intcomma }}</td>
+                        <td class="text-end text-success">Rs. {{ item.collected|intcomma }}</td>
+                        <td class="text-end fw-bold text-danger">Rs. {{ item.outstanding|intcomma }}</td>
+                        <td>
+                            <a href="{% url 'revenue:demand_detail' item.demand_id %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-light fw-bold">
+                    <tr>
+                        <td colspan="9" class="text-end">TOTAL OUTSTANDING:</td>
+                        <td class="text-end text-danger">Rs. {{ report_data.total_overdue_amount|intcomma }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Legend -->
+<div class="card mt-3">
+    <div class="card-body">
+        <h6>Color Coding:</h6>
+        <span class="badge bg-danger me-2">Over 90 days</span>
+        <span class="badge bg-warning me-2">Over 60 days</span>
+        <span class="badge bg-secondary">Under 60 days</span>
+    </div>
+</div>
+
+{% else %}
+<div class="alert alert-success">
+    <i class="bi bi-check-circle"></i> Excellent! No overdue demands found. All demands are either paid or within due date.
+</div>
+{% endif %}
+
+{% endblock %}

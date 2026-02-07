@@ -1,0 +1,203 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Collection Efficiency Report
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Collection Efficiency - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'revenue:dashboard' %}">Revenue</a></li>
+        <li class="breadcrumb-item active">Collection Efficiency</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">
+        <i class="bi bi-graph-up-arrow"></i> Collection Efficiency Report
+    </h2>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Fiscal Year</label>
+                <select name="fiscal_year" class="form-select" onchange="this.form.submit()">
+                    {% for fy in fiscal_years %}
+                    <option value="{{ fy.id }}" {% if selected_fiscal_year.id == fy.id %}selected{% endif %}>
+                        {{ fy.year_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if selected_fiscal_year and report_data %}
+<div class="alert alert-info mb-4">
+    <i class="bi bi-info-circle"></i> Showing efficiency metrics for <strong>{{ report_data.fiscal_year.year_name }}</strong>
+</div>
+
+<!-- Key Metrics -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card h-100 border-start border-primary border-4">
+            <div class="card-body">
+                <h4 class="text-primary mb-0">{{ report_data.collection_rate }}%</h4>
+                <small class="text-muted">COLLECTION RATE</small>
+                <div class="mt-2">
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-primary" style="width: {{ report_data.collection_rate }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-start border-success border-4">
+            <div class="card-body">
+                <h4 class="text-success mb-0">{{ report_data.avg_days_to_collect }} days</h4>
+                <small class="text-muted">AVG. COLLECTION TIME</small>
+                <div class="mt-2 small text-muted">From demand to payment</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-start border-info border-4">
+            <div class="card-body">
+                <h4 class="text-info mb-0">{{ report_data.on_time_rate }}%</h4>
+                <small class="text-muted">ON-TIME COLLECTIONS</small>
+                <div class="mt-2 small">{{ report_data.on_time_collections }} of {{ report_data.on_time_collections|add:report_data.late_collections }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-start border-warning border-4">
+            <div class="card-body">
+                <h4 class="text-warning mb-0">{{ report_data.late_collections }}</h4>
+                <small class="text-muted">LATE COLLECTIONS</small>
+                <div class="mt-2 small text-muted">Collected after due date</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Demand Summary</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tr>
+                        <td>Total Demanded:</td>
+                        <td class="text-end fw-bold">Rs. {{ report_data.total_demanded|intcomma }}</td>
+                    </tr>
+                    <tr>
+                        <td>Number of Demands:</td>
+                        <td class="text-end">{{ report_data.demand_count }}</td>
+                    </tr>
+                    <tr>
+                        <td>Total Collected:</td>
+                        <td class="text-end fw-bold text-success">Rs. {{ report_data.total_collected|intcomma }}</td>
+                    </tr>
+                    <tr>
+                        <td>Number of Collections:</td>
+                        <td class="text-end">{{ report_data.collection_count }}</td>
+                    </tr>
+                    <tr class="table-light fw-bold">
+                        <td>Outstanding:</td>
+                        <td class="text-end text-danger">Rs. {{ report_data.outstanding|intcomma }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Collection Performance</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>On-Time Collections</span>
+                        <span class="fw-bold text-success">{{ report_data.on_time_collections }}</span>
+                    </div>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar bg-success" style="width: {{ report_data.on_time_rate }}%;">
+                            {{ report_data.on_time_rate }}%
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Late Collections</span>
+                        <span class="fw-bold text-warning">{{ report_data.late_collections }}</span>
+                    </div>
+                    <div class="progress" style="height: 25px;">
+                        {% widthratio report_data.late_collections report_data.on_time_collections|add:report_data.late_collections 100 as late_rate %}
+                        <div class="progress-bar bg-warning" style="width: {{ late_rate }}%;">
+                            {{ late_rate }}%
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Monthly Trend -->
+{% if report_data.monthly_trend %}
+<div class="card">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Monthly Collection Trend</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Month</th>
+                        <th class="text-end">Amount Collected</th>
+                        <th class="text-center">Number of Collections</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report_data.monthly_trend %}
+                    <tr>
+                        <td>{{ item.month|date:"F Y" }}</td>
+                        <td class="text-end">Rs. {{ item.total|intcomma }}</td>
+                        <td class="text-center">{{ item.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> No efficiency data available for the selected fiscal year.
+</div>
+{% endif %}
+
+{% endblock %}

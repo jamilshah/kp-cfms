@@ -104,6 +104,20 @@ Description: Base template with Bootstrap 5 and navigation.
             color: #ffffff;
         }
         
+        .sidebar .nav-link.nav-link-sm {
+            font-size: 0.875rem;
+            padding: 0.35rem 0.5rem;
+            padding-left: 1.1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .sidebar .nav-link.nav-link-sm:hover {
+            white-space: normal;
+            overflow: visible;
+        }
+        
         .sidebar-heading {
             color: rgba(255, 255, 255, 0.5);
             font-size: 0.75rem;
@@ -399,9 +413,20 @@ Description: Base template with Bootstrap 5 and navigation.
                     <div class="accordion-body p-2">
                         <ul class="nav flex-column">
                             <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'revenue' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'revenue:dashboard' %}"><i class="bi bi-graph-up me-2"></i> Rev. Dashboard</a></li>
-                            <li class="nav-item"><a class="nav-link {% if 'demand' in request.resolver_match.url_name and request.resolver_match.app_name == 'revenue' %}active{% endif %}" href="{% url 'revenue:demand_list' %}"><i class="bi bi-file-earmark-text me-2"></i> Demands</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'demand' in request.resolver_match.url_name and request.resolver_match.app_name == 'revenue' and 'report' not in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:demand_list' %}"><i class="bi bi-file-earmark-text me-2"></i> Demands</a></li>
                             <li class="nav-item"><a class="nav-link {% if 'collection' in request.resolver_match.url_name and request.resolver_match.app_name == 'revenue' %}active{% endif %}" href="{% url 'revenue:collection_list' %}"><i class="bi bi-wallet2 me-2"></i> Collections</a></li>
-                            <li class="nav-item"><a class="nav-link {% if 'payer' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:payer_list' %}"><i class="bi bi-person-badge me-2"></i> Payers</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'payer' in request.resolver_match.url_name and 'report' not in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:payer_list' %}"><i class="bi bi-person-badge me-2"></i> Payers</a></li>
+                            
+                            <!-- Revenue Reports -->
+                            <li class="nav-item mt-3">
+                                <div class="nav-link text-white small fw-bold" style="cursor: default; opacity: 0.6;">REVENUE REPORTS</div>
+                            </li>
+                            <li class="nav-item"><a class="nav-link nav-link-sm {% if 'report_outstanding_receivables' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:report_outstanding_receivables' %}" title="Outstanding Receivables"><i class="bi bi-hourglass-split me-2"></i> Outstanding Receivables</a></li>
+                            <li class="nav-item"><a class="nav-link nav-link-sm {% if 'report_revenue_by_head' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:report_revenue_by_head' %}" title="Revenue by Head"><i class="bi bi-pie-chart me-2"></i> Revenue by Head</a></li>
+                            <li class="nav-item"><a class="nav-link nav-link-sm {% if 'report_payer_wise' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:report_payer_wise' %}" title="Payer-wise Summary"><i class="bi bi-people me-2"></i> Payer-wise Summary</a></li>
+                            <li class="nav-item"><a class="nav-link nav-link-sm {% if 'report_collection_efficiency' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:report_collection_efficiency' %}" title="Collection Efficiency"><i class="bi bi-graph-up-arrow me-2"></i> Collection Efficiency</a></li>
+                            <li class="nav-item"><a class="nav-link nav-link-sm {% if 'report_overdue_demands' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:report_overdue_demands' %}" title="Overdue Demands"><i class="bi bi-exclamation-triangle me-2"></i> Overdue Demands</a></li>
+                            <li class="nav-item"><a class="nav-link nav-link-sm {% if 'report_demand_vs_collection' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:report_demand_vs_collection' %}" title="Demand vs Collection"><i class="bi bi-arrow-left-right me-2"></i> Demand vs Collection</a></li>
                         </ul>
                     </div>
                 </div>
@@ -431,7 +456,7 @@ Description: Base template with Bootstrap 5 and navigation.
                         <i class="bi bi-file-earmark-bar-graph me-2"></i> Financial Reports
                     </button>
                 </h2>
-                <div id="collapseReporting" class="accordion-collapse collapse {% if request.resolver_match.app_name == 'reporting' %}show{% endif %}" aria-labelledby="headingReporting" data-bs-parent="#sidebarAccordion">
+                <div id="collapseReporting" class="accordion-collapse collapse {% if request.resolver_match.app_name == 'reporting' or 'report' in request.resolver_match.url_name %}show{% endif %}" aria-labelledby="headingReporting" data-bs-parent="#sidebarAccordion">
                     <div class="accordion-body p-2">
                         <ul class="nav flex-column">
                             <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'reporting' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'reporting:dashboard' %}"><i class="bi bi-speedometer2 me-2"></i> Reports Dashboard</a></li>

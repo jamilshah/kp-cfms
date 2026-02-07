@@ -104,19 +104,72 @@ Description: Revenue Demand Detail Template with Collection History
             </div>
             <div class="card-body">
                 <div class="row text-center mb-4">
-                    <div class="col-4">
+                    <div class="col-3">
                         <h4 class="text-primary">Rs. {{ demand.amount|intcomma }}</h4>
-                        <small class="text-muted">Demand Amount</small>
+                        <small class="text-muted">Principal</small>
                     </div>
-                    <div class="col-4">
+                    <div class="col-3">
                         <h4 class="text-success">Rs. {{ total_collected|intcomma }}</h4>
                         <small class="text-muted">Collected</small>
                     </div>
-                    <div class="col-4">
+                    <div class="col-3">
                         <h4 class="text-warning">Rs. {{ outstanding|intcomma }}</h4>
                         <small class="text-muted">Outstanding</small>
                     </div>
+                    <div class="col-3">
+                        {% if demand.apply_penalty %}
+                        {% with penalty=demand.calculate_penalty %}
+                        <h4 class="{% if penalty > 0 %}text-danger{% else %}text-success{% endif %}">Rs. {{ penalty|intcomma }}</h4>
+                        <small class="text-muted">Current Penalty</small>
+                        {% endwith %}
+                        {% else %}
+                        <h4 class="text-muted">N/A</h4>
+                        <small class="text-muted">No Penalty</small>
+                        {% endif %}
+                    </div>
                 </div>
+                
+                {% if demand.apply_penalty %}
+                <div class="alert {% if demand.penalty_waived %}alert-secondary{% else %}alert-warning{% endif %} mb-3">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <small><strong>Penalty Rate:</strong> {{ demand.penalty_rate }}% per day</small><br>
+                            <small><strong>Grace Period:</strong> {{ demand.grace_period_days }} days</small>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <small><strong>Max Penalty:</strong> {{ demand.max_penalty_percent }}% of Principal</small><br>
+                            {% with max_penalty=demand.amount|multiply:demand.max_penalty_percent|divide:100 %}
+                            <small class="text-muted">(Rs. {{ max_penalty|floatformat:2 }})</small>
+                            {% endwith %}
+                        </div>
+                        <div class="col-md-4 text-end">
+                            {% if demand.penalty_waived %}
+                            <span class="badge bg-secondary">PENALTY WAIVED</span><br>
+                            <small class="text-muted">By {{ demand.waived_by }} on {{ demand.waived_at|date:"d M Y" }}</small>
+                            {% else %}
+                            {% with days=demand.get_days_overdue %}
+                                {% if days > 0 %}
+                                    {% if days > demand.grace_period_days %}
+                                    <span class="badge bg-danger">{{ days }} days overdue</span><br>
+                                    <small class="text-muted">({{ days|add:"-"|add:demand.grace_period_days }} penalty days)</small>
+                                    {% else %}
+                                    <span class="badge bg-success">Within Grace Period</span><br>
+                                    <small class="text-muted">{{ demand.grace_period_days|add:"-"|add:days }} days remaining</small>
+                                    {% endif %}
+                                {% else %}
+                                <span class="badge bg-success">Not Overdue</span>
+                                {% endif %}
+                            {% endwith %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if demand.penalty_waived and demand.waiver_reason %}
+                    <div class="mt-2 small border-top pt-2">
+                        <strong>Waiver Reason:</strong> {{ demand.waiver_reason }}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
                 
                 <!-- Progress Bar -->
                 {% if demand.amount > 0 %}
@@ -135,7 +188,7 @@ Description: Revenue Demand Detail Template with Collection History
 </div>
 
 <!-- Workflow Actions -->
-{% if can_post or can_cancel %}
+{% if can_post or can_cancel or can_waive_penalty %}
 <div class="card mb-4">
     <div class="card-header">
         <i class="bi bi-lightning"></i> Actions
@@ -143,7 +196,7 @@ Description: Revenue Demand Detail Template with Collection History
     <div class="card-body">
         <div class="row">
             {% if can_post %}
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <form method="post" action="{% url 'revenue:demand_post' demand.pk %}" class="d-inline">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-primary" 
@@ -157,8 +210,19 @@ Description: Revenue Demand Detail Template with Collection History
             </div>
             {% endif %}
             
+            {% if can_waive_penalty %}
+            <div class="col-md-4">
+                <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#waivePenaltyModal">
+                    <i class="bi bi-shield-check"></i> Waive Penalty
+                </button>
+                <small class="text-muted d-block mt-2">
+                    Waive the late payment penalty for this demand
+                </small>
+            </div>
+            {% endif %}
+            
             {% if can_cancel %}
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#cancelModal">
                     <i class="bi bi-x-circle"></i> Cancel Demand
                 </button>
@@ -283,6 +347,53 @@ Description: Revenue Demand Detail Template with Collection History
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="submit" class="btn btn-danger">Cancel Demand</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Waive Penalty Modal -->
+{% if can_waive_penalty %}
+<div class="modal fade" id="waivePenaltyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{% url 'revenue:demand_waive_penalty' demand.pk %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-shield-check text-warning"></i> Waive Penalty</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        This action will waive the late payment penalty for this demand.
+                        <strong>This cannot be undone.</strong>
+                    </div>
+                    <div class="card bg-light mb-3">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6">
+                                    <small class="text-muted">Days Overdue:</small><br>
+                                    <strong>{{ demand.get_days_overdue }} days</strong>
+                                </div>
+                                <div class="col-6 text-end">
+                                    <small class="text-muted">Current Penalty:</small><br>
+                                    <strong class="text-danger">Rs. {{ demand.calculate_penalty|intcomma }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Waiver Reason <span class="text-danger">*</span></label>
+                        <textarea name="reason" class="form-control" rows="3" required 
+                                  placeholder="Enter reason for waiving the penalty (e.g., customer hardship, system error, etc.)"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Waive Penalty</button>
                 </div>
             </form>
         </div>

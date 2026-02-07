@@ -1,0 +1,283 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Outstanding Receivables Aging Report
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Outstanding Receivables Report - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'revenue:dashboard' %}">Revenue</a></li>
+        <li class="breadcrumb-item active">Outstanding Receivables</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">
+        <i class="bi bi-hourglass-split"></i> Outstanding Receivables - Aging Analysis
+    </h2>
+    <div>
+        <a href="{% url 'revenue:demand_export' %}?format=excel" class="btn btn-success">
+            <i class="bi bi-file-excel"></i> Export
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Fiscal Year</label>
+                <select name="fiscal_year" class="form-select" onchange="this.form.submit()">
+                    <option value="">All Fiscal Years</option>
+                    {% for fy in fiscal_years %}
+                    <option value="{{ fy.id }}" {% if selected_fiscal_year.id == fy.id %}selected{% endif %}>
+                        {{ fy.year_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if report_data %}
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card h-100 border-start border-success border-4">
+            <div class="card-body">
+                <h4 class="text-success mb-0">Rs. {{ report_data.buckets.current.total|intcomma }}</h4>
+                <small class="text-muted">CURRENT (0-30 days)</small>
+                <div class="mt-2 small">{{ report_data.buckets.current.count }} demands</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-start border-warning border-4">
+            <div class="card-body">
+                <h4 class="text-warning mb-0">Rs. {{ report_data.buckets.31_60.total|intcomma }}</h4>
+                <small class="text-muted">31-60 DAYS</small>
+                <div class="mt-2 small">{{ report_data.buckets.31_60.count }} demands</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-start border-orange border-4">
+            <div class="card-body">
+                <h4 class="text-orange mb-0">Rs. {{ report_data.buckets.61_90.total|intcomma }}</h4>
+                <small class="text-muted">61-90 DAYS</small>
+                <div class="mt-2 small">{{ report_data.buckets.61_90.count }} demands</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100 border-start border-danger border-4">
+            <div class="card-body">
+                <h4 class="text-danger mb-0">Rs. {{ report_data.buckets.over_90.total|intcomma }}</h4>
+                <small class="text-muted">OVER 90 DAYS</small>
+                <div class="mt-2 small">{{ report_data.buckets.over_90.count }} demands</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Grand Total -->
+<div class="card mb-4 bg-light">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h3 class="mb-0">Total Outstanding: Rs. {{ report_data.grand_total|intcomma }}</h3>
+                <small class="text-muted">As of {{ report_data.as_of_date }}</small>
+            </div>
+            <div class="col-md-6 text-end">
+                <h5 class="mb-0">{{ report_data.total_count }} Demands</h5>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Aging Tables -->
+<!-- Current (0-30 days) -->
+{% if report_data.buckets.current.demands %}
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Current (0-30 days) - Rs. {{ report_data.buckets.current.total|intcomma }} ({{ report_data.buckets.current.count }} demands)</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Challan No</th>
+                        <th>Payer</th>
+                        <th>Revenue Head</th>
+                        <th>Issue Date</th>
+                        <th>Due Date</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-end">Outstanding</th>
+                        <th class="text-center">Days</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report_data.buckets.current.demands %}
+                    <tr>
+                        <td><a href="{% url 'revenue:demand_detail' item.demand.pk %}">{{ item.challan_no }}</a></td>
+                        <td>{{ item.payer_name }}</td>
+                        <td>{{ item.budget_head }}</td>
+                        <td>{{ item.issue_date }}</td>
+                        <td>{{ item.due_date }}</td>
+                        <td class="text-end">Rs. {{ item.amount|intcomma }}</td>
+                        <td class="text-end fw-bold">Rs. {{ item.outstanding|intcomma }}</td>
+                        <td class="text-center"><span class="badge bg-secondary">{{ item.days_outstanding }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 31-60 Days -->
+{% if report_data.buckets.31_60.demands %}
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">31-60 Days - Rs. {{ report_data.buckets.31_60.total|intcomma }} ({{ report_data.buckets.31_60.count }} demands)</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Challan No</th>
+                        <th>Payer</th>
+                        <th>Revenue Head</th>
+                        <th>Issue Date</th>
+                        <th>Due Date</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-end">Outstanding</th>
+                        <th class="text-center">Days</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report_data.buckets.31_60.demands %}
+                    <tr>
+                        <td><a href="{% url 'revenue:demand_detail' item.demand.pk %}">{{ item.challan_no }}</a></td>
+                        <td>{{ item.payer_name }}</td>
+                        <td>{{ item.budget_head }}</td>
+                        <td>{{ item.issue_date }}</td>
+                        <td>{{ item.due_date }}</td>
+                        <td class="text-end">Rs. {{ item.amount|intcomma }}</td>
+                        <td class="text-end fw-bold">Rs. {{ item.outstanding|intcomma }}</td>
+                        <td class="text-center"><span class="badge bg-secondary">{{ item.days_outstanding }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 61-90 Days -->
+{% if report_data.buckets.61_90.demands %}
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">61-90 Days - Rs. {{ report_data.buckets.61_90.total|intcomma }} ({{ report_data.buckets.61_90.count }} demands)</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Challan No</th>
+                        <th>Payer</th>
+                        <th>Revenue Head</th>
+                        <th>Issue Date</th>
+                        <th>Due Date</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-end">Outstanding</th>
+                        <th class="text-center">Days</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report_data.buckets.61_90.demands %}
+                    <tr>
+                        <td><a href="{% url 'revenue:demand_detail' item.demand.pk %}">{{ item.challan_no }}</a></td>
+                        <td>{{ item.payer_name }}</td>
+                        <td>{{ item.budget_head }}</td>
+                        <td>{{ item.issue_date }}</td>
+                        <td>{{ item.due_date }}</td>
+                        <td class="text-end">Rs. {{ item.amount|intcomma }}</td>
+                        <td class="text-end fw-bold">Rs. {{ item.outstanding|intcomma }}</td>
+                        <td class="text-center"><span class="badge bg-secondary">{{ item.days_outstanding }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Over 90 Days -->
+{% if report_data.buckets.over_90.demands %}
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Over 90 Days - Rs. {{ report_data.buckets.over_90.total|intcomma }} ({{ report_data.buckets.over_90.count }} demands)</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Challan No</th>
+                        <th>Payer</th>
+                        <th>Revenue Head</th>
+                        <th>Issue Date</th>
+                        <th>Due Date</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-end">Outstanding</th>
+                        <th class="text-center">Days</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report_data.buckets.over_90.demands %}
+                    <tr>
+                        <td><a href="{% url 'revenue:demand_detail' item.demand.pk %}">{{ item.challan_no }}</a></td>
+                        <td>{{ item.payer_name }}</td>
+                        <td>{{ item.budget_head }}</td>
+                        <td>{{ item.issue_date }}</td>
+                        <td>{{ item.due_date }}</td>
+                        <td class="text-end">Rs. {{ item.amount|intcomma }}</td>
+                        <td class="text-end fw-bold">Rs. {{ item.outstanding|intcomma }}</td>
+                        <td class="text-center"><span class="badge bg-secondary">{{ item.days_outstanding }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> No outstanding receivables found for the selected period.
+</div>
+{% endif %}
+
+{% endblock %}

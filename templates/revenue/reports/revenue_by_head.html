@@ -1,0 +1,125 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Revenue by Budget Head Report
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Revenue by Head Report - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'revenue:dashboard' %}">Revenue</a></li>
+        <li class="breadcrumb-item active">Revenue by Head</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">
+        <i class="bi bi-pie-chart"></i> Revenue by Budget Head
+    </h2>
+    <div>
+        <a href="{% url 'revenue:demand_export' %}?format=excel&fiscal_year={{ selected_fiscal_year.id }}" class="btn btn-success">
+            <i class="bi bi-file-excel"></i> Export
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Fiscal Year</label>
+                <select name="fiscal_year" class="form-select" onchange="this.form.submit()">
+                    {% for fy in fiscal_years %}
+                    <option value="{{ fy.id }}" {% if selected_fiscal_year.id == fy.id %}selected{% endif %}>
+                        {{ fy.year_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if selected_fiscal_year %}
+<div class="alert alert-info mb-4">
+    <i class="bi bi-info-circle"></i> Showing data for <strong>{{ selected_fiscal_year.year_name }}</strong>
+    ({{ selected_fiscal_year.start_date }} to {{ selected_fiscal_year.end_date }})
+</div>
+
+{% if report_data %}
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Head Code</th>
+                        <th>Revenue Head</th>
+                        <th class="text-end">Total Demanded</th>
+                        <th class="text-center">Demands</th>
+                        <th class="text-end">Total Collected</th>
+                        <th class="text-center">Collections</th>
+                        <th class="text-end">Outstanding</th>
+                        <th class="text-center">Collection Rate</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report_data %}
+                    <tr>
+                        <td><code>{{ item.head_code }}</code></td>
+                        <td>{{ item.head_name }}</td>
+                        <td class="text-end">Rs. {{ item.total_demanded|intcomma }}</td>
+                        <td class="text-center">{{ item.demand_count }}</td>
+                        <td class="text-end text-success">Rs. {{ item.total_collected|intcomma }}</td>
+                        <td class="text-center">{{ item.collection_count }}</td>
+                        <td class="text-end {% if item.outstanding > 0 %}text-danger{% endif %}">Rs. {{ item.outstanding|intcomma }}</td>
+                        <td class="text-center">
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar {% if item.collection_rate >= 80 %}bg-success{% elif item.collection_rate >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                     role="progressbar" 
+                                     style="width: {{ item.collection_rate }}%;" 
+                                     aria-valuenow="{{ item.collection_rate }}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                    {{ item.collection_rate }}%
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-light fw-bold">
+                    <tr>
+                        <td colspan="2">TOTAL</td>
+                        <td class="text-end">Rs. {{ totals.total_demanded|intcomma }}</td>
+                        <td class="text-center">{{ totals.demand_count }}</td>
+                        <td class="text-end">Rs. {{ totals.total_collected|intcomma }}</td>
+                        <td class="text-center">{{ totals.collection_count }}</td>
+                        <td class="text-end">Rs. {{ totals.outstanding|intcomma }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> No revenue data found for the selected fiscal year.
+</div>
+{% endif %}
+{% endif %}
+
+{% endblock %}

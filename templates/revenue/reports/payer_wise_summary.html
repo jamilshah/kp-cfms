@@ -1,0 +1,113 @@
+<!--
+-------------------------------------------------------------------------
+System: KP-CFMS (Computerized Financial Management System)
+Client: Local Government Department, Khyber Pakhtunkhwa
+Team Lead: Jamil Shah
+Developers: Ali Asghar, Akhtar Munir and Zarif Khan
+Description: Payer-wise Revenue Summary Report
+-------------------------------------------------------------------------
+-->
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Payer-wise Summary - KP-CFMS{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'budgeting:dashboard' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'revenue:dashboard' %}">Revenue</a></li>
+        <li class="breadcrumb-item active">Payer-wise Summary</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">
+        <i class="bi bi-people"></i> Payer-wise Revenue Summary
+    </h2>
+    <div>
+        <a href="{% url 'revenue:demand_export' %}?format=excel" class="btn btn-success">
+            <i class="bi bi-file-excel"></i> Export
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Fiscal Year</label>
+                <select name="fiscal_year" class="form-select" onchange="this.form.submit()">
+                    <option value="">All Fiscal Years</option>
+                    {% for fy in fiscal_years %}
+                    <option value="{{ fy.id }}" {% if selected_fiscal_year and selected_fiscal_year.id == fy.id %}selected{% endif %}>
+                        {{ fy.year_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if report_data %}
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0" id="payerTable">
+                <thead class="table-light">
+                    <tr>
+                        <th>Payer Name</th>
+                        <th>CNIC/NTN</th>
+                        <th>Contact</th>
+                        <th class="text-end">Total Demanded</th>
+                        <th class="text-center">Demands</th>
+                        <th class="text-end">Total Collected</th>
+                        <th class="text-center">Collections</th>
+                        <th class="text-end">Outstanding</th>
+                        <th class="text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in report_data %}
+                    <tr>
+                        <td><a href="{% url 'revenue:payer_detail' item.payer_id %}">{{ item.payer_name }}</a></td>
+                        <td><code>{{ item.cnic_ntn|default:"-" }}</code></td>
+                        <td>{{ item.contact_no|default:"-" }}</td>
+                        <td class="text-end">Rs. {{ item.total_demanded|intcomma }}</td>
+                        <td class="text-center">{{ item.demand_count }}</td>
+                        <td class="text-end text-success">Rs. {{ item.total_collected|intcomma }}</td>
+                        <td class="text-center">{{ item.collection_count }}</td>
+                        <td class="text-end {% if item.outstanding > 0 %}text-danger fw-bold{% endif %}">Rs. {{ item.outstanding|intcomma }}</td>
+                        <td class="text-center">
+                            {% if item.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// Add search/sort functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // Simple table search can be added here if needed
+});
+</script>
+
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> No payer data found for the selected period.
+</div>
+{% endif %}
+
+{% endblock %}

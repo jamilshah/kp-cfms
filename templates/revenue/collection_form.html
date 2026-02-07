@@ -62,13 +62,39 @@ Description: Revenue Collection Create Form Template
                         <div class="row">
                             <div class="col-md-6">
                                 <strong>Payer:</strong> {{ selected_demand.payer.name }}<br>
-                                <strong>Challan:</strong> {{ selected_demand.challan_no }}
+                                <strong>Challan:</strong> {{ selected_demand.challan_no }}<br>
+                                {% if selected_demand.apply_penalty %}
+                                <strong>Penalty Rate:</strong> {{ selected_demand.penalty_rate }}% per day
+                                {% if selected_demand.grace_period_days > 0 %} ({{ selected_demand.grace_period_days }} day grace){% endif %}
+                                {% endif %}
                             </div>
                             <div class="col-md-6 text-md-end">
-                                <strong>Demand Amount:</strong> Rs. {{ selected_demand.amount|intcomma }}<br>
-                                <strong>Outstanding:</strong> <span class="text-warning fw-bold">Rs. {{ outstanding_balance|intcomma }}</span>
+                                <strong>Principal:</strong> Rs. {{ selected_demand.amount|intcomma }}<br>
+                                <strong>Outstanding:</strong> <span class="text-warning fw-bold">Rs. {{ outstanding_balance|intcomma }}</span><br>
+                                {% if selected_demand.apply_penalty %}
+                                    {% if selected_demand.penalty_waived %}
+                                    <strong>Penalty:</strong> <span class="badge bg-secondary">WAIVED</span>
+                                    {% else %}
+                                    {% with penalty=selected_demand.calculate_penalty days=selected_demand.get_days_overdue grace=selected_demand.grace_period_days %}
+                                        {% if days > 0 %}
+                                            {% if days > grace %}
+                                            <strong>Current Penalty:</strong> <span class="text-danger">Rs. {{ penalty|intcomma }}</span> ({{ days }} days overdue{% if grace > 0 %}, after {{ grace }} day grace{% endif %})
+                                            {% else %}
+                                            <strong>Penalty:</strong> <span class="text-success">Rs. 0.00</span> (within {{ grace }} day grace period)
+                                            {% endif %}
+                                        {% else %}
+                                        <strong>Penalty:</strong> <span class="text-success">Rs. 0.00</span> (Not overdue)
+                                        {% endif %}
+                                    {% endwith %}
+                                    {% endif %}
+                                {% endif %}
                             </div>
                         </div>
+                        {% if selected_demand.apply_penalty and selected_demand.max_penalty_percent < 100 %}
+                        <div class="mt-2 small">
+                            <i class="bi bi-info-circle"></i> Penalty capped at {{ selected_demand.max_penalty_percent }}% of principal (max Rs. {{ selected_demand.amount|floatformat:2|multiply:selected_demand.max_penalty_percent|divide:100|intcomma }})
+                        </div>
+                        {% endif %}
                     </div>
                     {% endif %}
                     
@@ -103,24 +129,46 @@ Description: Revenue Collection Create Form Template
                             <div class="invalid-feedback d-block">{{ form.instrument_type.errors.0 }}</div>
                             {% endif %}
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-8">
                             <label for="{{ form.instrument_no.id_for_label }}" class="form-label">
-                                Instrument No.
+                                Instrument No./Reference
                             </label>
                             {{ form.instrument_no }}
                             {% if form.instrument_no.errors %}
                             <div class="invalid-feedback d-block">{{ form.instrument_no.errors.0 }}</div>
                             {% endif %}
-                            <small class="text-muted">Cheque # or reference</small>
+                            <small class="text-muted">Cheque number or transaction reference</small>
                         </div>
-                        <div class="col-md-4">
-                            <label for="{{ form.amount_received.id_for_label }}" class="form-label">
-                                Amount Received (Rs.) <span class="text-danger">*</span>
-                            </label>
-                            {{ form.amount_received }}
-                            {% if form.amount_received.errors %}
-                            <div class="invalid-feedback d-block">{{ form.amount_received.errors.0 }}</div>
-                            {% endif %}
+                    </div>
+                    
+                    <!-- Amount Collection Section -->
+                    <div class="card mb-4 border-success">
+                        <div class="card-header bg-success bg-opacity-10">
+                            <h6 class="mb-0"><i class="bi bi-cash-stack text-success"></i> Collection Details</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="{{ form.amount_received.id_for_label }}" class="form-label">
+                                        Principal Amount (Rs.) <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.amount_received }}
+                                    {% if form.amount_received.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.amount_received.errors.0 }}</div>
+                                    {% endif %}
+                                    <small class="text-muted d-block">Amount collected against principal demand</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.penalty_collected.id_for_label }}" class="form-label">
+                                        Penalty Collected (Rs.)
+                                    </label>
+                                    {{ form.penalty_collected }}
+                                    {% if form.penalty_collected.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.penalty_collected.errors.0 }}</div>
+                                    {% endif %}
+                                    <small class="text-muted d-block">Late payment penalty amount (if any)</small>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
@@ -153,21 +201,74 @@ Description: Revenue Collection Create Form Template
 
 {% block extra_js %}
 <script>
-// Update outstanding balance when demand changes
-document.getElementById('{{ form.demand.id_for_label }}').addEventListener('change', function() {
-    var demandId = this.value;
-    if (demandId) {
-        fetch('{% url "revenue:demand_outstanding_api" 0 %}'.replace('0', demandId))
-            .then(response => response.json())
-            .then(data => {
-                if (!data.error) {
-                    // Update amount field max value
-                    var amountField = document.getElementById('{{ form.amount_received.id_for_label }}');
-                    amountField.max = data.outstanding;
-                    amountField.placeholder = 'Max: ' + data.outstanding;
-                }
-            });
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-calculate and populate penalty based on demand selection
+    {% if selected_demand %}
+    var penaltyData = {
+        apply_penalty: {{ selected_demand.apply_penalty|lower }},
+        penalty_amount: {{ selected_demand.calculate_penalty|default:0 }},
+        days_overdue: {{ selected_demand.get_days_overdue }},
+        grace_period: {{ selected_demand.grace_period_days }},
+        waived: {{ selected_demand.penalty_waived|lower }}
+    };
+    
+    // Auto-populate penalty field
+    if (penaltyData.apply_penalty && !penaltyData.waived && penaltyData.penalty_amount > 0) {
+        var penaltyField = document.getElementById('id_penalty_collected');
+        if (penaltyField && !penaltyField.value) {
+            penaltyField.value = penaltyData.penalty_amount.toFixed(2);
+            
+            // Show info message
+            var penaltyDiv = penaltyField.closest('.col-md-6');
+            var infoDiv = document.createElement('div');
+            infoDiv.className = 'alert alert-info mt-2 mb-0 small';
+            infoDiv.innerHTML = '<i class="bi bi-info-circle"></i> Penalty auto-calculated: ' + 
+                                penaltyData.days_overdue + ' days overdue (after ' + 
+                                penaltyData.grace_period + ' day grace period)';
+            penaltyDiv.appendChild(infoDiv);
+        }
     }
+    {% endif %}
+    
+    // Update total collection display
+    function updateTotalCollection() {
+        var principal = parseFloat(document.getElementById('id_amount_received').value) || 0;
+        var penalty = parseFloat(document.getElementById('id_penalty_collected').value) || 0;
+        var total = principal + penalty;
+        
+        // Display total if elements exist (can be added to template)
+        var totalDisplay = document.getElementById('total_collection_display');
+        if (totalDisplay) {
+            totalDisplay.textContent = 'Rs. ' + total.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+        }
+    }
+    
+    // Add event listeners to amount fields
+    document.getElementById('id_amount_received').addEventListener('input', updateTotalCollection);
+    document.getElementById('id_penalty_collected').addEventListener('input', updateTotalCollection);
+    
+    // Initial calculation
+    updateTotalCollection();
 });
+
+// Update outstanding balance when demand changes
+var demandSelect = document.getElementById('{{ form.demand.id_for_label }}');
+if (demandSelect) {
+    demandSelect.addEventListener('change', function() {
+        var demandId = this.value;
+        if (demandId) {
+            fetch('{% url "revenue:demand_outstanding_api" 0 %}'.replace('0', demandId))
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.error) {
+                        // Update amount field max value
+                        var amountField = document.getElementById('{{ form.amount_received.id_for_label }}');
+                        amountField.max = data.outstanding;
+                        amountField.placeholder = 'Max: ' + data.outstanding;
+                    }
+                });
+        }
+    });
+}
 </script>
 {% endblock %}
