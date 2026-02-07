@@ -7,11 +7,17 @@ from django.urls import reverse_lazy, reverse
 from django.contrib import messages
 from django.utils.translation import gettext_lazy as _
 from django.shortcuts import get_object_or_404, redirect
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.db import models
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_protect
 from typing import Dict, Any
+import re
+import logging
 
-from apps.users.permissions import AdminRequiredMixin, MakerRequiredMixin
+logger = logging.getLogger(__name__)
+
+from apps.users.permissions import AdminRequiredMixin, MakerRequiredMixin, CheckerRequiredMixin
 from apps.finance.models import (
     BudgetHead, Fund, ChequeBook, ChequeLeaf, LeafStatus,
     Voucher, JournalEntry
@@ -302,6 +308,7 @@ class BudgetHeadDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
+@method_decorator(csrf_protect, name='dispatch')
 class BudgetHeadToggleStatusView(LoginRequiredMixin, AdminRequiredMixin, View):
     """
     Toggle the active status of a Budget Head via AJAX.
@@ -435,6 +442,7 @@ class ChequeBookDetailView(LoginRequiredMixin, AdminRequiredMixin, DetailView):
         return context
 
 
+@method_decorator(csrf_protect, name='dispatch')
 class ChequeLeafCancelView(LoginRequiredMixin, AdminRequiredMixin, View):
     """
     Cancel a cheque leaf (mark as void).
@@ -462,6 +470,7 @@ class ChequeLeafCancelView(LoginRequiredMixin, AdminRequiredMixin, View):
         return HttpResponseRedirect(reverse('budgeting:setup_chequebook_detail', kwargs={'pk': pk}))
 
 
+@method_decorator(csrf_protect, name='dispatch')
 class ChequeLeafDamageView(LoginRequiredMixin, AdminRequiredMixin, View):
     """
     Mark a cheque leaf as damaged.
@@ -622,6 +631,7 @@ class BankStatementDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
+@method_decorator(csrf_protect, name='dispatch')
 class BankStatementUploadCSVView(LoginRequiredMixin, View):
     """
     Upload and parse CSV file for an existing statement.
@@ -675,6 +685,7 @@ class BankStatementUploadCSVView(LoginRequiredMixin, View):
         )
 
 
+@method_decorator(csrf_protect, name='dispatch')
 class BankStatementAddLineView(LoginRequiredMixin, View):
     """
     Add a single line to a statement.
@@ -741,6 +752,7 @@ class ReconciliationWorkbenchView(LoginRequiredMixin, DetailView):
         return context
 
 
+@method_decorator(csrf_protect, name='dispatch')
 class AutoReconcileView(LoginRequiredMixin, View):
     """
     Trigger automatic reconciliation.
@@ -773,6 +785,7 @@ class AutoReconcileView(LoginRequiredMixin, View):
         )
 
 
+@method_decorator(csrf_protect, name='dispatch')
 class ManualMatchView(LoginRequiredMixin, View):
     """
     Manually match selected items.
@@ -814,6 +827,7 @@ class ManualMatchView(LoginRequiredMixin, View):
             })
 
 
+@method_decorator(csrf_protect, name='dispatch')
 class UnmatchLineView(LoginRequiredMixin, View):
     """
     Unmatch a statement line.
@@ -837,6 +851,7 @@ class UnmatchLineView(LoginRequiredMixin, View):
         )
 
 
+@method_decorator(csrf_protect, name='dispatch')
 class LockStatementView(LoginRequiredMixin, View):
     """
     Lock a statement after reconciliation is complete.
@@ -906,9 +921,22 @@ class VoucherListView(LoginRequiredMixin, ListView):
         user = self.request.user
         org = getattr(user, 'organization', None)
         
+        from django.db.models import Prefetch
+        
+        # Optimized queryset with prefetch
         qs = Voucher.objects.filter(organization=org).select_related(
-            'fiscal_year', 'fund', 'posted_by'
-        ).prefetch_related('entries')
+            'fiscal_year', 'fund', 'posted_by', 'created_by',
+            'reversed_by', 'reversed_by_voucher'
+        ).prefetch_related(
+            Prefetch(
+                'entries',
+                queryset=JournalEntry.objects.select_related(
+                    'budget_head', 
+                    'budget_head__global_head',
+                    'budget_head__function'
+                ).order_by('id')
+            )
+        )
         
         # Filter by voucher type
         voucher_type = self.request.GET.get('type')
@@ -1035,22 +1063,25 @@ class VoucherCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
             # Format: JV-YYYY-NNN or CV-YYYY-NNN
             voucher_type = form.instance.voucher_type
             year = fiscal_year.start_date.year
-            last_voucher = Voucher.objects.filter(
+            # Lock the table to prevent race conditions
+            last_voucher_no = Voucher.objects.filter(
                 organization=org,
                 fiscal_year=fiscal_year,
                 voucher_type=voucher_type
-            ).order_by('-voucher_no').first()
+            ).select_for_update().aggregate(
+                max_no=models.Max('voucher_no')
+            )['max_no']
             
-            if last_voucher and last_voucher.voucher_no:
-                try:
-                    last_num = int(last_voucher.voucher_no.split('-')[-1])
-                    next_num = last_num + 1
-                except (ValueError, IndexError):
+            if last_voucher_no:
+                match = re.search(r'-(\d+)$', last_voucher_no)
+                if match:
+                    next_num = int(match.group(1)) + 1
+                else:
                     next_num = 1
             else:
                 next_num = 1
             
-            form.instance.voucher_no = f"{voucher_type}-{year}-{next_num:03d}"
+            form.instance.voucher_no = f"{voucher_type}-{year}-{next_num:04d}"
             
             # Save voucher
             self.object = form.save()
@@ -1068,7 +1099,9 @@ class VoucherCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
                 total_credit += entry.credit
             
             # Validate balance
+            # Validate balance
             if total_debit != total_credit:
+                transaction.set_rollback(True)
                 messages.error(
                     self.request,
                     _('Voucher is not balanced. Debit: {}, Credit: {}').format(
@@ -1078,6 +1111,7 @@ class VoucherCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
                 return self.form_invalid(form)
             
             if total_debit == Decimal('0.00'):
+                transaction.set_rollback(True)
                 messages.error(self.request, _('Voucher has no entries or all amounts are zero.'))
                 return self.form_invalid(form)
             
@@ -1115,31 +1149,39 @@ class VoucherDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-class PostVoucherView(LoginRequiredMixin, View):
-    """
-    Post a voucher to the General Ledger.
-    
-    Only allowed if:
-    - Voucher is not already posted
-    - Voucher is balanced
-    """
+@method_decorator(csrf_protect, name='dispatch')
+class PostVoucherView(LoginRequiredMixin, CheckerRequiredMixin, View):
+    """Post a voucher to the General Ledger."""
     
     def post(self, request, pk):
         user = request.user
         org = getattr(user, 'organization', None)
+        
+        logger.info(
+            f"Voucher posting attempt - User: {user.username}, "
+            f"Org: {org.code if org else 'None'}, Voucher PK: {pk}"
+        )
         
         voucher = get_object_or_404(
             Voucher.objects.filter(organization=org),
             pk=pk
         )
         
-        # Check if already posted
         if voucher.is_posted:
+            logger.warning(
+                f"Attempted to post already posted voucher - "
+                f"Voucher: {voucher.voucher_no}, User: {user.username}"
+            )
             messages.warning(request, _('Voucher is already posted.'))
             return redirect('finance:voucher_detail', pk=pk)
         
-        # Check if balanced
         if not voucher.is_balanced():
+            logger.error(
+                f"Attempted to post unbalanced voucher - "
+                f"Voucher: {voucher.voucher_no}, "
+                f"Debit: {voucher.get_total_debit()}, "
+                f"Credit: {voucher.get_total_credit()}"
+            )
             messages.error(
                 request,
                 _('Cannot post unbalanced voucher. Debit: {}, Credit: {}').format(
@@ -1152,14 +1194,25 @@ class PostVoucherView(LoginRequiredMixin, View):
         try:
             with transaction.atomic():
                 voucher.post_voucher(user)
+                logger.info(
+                    f"Voucher posted successfully - "
+                    f"Voucher: {voucher.voucher_no}, User: {user.username}"
+                )
                 messages.success(request, _('Voucher posted successfully.'))
         except Exception as e:
+            logger.error(
+                f"Error posting voucher - "
+                f"Voucher: {voucher.voucher_no}, User: {user.username}, "
+                f"Error: {str(e)}",
+                exc_info=True
+            )
             messages.error(request, _('Error posting voucher: ') + str(e))
         
         return redirect('finance:voucher_detail', pk=pk)
 
 
-class UnpostVoucherView(LoginRequiredMixin, View):
+@method_decorator(csrf_protect, name='dispatch')
+class UnpostVoucherView(LoginRequiredMixin, CheckerRequiredMixin, View):
     """
     Reverse a posted voucher by creating a reversal voucher.
     

@@ -15,4 +15,5 @@ class RevenueConfig(AppConfig):
     
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.revenue'
+    label = 'revenue'
     verbose_name = 'Revenue Management'

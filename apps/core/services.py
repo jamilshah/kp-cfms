@@ -9,11 +9,16 @@ Description: Core services for notification management and other
 -------------------------------------------------------------------------
 """
 from typing import Optional, List
+import logging
+
 from django.db import transaction
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.models import Notification, NotificationCategory
+
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -61,15 +66,29 @@ class NotificationService:
             ...     icon='bi-file-earmark-text'
             ... )
         """
-        notification = Notification.objects.create(
-            recipient=recipient,
-            title=title,
-            message=message,
-            link=link,
-            category=category,
-            icon=icon
-        )
-        return notification
+        try:
+            notification = Notification.objects.create(
+                recipient=recipient,
+                title=title,
+                message=message,
+                link=link,
+                category=category,
+                icon=icon
+            )
+            # Log success but don't spam if it's high volume
+            # logger.debug(f"Notification sent to {recipient.username}: {title}")
+            return notification
+        except Exception as e:
+            logger.error(
+                f"Failed to send notification to {recipient.username}: {title}",
+                exc_info=True,
+                extra={
+                    'recipient_id': recipient.id,
+                    'title': title,
+                    'error': str(e)
+                }
+            )
+            return None
     
     @staticmethod
     def send_bulk_notification(

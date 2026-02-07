@@ -16,21 +16,9 @@ from apps.budgeting.models import (
 )
 
 
-@receiver(pre_save, sender=FiscalYear)
-def fiscal_year_pre_save(sender, instance: FiscalYear, **kwargs) -> None:
-    """
-    Pre-save signal for FiscalYear.
-    
-    Ensures only one fiscal year can be active at a time.
-    """
-    if instance.is_active and instance.pk:
-        # Deactivate other fiscal years if this one is being activated
-        FiscalYear.objects.exclude(pk=instance.pk).filter(
-            is_active=True
-        ).update(is_active=False)
-    elif instance.is_active:
-        # New instance being created as active
-        FiscalYear.objects.filter(is_active=True).update(is_active=False)
+# Signal removed: FiscalYear.is_active field no longer exists
+# The logic for active fiscal year is now handled by FiscalYear.get_current_operating_year()
+# and is_planning_active / is_revision_active flags.
 
 
 # DISABLED: FiscalYear doesn't have is_locked or status fields

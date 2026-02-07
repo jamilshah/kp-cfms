@@ -34,7 +34,7 @@ Description: Notification list partial (reusable component).
                 <a href="{{ notification.link }}" 
                    class="btn btn-sm btn-outline-primary"
                    data-mark-read-url="{% url 'core:notification_mark_read' notification.id %}"
-                   onclick="htmx.ajax('POST', this.getAttribute('data-mark-read-url'), {swap: 'none'})">
+                   onclick="markAsReadAndNavigate(event, this)">
                     <i class="bi bi-box-arrow-up-right"></i> View
                 </a>
                 {% endif %}

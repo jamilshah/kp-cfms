@@ -623,9 +623,9 @@ class RevenueCollection(AuditLogMixin, TenantAwareMixin):
                 _('Cannot post collection for a demand that is not Posted or Partially Paid.')
             )
         
-        # Get the Accounts Receivable system head (C03880)
+        # Get the Accounts Receivable system head
         ar_head = BudgetHead.objects.filter(
-            global_head__code='C03880'
+            global_head__system_code='AR'
         ).first()
         
         if not ar_head:

@@ -79,6 +79,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('budgeting', '0024_alter_fiscalyear_unique_together_and_more'),
+        ('revenue', '0001_initial'),
     ]
 
     operations = [

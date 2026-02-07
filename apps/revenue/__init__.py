@@ -7,4 +7,4 @@ Developers: Ali Asghar, Akhtar Munir and Zarif Khan
 Description: Revenue module initialization.
 -------------------------------------------------------------------------
 """
-default_app_config = 'apps.revenue.apps.RevenueConfig'
+# default_app_config = 'apps.revenue.apps.RevenueConfig'

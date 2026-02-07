@@ -605,10 +605,11 @@ class JournalEntryForm(forms.ModelForm):
             self.fields['budget_head'].queryset = BudgetHead.objects.none()
     
     def clean(self):
-        """Validate that either debit or credit is entered, but not both."""
+        """Validate that either debit or credit is entered, and check budget."""
         cleaned_data = super().clean()
         debit = cleaned_data.get('debit', 0)
         credit = cleaned_data.get('credit', 0)
+        budget_head = cleaned_data.get('budget_head')
         
         if debit and credit:
             raise ValidationError(
@@ -619,5 +620,29 @@ class JournalEntryForm(forms.ModelForm):
             raise ValidationError(
                 _('Either debit or credit amount must be entered.')
             )
+        
+        # Budget control check for expenditure entries (credit > 0 as per action plan)
+        if budget_head and credit > 0:
+            from apps.budgeting.models import FiscalYear
+            
+            # Get fiscal year from form data or current
+            # Since this is a line item, we rely on the parent voucher's date/FY presumably, 
+            # but we don't have access to parent voucher date easily here without 'cleaned_data' context of parent form if avail.
+            # We'll use current operating year as fallback/default 
+            fiscal_year = FiscalYear.get_current_operating_year()
+            
+            if budget_head.budget_control:
+                # Use self.organization which is passed in __init__
+                available = budget_head.get_available_budget(fiscal_year, organization=self.organization)
+                
+                if credit > available:
+                    raise ValidationError({
+                        'credit': _(
+                            'Insufficient budget. Amount: %(amount)s, Available: %(available)s'
+                        ) % {
+                            'amount': credit,
+                            'available': available
+                        }
+                    })
         
         return cleaned_data

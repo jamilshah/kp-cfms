@@ -22,3 +22,6 @@ wcwidth==0.3.2
 weasyprint
 xhtml2pdf
 reportlab
+
+# Performance Monitoring & Debugging
+django-debug-toolbar==5.0.1  # SQL query profiling and performance analysis

@@ -54,6 +54,18 @@ class TenantMiddleware(MiddlewareMixin):
                 user_role = getattr(request.user, 'role', None)
                 if user_role in ['LCB', 'ADM']:
                     request.is_oversight_user = True
+            
+            # Set PostgreSQL RLS session variable for database-level isolation
+            # This provides defense-in-depth security
+            from django.db import connection
+            org_id = user_org.id if user_org else 0
+            
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET app.current_org_id = %s", [org_id])
+            except Exception:
+                # Gracefully handle if RLS is not enabled yet
+                pass
         
         return None
     
