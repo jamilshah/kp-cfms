@@ -30,9 +30,9 @@ SECRET_KEY = env('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
 
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '175.107.59.132', '172.16.104.132'])
 
-CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=['http://175.107.59.132', 'http://127.0.0.1'])
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=['http://175.107.59.132', 'http://172.16.104.132', 'http://127.0.0.1'])
 
 
 # Application definition
@@ -61,6 +61,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # 'apps.core.middleware_script_name.ScriptNameMiddleware',  # Handle X-Script-Name for subpath deployment
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -146,7 +147,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = env('STATIC_URL', default='static/')
+# FORCE_SCRIPT_NAME is handled dynamically by ScriptNameMiddleware from X-Script-Name header
 FORCE_SCRIPT_NAME = env('FORCE_SCRIPT_NAME', default=None)
+USE_X_FORWARDED_HOST = True
 
 # Login/Logout Configuration
 LOGIN_URL = 'login'
@@ -191,10 +194,10 @@ X_FRAME_OPTIONS = 'DENY'
 # Session & Cookie Security
 # Session & Cookie Security
 if not DEBUG:
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = env.bool('SESSION_COOKIE_SECURE', default=True)
+    CSRF_COOKIE_SECURE = env.bool('CSRF_COOKIE_SECURE', default=True)
     # Strict HSTS & SSL
-    SECURE_SSL_REDIRECT = True
+    SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=False)
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True

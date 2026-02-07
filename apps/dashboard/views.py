@@ -37,7 +37,6 @@ class ExecutiveDashboardView(LoginRequiredMixin, TemplateView):
     
     def dispatch(self, request, *args, **kwargs):
         """Auto-redirect LCB officers without org to provincial dashboard."""
-        from django.shortcuts import redirect
         
         user = request.user
         
@@ -318,6 +317,7 @@ class DashboardRedirectView(LoginRequiredMixin, RedirectView):
     """
     
     permanent = False
+    url = None
     
     def get_redirect_url(self, *args, **kwargs):
         """Route user to appropriate workspace based on their role."""
