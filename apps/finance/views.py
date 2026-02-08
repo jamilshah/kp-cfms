@@ -6,25 +6,84 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy, reverse
 from django.contrib import messages
 from django.utils.translation import gettext_lazy as _
-from django.shortcuts import get_object_or_404, redirect
-from django.http import HttpResponseRedirect, JsonResponse
-from django.db import models
+from django.shortcuts import get_object_or_404, redirect, render
+from django.http import HttpResponseRedirect, JsonResponse, HttpResponse
+from django.db import models, transaction
+from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect
+from django.core.cache import cache
 from typing import Dict, Any
 import re
+import csv
 import logging
+from hashlib import md5
 
 logger = logging.getLogger(__name__)
 
-from apps.users.permissions import AdminRequiredMixin, MakerRequiredMixin, CheckerRequiredMixin
+from apps.users.permissions import AdminRequiredMixin, MakerRequiredMixin, CheckerRequiredMixin, SuperAdminRequiredMixin
 from apps.finance.models import (
     BudgetHead, Fund, ChequeBook, ChequeLeaf, LeafStatus,
-    Voucher, JournalEntry
+    Voucher, JournalEntry, GlobalHead, FunctionCode, MinorHead
 )
 from apps.finance.forms import BudgetHeadForm, ChequeBookForm, ChequeLeafCancelForm, VoucherForm
 from apps.core.models import BankAccount
-from apps.budgeting.models import FiscalYear
+from apps.budgeting.models import FiscalYear, Department
+from django.views.generic import TemplateView
+
+
+class CoAManagementHubView(LoginRequiredMixin, SuperAdminRequiredMixin, TemplateView):
+    """
+    Centralized Chart of Accounts Management Hub.
+    Provides an intuitive workflow for setting up and managing CoA.
+    """
+    template_name = 'finance/coa_management_hub.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Step 1: Master Data Statistics
+        context['departments_count'] = Department.objects.filter(is_active=True).count()
+        context['functions_count'] = FunctionCode.objects.filter(is_active=True).count()
+        context['global_heads_count'] = GlobalHead.objects.count()
+        context['universal_global_heads'] = GlobalHead.objects.filter(scope='UNIVERSAL').count()
+        context['departmental_global_heads'] = GlobalHead.objects.filter(scope='DEPARTMENTAL').count()
+        
+        # Step 2: Budget Head Statistics
+        context['budget_heads_total'] = BudgetHead.objects.filter(is_active=True).count()
+        context['budget_heads_mapped'] = BudgetHead.objects.filter(is_active=True, department__isnull=False).count()
+        context['budget_heads_unmapped'] = BudgetHead.objects.filter(is_active=True, department__isnull=True).count()
+        context['sub_heads_count'] = BudgetHead.objects.filter(is_active=True).exclude(sub_code='00').count()
+        
+        # Step 3: Department Coverage
+        dept_stats = []
+        for dept in Department.objects.filter(is_active=True).order_by('name')[:10]:
+            dept_stats.append({
+                'name': dept.name,
+                'budget_heads': BudgetHead.objects.filter(department=dept, is_active=True).count(),
+                'functions': dept.related_functions.filter(is_active=True).count(),
+            })
+        context['department_stats'] = dept_stats
+        
+        # Completion indicators
+        total_budget_heads = BudgetHead.objects.filter(is_active=True).count()
+        if total_budget_heads > 0:
+            context['mapping_percentage'] = int((context['budget_heads_mapped'] / total_budget_heads) * 100)
+        else:
+            context['mapping_percentage'] = 0
+        
+        # Calculate stroke-dashoffset for progress ring (circumference = 326.73)
+        circumference = 326.73
+        context['progress_offset'] = circumference - (circumference * context['mapping_percentage'] / 100)
+            
+        # Workflow status
+        context['step1_complete'] = (context['departments_count'] > 0 and 
+                                     context['functions_count'] > 0 and 
+                                     context['global_heads_count'] > 0)
+        context['step2_ready'] = context['step1_complete']
+        context['step3_needed'] = context['budget_heads_unmapped'] > 0
+        
+        return context
 
 
 class FundListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
@@ -140,15 +199,10 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         if function_id:
             qs = qs.filter(function_id=function_id)
 
-        # Department filter
+        # Department filter - now uses direct BudgetHead.department field
         department_id = self.request.GET.get('department')
         if department_id:
-            from apps.budgeting.models import Department
-            try:
-                dept = Department.objects.get(id=department_id)
-                qs = qs.filter(function__in=dept.related_functions.all())
-            except Department.DoesNotExist:
-                pass # Or handle error
+            qs = qs.filter(department_id=department_id)
         
         # Active status filter
         is_active = self.request.GET.get('is_active')
@@ -197,6 +251,9 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         context['functions'] = functions_qs.order_by('code')
         context['account_types'] = AccountType.choices
         context['fund_types'] = FundType.choices
+        
+        # Count unmapped budget heads (no department assigned)
+        context['unmapped_count'] = BudgetHead.objects.filter(department__isnull=True).count()
         
         # OPTIMIZED: Get unique major and minor heads using database-level distinct
         # No longer iterating through all heads in Python
@@ -262,14 +319,26 @@ class BudgetHeadCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
     template_name = 'finance/budget_head_form.html'
     success_url = reverse_lazy('budgeting:setup_coa_list')
 
+    def get_form_kwargs(self):
+        """Pass request and mode parameter to form."""
+        kwargs = super().get_form_kwargs()
+        kwargs['request'] = self.request
+        kwargs['mode'] = self.request.GET.get('mode', '')
+        return kwargs
+
     def form_valid(self, form):
         messages.success(self.request, _('Budget Head created successfully.'))
         return super().form_valid(form)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['page_title'] = _('Add New Budget Head')
+        mode = self.request.GET.get('mode', '')
+        if mode == 'subhead':
+            context['page_title'] = _('Create Sub-Head')
+        else:
+            context['page_title'] = _('Add New Budget Head')
         context['back_url'] = self.success_url
+        context['is_subhead_mode'] = mode == 'subhead'
         return context
 
 
@@ -306,6 +375,342 @@ class BudgetHeadDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
     def delete(self, request, *args, **kwargs):
         messages.success(self.request, _('Budget Head deleted successfully.'))
         return super().delete(request, *args, **kwargs)
+
+
+class SubHeadCSVTemplateView(LoginRequiredMixin, AdminRequiredMixin, View):
+    """
+    Download CSV template for bulk sub-head creation.
+    """
+    def get(self, request):
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="subhead_import_template.csv"'
+        
+        writer = csv.writer(response)
+        # Write header
+        writer.writerow([
+            'Department Code', 'Fund Code', 'Function Code', 'Global Head Code',
+            'Sub Code', 'Local Description', 
+            'Budget Control (Y/N)', 'Posting Allowed (Y/N)', 'Project Required (Y/N)', 'Active (Y/N)'
+        ])
+        
+        # Write example rows
+        writer.writerow([
+            'ADM', 'GEN', '011205', 'C03880',
+            '01', 'Library Subscription Fee',
+            'Y', 'Y', 'N', 'Y'
+        ])
+        writer.writerow([
+            'ADM', 'GEN', '011205', 'C03880',
+            '02', 'Sports Equipment',
+            'Y', 'Y', 'N', 'Y'
+        ])
+        
+        return response
+
+
+class SubHeadCSVImportView(LoginRequiredMixin, AdminRequiredMixin, View):
+    """
+    Import sub-heads from CSV file.
+    """
+    template_name = 'finance/subhead_csv_import.html'
+    
+    def get(self, request):
+        return render(request, self.template_name)
+    
+    def post(self, request):
+        csv_file = request.FILES.get('csv_file')
+        
+        if not csv_file:
+            messages.error(request, _('Please upload a CSV file.'))
+            return redirect('finance:subhead_csv_import')
+        
+        if not csv_file.name.endswith('.csv'):
+            messages.error(request, _('Please upload a valid CSV file.'))
+            return redirect('finance:subhead_csv_import')
+        
+        # Parse CSV
+        decoded_file = csv_file.read().decode('utf-8').splitlines()
+        reader = csv.DictReader(decoded_file)
+        
+        success_count = 0
+        error_count = 0
+        errors = []
+        
+        try:
+            with transaction.atomic():
+                for row_num, row in enumerate(reader, start=2):  # Start at 2 (header is row 1)
+                    try:
+                        # Get or validate references
+                        dept_code = row['Department Code'].strip()
+                        fund_code = row['Fund Code'].strip()
+                        func_code = row['Function Code'].strip()
+                        global_head_code = row['Global Head Code'].strip()
+                        sub_code = row['Sub Code'].strip()
+                        local_desc = row['Local Description'].strip()
+                        
+                        # Lookup objects
+                        try:
+                            department = Department.objects.get(code=dept_code, is_active=True)
+                        except Department.DoesNotExist:
+                            errors.append(f'Row {row_num}: Department "{dept_code}" not found.')
+                            error_count += 1
+                            continue
+                        
+                        try:
+                            fund = Fund.objects.get(code=fund_code, is_active=True)
+                        except Fund.DoesNotExist:
+                            errors.append(f'Row {row_num}: Fund "{fund_code}" not found.')
+                            error_count += 1
+                            continue
+                        
+                        try:
+                            function = FunctionCode.objects.get(code=func_code, is_active=True)
+                        except FunctionCode.DoesNotExist:
+                            errors.append(f'Row {row_num}: Function "{func_code}" not found.')
+                            error_count += 1
+                            continue
+                        
+                        try:
+                            global_head = GlobalHead.objects.get(code=global_head_code)
+                        except GlobalHead.DoesNotExist:
+                            errors.append(f'Row {row_num}: Global Head "{global_head_code}" not found.')
+                            error_count += 1
+                            continue
+                        
+                        # Validate sub-code
+                        if sub_code == '00':
+                            errors.append(f'Row {row_num}: Sub-code cannot be "00". Use 01-99.')
+                            error_count += 1
+                            continue
+                        
+                        if not local_desc:
+                            errors.append(f'Row {row_num}: Local Description is required.')
+                            error_count += 1
+                            continue
+                        
+                        # Check for duplicates
+                        if BudgetHead.objects.filter(
+                            department=department,
+                            fund=fund,
+                            function=function,
+                            global_head=global_head,
+                            sub_code=sub_code
+                        ).exists():
+                            errors.append(f'Row {row_num}: Sub-head already exists for this combination.')
+                            error_count += 1
+                            continue
+                        
+                        # Parse boolean fields
+                        budget_control = row.get('Budget Control (Y/N)', 'Y').strip().upper() == 'Y'
+                        posting_allowed = row.get('Posting Allowed (Y/N)', 'Y').strip().upper() == 'Y'
+                        project_required = row.get('Project Required (Y/N)', 'N').strip().upper() == 'Y'
+                        is_active = row.get('Active (Y/N)', 'Y').strip().upper() == 'Y'
+                        
+                        # Create sub-head
+                        BudgetHead.objects.create(
+                            department=department,
+                            fund=fund,
+                            function=function,
+                            global_head=global_head,
+                            sub_code=sub_code,
+                            head_type='SUB_HEAD',
+                            local_description=local_desc,
+                            budget_control=budget_control,
+                            posting_allowed=posting_allowed,
+                            project_required=project_required,
+                            is_active=is_active
+                        )
+                        success_count += 1
+                        
+                    except KeyError as e:
+                        errors.append(f'Row {row_num}: Missing required column: {e}')
+                        error_count += 1
+                    except Exception as e:
+                        errors.append(f'Row {row_num}: {str(e)}')
+                        error_count += 1
+                
+                # If there are errors, rollback
+                if error_count > 0:
+                    raise Exception('Import had errors')
+        
+        except Exception as e:
+            messages.error(request, f'Import failed. Please fix the errors and try again.')
+            return render(request, self.template_name, {
+                'errors': errors,
+                'success_count': success_count,
+                'error_count': error_count
+            })
+        
+        messages.success(request, f'Successfully imported {success_count} sub-heads.')
+        return redirect('budgeting:setup_coa_list')
+
+
+class GlobalHeadCSVTemplateView(LoginRequiredMixin, SuperAdminRequiredMixin, View):
+    """
+    Download CSV template for bulk CoA (Global Heads) import.
+    """
+    def get(self, request):
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="global_heads_import_template.csv"'
+        
+        writer = csv.writer(response)
+        # Write header
+        writer.writerow([
+            'Object Code', 'Object Name', 'Minor Head Code', 'Account Type',
+            'Scope', 'System Code (Optional)', 
+            'Applicable Departments (Optional)', 'Applicable Functions (Optional)'
+        ])
+        
+        # Write example rows
+        writer.writerow([
+            'A01101', 'Basic Pay - Officers', 'A011', 'EXP',
+            'UNIVERSAL', '', '', ''
+        ])
+        writer.writerow([
+            'C03880', 'TMA Other Non-tax Revenues', 'C038', 'REV',
+            'UNIVERSAL', '', '', ''
+        ])
+        writer.writerow([
+            'A01999', 'Department Specific Allowance', 'A019', 'EXP',
+            'DEPARTMENTAL', '', 'ADM,FIN', '011205,020101'
+        ])
+        
+        return response
+
+
+class GlobalHeadCSVImportView(LoginRequiredMixin, SuperAdminRequiredMixin, View):
+    """
+    Import Global Heads (CoA) from CSV file.
+    """
+    template_name = 'finance/global_head_csv_import.html'
+    
+    def get(self, request):
+        return render(request, self.template_name)
+    
+    def post(self, request):
+        csv_file = request.FILES.get('csv_file')
+        
+        if not csv_file:
+            messages.error(request, _('Please upload a CSV file.'))
+            return redirect('finance:global_head_csv_import')
+        
+        if not csv_file.name.endswith('.csv'):
+            messages.error(request, _('Please upload a valid CSV file.'))
+            return redirect('finance:global_head_csv_import')
+        
+        # Parse CSV
+        decoded_file = csv_file.read().decode('utf-8').splitlines()
+        reader = csv.DictReader(decoded_file)
+        
+        success_count = 0
+        error_count = 0
+        errors = []
+        
+        try:
+            with transaction.atomic():
+                for row_num, row in enumerate(reader, start=2):  # Start at 2 (header is row 1)
+                    try:
+                        # Get required fields
+                        code = row['Object Code'].strip()
+                        name = row['Object Name'].strip()
+                        minor_code = row['Minor Head Code'].strip()
+                        account_type = row['Account Type'].strip().upper()
+                        scope = row['Scope'].strip().upper()
+                        system_code = row.get('System Code (Optional)', '').strip() or None
+                        dept_codes = row.get('Applicable Departments (Optional)', '').strip()
+                        func_codes = row.get('Applicable Functions (Optional)', '').strip()
+                        
+                        # Validate required fields
+                        if not code or not name or not minor_code:
+                            errors.append(f'Row {row_num}: Object Code, Name, and Minor Head Code are required.')
+                            error_count += 1
+                            continue
+                        
+                        # Lookup minor head
+                        try:
+                            minor_head = MinorHead.objects.get(code=minor_code)
+                        except MinorHead.DoesNotExist:
+                            errors.append(f'Row {row_num}: Minor Head "{minor_code}" not found.')
+                            error_count += 1
+                            continue
+                        
+                        # Validate account type
+                        from apps.finance.models import AccountType
+                        valid_types = ['EXP', 'REV', 'AST', 'LIA', 'EQT']
+                        if account_type not in valid_types:
+                            errors.append(f'Row {row_num}: Invalid Account Type "{account_type}". Use: {", ".join(valid_types)}')
+                            error_count += 1
+                            continue
+                        
+                        # Validate scope
+                        if scope not in ['UNIVERSAL', 'DEPARTMENTAL']:
+                            errors.append(f'Row {row_num}: Scope must be UNIVERSAL or DEPARTMENTAL.')
+                            error_count += 1
+                            continue
+                        
+                        # Check for duplicate code
+                        if GlobalHead.objects.filter(code=code).exists():
+                            errors.append(f'Row {row_num}: Global Head with code "{code}" already exists.')
+                            error_count += 1
+                            continue
+                        
+                        # Create Global Head
+                        global_head = GlobalHead.objects.create(
+                            code=code,
+                            name=name,
+                            minor=minor_head,
+                            account_type=account_type,
+                            scope=scope,
+                            system_code=system_code if system_code else None
+                        )
+                        
+                        # Add departments if scope is DEPARTMENTAL
+                        if scope == 'DEPARTMENTAL' and dept_codes:
+                            dept_list = [d.strip() for d in dept_codes.split(',') if d.strip()]
+                            for dept_code in dept_list:
+                                try:
+                                    dept = Department.objects.get(code=dept_code, is_active=True)
+                                    global_head.applicable_departments.add(dept)
+                                except Department.DoesNotExist:
+                                    errors.append(f'Row {row_num}: Warning - Department "{dept_code}" not found, skipped.')
+                        
+                        # Add functions if specified
+                        if func_codes:
+                            func_list = [f.strip() for f in func_codes.split(',') if f.strip()]
+                            for func_code in func_list:
+                                try:
+                                    func = FunctionCode.objects.get(code=func_code, is_active=True)
+                                    global_head.applicable_functions.add(func)
+                                except FunctionCode.DoesNotExist:
+                                    errors.append(f'Row {row_num}: Warning - Function "{func_code}" not found, skipped.')
+                        
+                        success_count += 1
+                        
+                    except KeyError as e:
+                        errors.append(f'Row {row_num}: Missing required column: {e}')
+                        error_count += 1
+                    except Exception as e:
+                        errors.append(f'Row {row_num}: {str(e)}')
+                        error_count += 1
+                
+                # If there are critical errors, rollback
+                critical_errors = [e for e in errors if 'Warning' not in e]
+                if len(critical_errors) > 0:
+                    raise Exception('Import had critical errors')
+        
+        except Exception as e:
+            messages.error(request, f'Import failed. Please fix the errors and try again.')
+            return render(request, self.template_name, {
+                'errors': errors,
+                'success_count': success_count,
+                'error_count': len([e for e in errors if 'Warning' not in e])
+            })
+        
+        if errors:
+            messages.warning(request, f'Imported {success_count} global heads with {len(errors)} warnings.')
+        else:
+            messages.success(request, f'Successfully imported {success_count} global heads.')
+        return redirect('system_admin:global_head_list')
 
 
 @method_decorator(csrf_protect, name='dispatch')
@@ -1295,7 +1700,7 @@ from apps.budgeting.models import Department
 def load_functions(request):
     """
     AJAX view to load functions filtered by department.
-    Used by VoucherForm header filters.
+    Used by VoucherForm header filters and BudgetHeadForm.
     Returns HTML with function options including default and usage notes.
     """
     department_id = request.GET.get('department')
@@ -1309,8 +1714,16 @@ def load_functions(request):
             default_id = dept.default_function_id if dept.default_function else None
         except (ValueError, TypeError, Department.DoesNotExist):
             pass
+    
+    # Determine which template to use based on context
+    # Budget head form uses global_head, expenditure uses budget_head
+    template = request.GET.get('template', 'expenditure')
+    if template == 'finance':
+        template_path = 'finance/partials/function_options.html'
+    else:
+        template_path = 'expenditure/partials/function_options.html'
             
-    return render(request, 'expenditure/partials/function_options.html', {
+    return render(request, template_path, {
         'functions': functions,
         'default_id': default_id
     })
@@ -1348,52 +1761,144 @@ def load_global_heads(request):
 
 
 
+def _generate_cache_key(prefix, **params):
+    """
+    Helper function to generate consistent cache keys.
+    
+    Args:
+        prefix: Cache key prefix (e.g., 'smart_search', 'budget_heads')
+        **params: Key-value pairs to include in cache key
+    
+    Returns:
+        str: Generated cache key with 5-minute TTL convention
+    """
+    # Sort params for consistent key generation
+    param_str = '_'.join(f"{k}:{v}" for k, v in sorted(params.items()) if v)
+    # Use MD5 hash for long parameter strings
+    param_hash = md5(param_str.encode()).hexdigest()[:12]
+    return f"cfms_{prefix}_{param_hash}"
+
+
+def invalidate_budget_head_cache(org_id=None):
+    """
+    Invalidate all cached budget head search results.
+    
+    Args:
+        org_id: Optional organization ID. If provided, only invalidates cache for that org.
+                If None, clears all budget head caches (use with caution).
+    
+    This should be called when:
+    - BudgetHead is created/updated/deleted
+    - DepartmentFunctionConfiguration is modified
+    - BudgetAllocation changes significantly
+    """
+    if org_id:
+        # For now, we'll use a simple pattern-based cache clearing
+        # In production, consider using cache tags or Redis patterns
+        logger.info(f"Cache invalidation requested for org {org_id}")
+        # Since LocMemCache doesn't support pattern deletion,
+        # we rely on TTL expiration or manual clear_all
+        # For Redis, you could use: cache.delete_pattern(f"cfms_*_org:{org_id}_*")
+    else:
+        logger.warning("Clearing ALL budget head cache - use sparingly!")
+        # This is a nuclear option - clears everything
+        # cache.clear()  # Commented out for safety
+    
+    return True
+
+
 def load_budget_heads_options(request):
     """
     AJAX view to load budget head options filtered by department and/or function.
+    
+    NEW BEHAVIOR (after CoA restructuring):
+    - Filters by department FK directly on BudgetHead (not via function anymore)
+    - When both department AND function are provided: uses the most precise filter
+    - Returns only heads for the specific department-function combination
+    - CACHED for 5 minutes to improve performance
+    
     Returns options as a script that updates all budget_head selects in the formset.
     """
     department_id = request.GET.get('department')
     function_id = request.GET.get('function')
     account_type = request.GET.get('account_type')
+    
+    # Get user organization for cache key
+    user = request.user
+    org = getattr(user, 'organization', None)
+    org_id = org.id if org else 'none'
+    
+    # Check cache first
+    cache_key = _generate_cache_key(
+        'budget_heads_options',
+        org=org_id,
+        dept=department_id or '',
+        func=function_id or '',
+        acct=account_type or ''
+    )
+    
+    cached_response = cache.get(cache_key)
+    if cached_response:
+        logger.debug(f"Cache HIT for {cache_key}")
+        return cached_response
+    
+    logger.debug(f"Cache MISS for {cache_key}")
     department = None
     
-    # Base queryset - all posting-allowed heads
-    # Exclude salary heads (A01*) as they have separate salary bill workflow
+    # Base queryset - all posting-allowed heads, exclude salary heads
     budget_heads = BudgetHead.objects.filter(
         posting_allowed=True,
         is_active=True
     ).exclude(
         global_head__code__startswith='A01'
-    ).select_related('global_head', 'function').order_by('global_head__code')
+    ).select_related(
+        'global_head',
+        'global_head__minor',
+        'global_head__minor__major',
+        'function',
+        'department'
+    ).order_by('global_head__code')
     
     if account_type:
         budget_heads = budget_heads.filter(global_head__account_type=account_type)
     
-    # Filter by function (primary method)
-    if function_id:
-        try:
-            budget_heads = budget_heads.filter(function_id=function_id)
-            # Get department for display purposes
-            function = FunctionCode.objects.get(id=function_id)
-            # Try to find which department this function belongs to
-            dept_with_function = Department.objects.filter(related_functions=function).first()
-            if dept_with_function:
-                department = dept_with_function
-        except (ValueError, TypeError, FunctionCode.DoesNotExist):
-            pass
-    # Fallback: Filter by department's assigned functions
-    elif department_id:
+    # PRIMARY FILTER: Use department + function together for most precise results
+    if department_id and function_id:
         try:
             department = Department.objects.get(id=department_id)
-            # Only show budget heads for functions assigned to this department
+            # Use the new department FK directly for precise filtering
             budget_heads = budget_heads.filter(
-                function__in=department.related_functions.all()
+                department_id=department_id,
+                function_id=function_id
             )
         except (ValueError, TypeError, Department.DoesNotExist):
             pass
+    # Filter by function only (fallback - try to find department from budget heads)
+    elif function_id:
+        try:
+            budget_heads = budget_heads.filter(function_id=function_id)
+            # Get department for display - try from budget head's department first
+            first_head = budget_heads.first()
+            if first_head and first_head.department:
+                department = first_head.department
+            else:
+                # Fallback: Try to find via M2M (legacy behavior)
+                function = FunctionCode.objects.get(id=function_id)
+                dept_with_function = Department.objects.filter(related_functions=function).first()
+                if dept_with_function:
+                    department = dept_with_function
+        except (ValueError, TypeError, FunctionCode.DoesNotExist):
+            pass
+    # Filter by department only
+    elif department_id:
+        try:
+            department = Department.objects.get(id=department_id)
+            # Use the new department FK directly
+            budget_heads = budget_heads.filter(department=department)
+        except (ValueError, TypeError, Department.DoesNotExist):
+            pass
     
-    # Filter by allocation (Scenario 1: only show heads with budget)
+    # Filter by allocation (only show heads with budget)
     try:
         user = request.user
         org = getattr(user, 'organization', None)
@@ -1418,15 +1923,62 @@ def load_budget_heads_options(request):
                 ).filter(has_allocation=True)
     except Exception as e:
         print(f"ERROR in load_budget_heads_options: {e}")
-        # Fallback: don't filter by allocation if error occurs, to avoid 500
+        # Fallback: don't filter by allocation if error occurs
         pass
     
     print(f"DEBUG: load_budget_heads_options params - Dept: {department_id}, Function: {function_id}, Type: {account_type}")
-            
     print(f"DEBUG: Returning {budget_heads.count()} budget heads")
-    return render(request, 'finance/partials/budget_head_formset_options.html', {
+    
+    response = render(request, 'finance/partials/budget_head_formset_options.html', {
         'budget_heads': budget_heads,
         'department': department
+    })
+    
+    # Cache the response for 5 minutes (300 seconds)
+    cache.set(cache_key, response, 300)
+    logger.debug(f"Cached budget_heads_options: {cache_key}")
+    
+    return response
+
+
+def load_existing_subheads(request):
+    """
+    AJAX view to fetch existing sub-heads for a given combination.
+    Used in BudgetHeadForm to show what sub-codes are already taken.
+    
+    Returns HTML snippet showing existing sub-heads and suggesting next available code.
+    """
+    department_id = request.GET.get('department')
+    fund_id = request.GET.get('fund')
+    function_id = request.GET.get('function')
+    global_head_id = request.GET.get('global_head')
+    
+    existing_subheads = []
+    next_available_code = '01'
+    
+    if department_id and fund_id and function_id and global_head_id:
+        try:
+            existing_subheads = BudgetHead.objects.filter(
+                department_id=department_id,
+                fund_id=fund_id,
+                function_id=function_id,
+                global_head_id=global_head_id,
+                head_type='SUB_HEAD'
+            ).select_related('global_head').order_by('sub_code')
+            
+            # Find next available sub-code
+            used_codes = [sh.sub_code for sh in existing_subheads]
+            for code_num in range(1, 100):
+                suggested_code = f'{code_num:02d}'
+                if suggested_code not in used_codes:
+                    next_available_code = suggested_code
+                    break
+        except (ValueError, TypeError):
+            pass
+    
+    return render(request, 'finance/partials/existing_subheads.html', {
+        'existing_subheads': existing_subheads,
+        'next_available_code': next_available_code
     })
 
 
@@ -1447,7 +1999,11 @@ def budget_head_search_api(request):
     budget_heads = BudgetHead.objects.filter(
         posting_allowed=True,
         is_active=True
-    ).select_related('global_head', 'function')
+    ).select_related(
+        'global_head',
+        'global_head__minor',
+        'function'
+    )
     
     # Filter by function if specified (most important filter to avoid duplicates)
     if function_id:
@@ -1496,4 +2052,344 @@ def budget_head_search_api(request):
             'more': end_idx < total_count
         }
     })
+
+
+def smart_budget_head_search_api(request):
+    """
+    Enhanced API endpoint for Smart Budget Head Selection Widget.
+    
+    Returns comprehensive budget head information including:
+    - Budget availability
+    - Category grouping (Salary, Operating, Assets, etc.)
+    - Recently used heads
+    - Favorite heads
+    - Current utilization percentage
+    
+    This powers the modern, user-friendly budget head selection interface.
+    CACHED for 5 minutes to improve performance.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.debug(f"smart_budget_head_search_api called by {request.user}, params: {request.GET}")
+    
+    from decimal import Decimal
+    from apps.finance.models import BudgetHeadFavorite, BudgetHeadUsageHistory,  DepartmentFunctionConfiguration
+    from apps.budgeting.models import FiscalYear, BudgetAllocation
+    
+    # Get parameters
+    search_term = request.GET.get('q', '').strip()
+    department_id = request.GET.get('department_id', '').strip()
+    function_id = request.GET.get('function_id', '').strip()
+    account_type = request.GET.get('account_type', '').strip()
+    include_favorites = request.GET.get('include_favorites', 'true') == 'true'
+    include_recently_used = request.GET.get('include_recently_used', 'true') == 'true'
+    page = int(request.GET.get('page', 1))
+    page_size = 20
+    
+    user = request.user
+    org = getattr(user, 'organization', None)
+    
+    if not org:
+        logger.warning(f"User {user.username} has no organization assigned")
+        return JsonResponse({
+            'results': [{
+                'id': '',
+                'text': '⚠️ Your account is not assigned to any organization. Contact your administrator.',
+                'disabled': True
+            }],
+            'favorites': [],
+            'recently_used': [],
+            'pagination': {'more': False, 'total': 0, 'page': 1}
+        })
+    
+    # Check cache for main results (excluding user-specific favorites/recently_used)
+    # Cache key includes all query parameters except user-specific flags
+    cache_key = _generate_cache_key(
+        'smart_search',
+        org=org.id,
+        dept=department_id,
+        func=function_id,
+        acct=account_type,
+        q=search_term,
+        page=page
+    )
+    
+    # Try to get cached main results
+    cached_main_results = cache.get(cache_key)
+    
+    if cached_main_results:
+        logger.debug(f"Cache HIT for smart_search: {cache_key}")
+        results = cached_main_results['results']
+        pagination_info = cached_main_results['pagination']
+    else:
+        logger.debug(f"Cache MISS for smart_search: {cache_key}")
+        
+        # Get current fiscal year
+        fiscal_year = FiscalYear.get_current_operating_year()
+        if not fiscal_year:
+            return JsonResponse({'error': 'No active fiscal year'}, status=400)
+        
+        # Base queryset - use DepartmentFunctionConfiguration for filtering
+        budget_heads = BudgetHead.objects.filter(
+            posting_allowed=True,
+            is_active=True
+        ).select_related(
+            'global_head',
+            'global_head__minor',
+            'global_head__minor__major',
+            'function',
+            'department',
+            'fund'
+        )
+        
+        # Filter by department and function if provided
+        if department_id and function_id:
+            try:
+                config = DepartmentFunctionConfiguration.objects.get(
+                    department_id=department_id,
+                    function_id=function_id
+                )
+                # Get allowed global head IDs
+                allowed_head_ids = config.allowed_global_heads.values_list('id', flat=True)
+                budget_heads = budget_heads.filter(
+                    department_id=department_id,
+                    function_id=function_id,
+                    global_head_id__in=allowed_head_ids
+                )
+            except DepartmentFunctionConfiguration.DoesNotExist:
+                logger.warning(f"No DepartmentFunctionConfiguration found for dept={department_id}, func={function_id}")
+                # Fallback to basic filtering
+                budget_heads = budget_heads.filter(
+                    department_id=department_id,
+                    function_id=function_id
+                )
+        elif function_id:
+            budget_heads = budget_heads.filter(function_id=function_id)
+        elif department_id:
+            budget_heads = budget_heads.filter(department_id=department_id)
+        
+        # Filter by account type
+        if account_type:
+            budget_heads = budget_heads.filter(global_head__account_type=account_type)
+        
+        # Search filter
+        if search_term:
+            budget_heads = budget_heads.filter(
+                Q(global_head__code__icontains=search_term) |
+                Q(global_head__name__icontains=search_term) |
+                Q(local_description__icontains=search_term)
+            )
+        
+        # Order by code
+        budget_heads = budget_heads.order_by('global_head__code')
+        
+        # Pagination
+        total_count = budget_heads.count()
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        page_results = budget_heads[start_idx:end_idx]
+        
+        # Build results with enhanced information
+        results = []
+        for bh in page_results:
+            # Get budget allocation
+            try:
+                allocation = BudgetAllocation.objects.get(
+                    organization=org,
+                    fiscal_year=fiscal_year,
+                    budget_head=bh
+                )
+                allocated_amount = float(allocation.revised_allocation)
+                utilized_amount = float(allocation.spent_amount)
+                available_amount = float(allocation.get_available_budget())
+                utilization_percentage = float((allocation.spent_amount / allocation.revised_allocation * 100) if allocation.revised_allocation > 0 else 0)
+            except BudgetAllocation.DoesNotExist:
+                allocated_amount = 0.0
+                utilized_amount = 0.0
+                available_amount = 0.0
+                utilization_percentage = 0.0
+            
+            # Categorize budget head
+            code = bh.global_head.code
+            if code.startswith('A01'):
+                category = 'Salary'
+            elif code.startswith(('A03', 'A04')):
+                category = 'Operating'
+            elif code.startswith('C'):
+                category = 'Assets'
+            elif code.startswith('D'):
+                category = 'Liabilities'
+            else:
+                category = 'Other'
+            
+            results.append({
+                'id': bh.id,
+                'code': code,
+                'name': bh.local_description or bh.global_head.name,
+                'display_text': f"{code} - {bh.global_head.name}",
+                'category': category,
+                'account_type': bh.global_head.account_type,
+                'function_code': bh.function.code if bh.function else '',
+                'department_name': bh.department.name if bh.department else '',
+                'budget': {
+                    'allocated': allocated_amount,
+                    'utilized': utilized_amount,
+                    'available': available_amount,
+                    'utilization_percentage': utilization_percentage,
+                    'has_budget': allocated_amount > 0,
+                    'is_over_budget': available_amount < 0,
+                },
+                'is_favorite': False,  # Will be updated below if needed
+            })
+        
+        pagination_info = {
+            'more': end_idx < total_count,
+            'total': total_count,
+            'page': page,
+        }
+        
+        # Cache the main results for 5 minutes (300 seconds)
+        cache.set(cache_key, {
+            'results': results,
+            'pagination': pagination_info
+        }, 300)
+        logger.debug(f"Cached smart_search results: {cache_key}")
+    
+    # Update favorites flag in results (user-specific, not cached)
+    if include_favorites:
+        favorite_ids = set(BudgetHeadFavorite.objects.filter(
+            user=user,
+            organization=org
+        ).values_list('budget_head_id', flat=True))
+        
+        for result in results:
+            result['is_favorite'] = result['id'] in favorite_ids
+    
+    # Get favorites if requested
+    favorites = []
+    if include_favorites and page == 1:
+        favorite_heads = BudgetHeadFavorite.objects.filter(
+            user=user,
+            organization=org
+        ).select_related('budget_head__global_head').order_by('-created_at')[:5]
+        
+        favorites = [
+            {
+                'id': fav.budget_head.id,
+                'code': fav.budget_head.global_head.code,
+                'name': fav.budget_head.name,
+            } for fav in favorite_heads
+        ]
+    
+    # Get recently used if requested
+    recently_used = []
+    if include_recently_used and page == 1:
+        recent_usage = BudgetHeadUsageHistory.objects.filter(
+            user=user,
+            organization=org
+        ).select_related('budget_head__global_head').order_by('-last_used')[:5]
+        
+        recently_used = [
+            {
+                'id': usage.budget_head.id,
+                'code': usage.budget_head.global_head.code,
+                'name': usage.budget_head.name,
+                'usage_count': usage.usage_count,
+            } for usage in recent_usage
+        ]
+    
+    return JsonResponse({
+        'results': results,
+        'favorites': favorites,
+        'recently_used': recently_used,
+        'pagination': {
+            'more': pagination_info.get('more', False),
+            'total': pagination_info.get('total', 0),
+            'page': pagination_info.get('page', 1),
+        }
+    })
+
+
+def toggle_budget_head_favorite(request):
+    """
+    API endpoint to add/remove a budget head from user's favorites.
+    
+    Method: POST
+    Parameters:
+        - budget_head_id: ID of the budget head
+        - action: 'add' or 'remove'
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    from apps.finance.models import BudgetHeadFavorite
+    import json
+    
+    try:
+        data = json.loads(request.body)
+        budget_head_id = data.get('budget_head_id')
+        action = data.get('action')
+        
+        user = request.user
+        org = getattr(user, 'organization', None)
+        
+        if not org:
+            return JsonResponse({'error': 'No organization context'}, status=400)
+        
+        if action == 'add':
+            BudgetHeadFavorite.objects.get_or_create(
+                user=user,
+                budget_head_id=budget_head_id,
+                organization=org
+            )
+            return JsonResponse({'success': True, 'message': 'Added to favorites'})
+        
+        elif action == 'remove':
+            BudgetHeadFavorite.objects.filter(
+                user=user,
+                budget_head_id=budget_head_id,
+                organization=org
+            ).delete()
+            return JsonResponse({'success': True, 'message': 'Removed from favorites'})
+        
+        else:
+            return JsonResponse({'error': 'Invalid action'}, status=400)
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def record_budget_head_usage(request):
+    """
+    API endpoint to record budget head usage for recently used tracking.
+    
+    Method: POST
+    Parameters:
+        - budget_head_id: ID of the budget head used
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    from apps.finance.models import BudgetHeadUsageHistory
+    import json
+    
+    try:
+        data = json.loads(request.body)
+        budget_head_id = data.get('budget_head_id')
+        
+        user = request.user
+        org = getattr(user, 'organization', None)
+        
+        if not org:
+            return JsonResponse({'error': 'No organization context'}, status=400)
+        
+        budget_head = BudgetHead.objects.get(id=budget_head_id)
+        BudgetHeadUsageHistory.record_usage(user, budget_head, org)
+        
+        return JsonResponse({'success': True, 'message': 'Usage recorded'})
+    
+    except BudgetHead.DoesNotExist:
+        return JsonResponse({'error': 'Budget head not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 

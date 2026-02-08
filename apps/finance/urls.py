@@ -11,6 +11,9 @@ Description: URL configuration for the finance module including
 from django.urls import path
 
 from apps.finance.views import (
+    # CoA Management Hub
+    CoAManagementHubView,
+    
     # Master Data
     FundListView,
     BudgetHeadListView,
@@ -41,22 +44,51 @@ from apps.finance.views import (
     load_functions,
     load_global_heads,
     load_budget_heads_options,
+    load_existing_subheads,
     budget_head_search_api,
+    smart_budget_head_search_api,
+    toggle_budget_head_favorite,
+    record_budget_head_usage,
+    
+    # CSV Import/Export
+    SubHeadCSVTemplateView,
+    SubHeadCSVImportView,
+    GlobalHeadCSVTemplateView,
+    GlobalHeadCSVImportView,
 )
 
-from apps.finance.views_coa_mapping import (
-    CoADepartmentMappingView,
+from apps.finance.views_coa_configuration import (
+    ConfigureDepartmentFunctionHeadView,
+    BudgetHeadDepartmentAssignmentView,
+    DepartmentFunctionConfigurationMatrixView,
+    DepartmentFunctionConfigurationDetailView,
 )
 
 app_name = 'finance'
 
 urlpatterns = [
+    # CoA Management Hub
+    path('coa-hub/', CoAManagementHubView.as_view(), name='coa_hub'),
+    
     # Master Data
     path('funds/', FundListView.as_view(), name='fund_list'),
     path('budget-heads/', BudgetHeadListView.as_view(), name='budget_head_list'),
     
-    # CoA Department Mapping (Super Admin)
-    path('coa-department-mapping/', CoADepartmentMappingView.as_view(), name='coa_department_mapping'),
+    # CoA Configuration (Super Admin - Provincial Level)
+    path('configure-dept-func-head/', ConfigureDepartmentFunctionHeadView.as_view(), name='configure_dept_func_head'),
+    path('dept-func-config-matrix/', DepartmentFunctionConfigurationMatrixView.as_view(), name='dept_func_config_matrix'),
+    path('dept-func-config/<int:dept_id>/<int:func_id>/', DepartmentFunctionConfigurationDetailView.as_view(), name='dept_func_config_detail'),
+    
+    # CSV Import/Export for Sub-Heads
+    path('subheads/csv-template/', SubHeadCSVTemplateView.as_view(), name='subhead_csv_template'),
+    path('subheads/csv-import/', SubHeadCSVImportView.as_view(), name='subhead_csv_import'),
+    
+    # CSV Import/Export for Global Heads (Master CoA)
+    path('global-heads/csv-template/', GlobalHeadCSVTemplateView.as_view(), name='global_head_csv_template'),
+    path('global-heads/csv-import/', GlobalHeadCSVImportView.as_view(), name='global_head_csv_import'),
+    
+    # Legacy Data Cleanup
+    path('budget-head-departments/', BudgetHeadDepartmentAssignmentView.as_view(), name='budget_head_departments'),
     
     # Bank Statement Management
     path('statements/', BankStatementListView.as_view(), name='statement_list'),
@@ -84,5 +116,9 @@ urlpatterns = [
     path('ajax/load-functions/', load_functions, name='load_functions'),
     path('ajax/load-global-heads/', load_global_heads, name='load_global_heads'),
     path('ajax/load-budget-heads-options/', load_budget_heads_options, name='load_budget_heads_options'),
+    path('ajax/existing-subheads/', load_existing_subheads, name='load_existing_subheads'),
     path('ajax/budget-head-search/', budget_head_search_api, name='budget_head_search_api'),
+    path('ajax/smart-budget-head-search/', smart_budget_head_search_api, name='smart_budget_head_search_api'),
+    path('ajax/toggle-favorite/', toggle_budget_head_favorite, name='toggle_budget_head_favorite'),
+    path('ajax/record-usage/', record_budget_head_usage, name='record_budget_head_usage'),
 ]

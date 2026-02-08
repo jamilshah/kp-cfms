@@ -1,0 +1,348 @@
+<!-- Smart Budget Head Selection Widget -->
+<!-- Enhanced budget head selection with search, categories, budget info, favorites -->
+
+<div class="smart-budget-head-widget" id="{{ widget_id|default:'budget-head-widget' }}">
+    <!-- Hidden input to store selected value -->
+    <input type="hidden" name="{{ field_name }}" id="{{ field_id }}" value="{{ selected_value }}">
+    
+    <!-- Widget Button/Trigger -->
+    <div class="form-control budget-head-selector" onclick="openBudgetHeadModal('{{ widget_id|default:'budget-head-widget' }}')">
+        <div class="d-flex justify-content-between align-items-center">
+            <span class="selected-display">
+                {% if selected_text %}
+                    {{ selected_text }}
+                {% else %}
+                    <span class="text-muted">Click to select budget head...</span>
+                {% endif %}
+            </span>
+            <i class="bi bi-search"></i>
+        </div>
+    </div>
+    
+    <!-- Modal for Selection -->
+    <div class="modal fade" id="modal-{{ widget_id|default:'budget-head-widget' }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-book"></i> Select Budget Head
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                
+                <div class="modal-body">
+                    <!-- Search and Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <input type="text" class="form-control search-input" 
+                                   placeholder="🔍 Search by code or name..." 
+                                   onkeyup="searchBudgetHeads('{{ widget_id|default:'budget-head-widget' }}')">
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select filter-account-type" 
+                                    onchange="searchBudgetHeads('{{ widget_id|default:'budget-head-widget' }}')">
+                                <option value="">All Types</option>
+                                <option value="EXP">Expenditure</option>
+                                <option value="REV">Revenue</option>
+                                <option value="AST">Asset</option>
+                                <option value="LIA">Liability</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select filter-category" 
+                                    onchange="searchBudgetHeads('{{ widget_id|default:'budget-head-widget' }}')">
+                                <option value="">All Categories</option>
+                                <option value="Salary">Salary</option>
+                                <option value="Operating">Operating</option>
+                                <option value="Assets">Assets</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Access Tabs -->
+                    <ul class="nav nav-tabs mb-3" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-all-{{ widget_id }}" type="button">
+                                All Budget Heads
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-favorites-{{ widget_id }}" type="button">
+                                ⭐ Favorites
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-recent-{{ widget_id }}" type="button">
+                                🕐 Recently Used
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <!-- Tab Content -->
+                    <div class="tab-content">
+                        <!-- All Budget Heads Tab -->
+                        <div class="tab-pane fade show active" id="tab-all-{{ widget_id }}">
+                            <div class="loading-spinner text-center py-5 d-none">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                            <div class="budget-heads-container">
+                                <!-- Results will be populated here via JavaScript -->
+                            </div>
+                        </div>
+                        
+                        <!-- Favorites Tab -->
+                        <div class="tab-pane fade" id="tab-favorites-{{ widget_id }}">
+                            <div class="favorites-container">
+                                <p class="text-muted">No favorites yet. Click the star icon to add favorites.</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Recently Used Tab -->
+                        <div class="tab-pane fade" id="tab-recent-{{ widget_id }}">
+                            <div class="recent-container">
+                                <p class="text-muted">No recently used budget heads.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.budget-head-selector {
+    cursor: pointer;
+    min-height: 38px;
+}
+.budget-head-selector:hover {
+    border-color: #0d6efd;
+    background-color: #f8f9fa;
+}
+.budget-head-card {
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+.budget-head-card:hover {
+    border-color: #0d6efd;
+    box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
+    transform: translateY(-2px);
+}
+.budget-head-card.selected {
+    border-color: #198754;
+    background-color: #f0f9ff;
+}
+.budget-info {
+    font-size: 0.875rem;
+}
+.badge-category {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+.budget-bar {
+    height: 6px;
+    background-color: #e9ecef;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+}
+.budget-bar-fill {
+    height: 100%;
+    transition: width 0.3s;
+}
+.favorite-icon {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #ffc107;
+}
+.favorite-icon:hover {
+    transform: scale(1.2);
+}
+</style>
+
+<script>
+// Store widget data
+window.budgetHeadWidgets = window.budgetHeadWidgets || {};
+
+function openBudgetHeadModal(widgetId) {
+    const modal = new bootstrap.Modal(document.getElementById(`modal-${widgetId}`));
+    modal.show();
+    
+    // Load data if not already loaded
+    if (!window.budgetHeadWidgets[widgetId]) {
+        loadBudgetHeadData(widgetId);
+    }
+}
+
+function searchBudgetHeads(widgetId) {
+    const modal = document.getElementById(`modal-${widgetId}`);
+    const searchTerm = modal.querySelector('.search-input').value;
+    const accountType = modal.querySelector('.filter-account-type').value;
+    const category = modal.querySelector('.filter-category').value;
+    
+    loadBudgetHeadData(widgetId, searchTerm, accountType, category);
+}
+
+function loadBudgetHeadData(widgetId, searchTerm = '', accountType = '', category = '') {
+    const modal = document.getElementById(`modal-${widgetId}`);
+    const container = modal.querySelector('.budget-heads-container');
+    const spinner = modal.querySelector('.loading-spinner');
+    
+    // Show spinner
+    spinner.classList.remove('d-none');
+    container.innerHTML = '';
+    
+    // Get filter values from page context (if available)
+    const departmentId = document.querySelector('[name="department"]')?.value || '';
+    const functionId = document.querySelector('[name="function"]')?.value || '';
+    
+    // Build URL
+    const params = new URLSearchParams({
+        q: searchTerm,
+        department_id: departmentId,
+        function_id: functionId,
+        account_type: accountType,
+        category: category,
+        include_favorites: 'true',
+        include_recently_used: 'true',
+    });
+    
+    fetch(`/finance/ajax/smart-budget-head-search/?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            spinner.classList.add('d-none');
+            renderBudgetHeads(widgetId, data.results);
+            renderFavorites(widgetId, data.favorites);
+            renderRecentlyUsed(widgetId, data.recently_used);
+        })
+        .catch(error => {
+            console.error('Error loading budget heads:', error);
+            spinner.classList.add('d-none');
+            container.innerHTML = '<div class="alert alert-danger">Error loading budget heads. Please try again.</div>';
+        });
+}
+
+function renderBudgetHeads(widgetId, results) {
+    const modal = document.getElementById(`modal-${widgetId}`);
+    const container = modal.querySelector('.budget-heads-container');
+    
+    if (results.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center py-4">No budget heads found matching your criteria.</p>';
+        return;
+    }
+    
+    container.innerHTML = results.map(head => `
+        <div class="budget-head-card" onclick="selectBudgetHead('${widgetId}', ${head.id}, '${head.code} - ${head.name}')">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <h6 class="mb-1">
+                        <code class="text-primary">${head.code}</code>
+                        ${head.name}
+                    </h6>
+                    <div class="budget-info text-muted mb-2">
+                        <span class="badge badge-category bg-secondary me-1">${head.category}</span>
+                        ${head.department_name ? `<span class="me-2">${head.department_name}</span>` : ''}
+                        ${head.function_code ? `<span class="badge bg-info">${head.function_code}</span>` : ''}
+                    </div>
+                    ${head.budget.has_budget ? `
+                        <div class="budget-info">
+                            <small>
+                                <strong>Available:</strong> ${head.budget.available.toLocaleString('en-PK', {minimumFractionDigits: 2})} 
+                                <span class="text-muted">(${head.budget.utilization_percentage.toFixed(1)}% used)</span>
+                            </small>
+                            <div class="budget-bar">
+                                <div class="budget-bar-fill ${head.budget.is_over_budget ? 'bg-danger' : head.budget.utilization_percentage > 80 ? 'bg-warning' : 'bg-success'}" 
+                                     style="width: ${Math.min(head.budget.utilization_percentage, 100)}%"></div>
+                            </div>
+                        </div>
+                    ` : '<small class="text-warning">⚠️ No budget allocated</small>'}
+                </div>
+                <i class="bi ${head.is_favorite ? 'bi-star-fill' : 'bi-star'} favorite-icon" 
+                   onclick="toggleFavorite(event, ${head.id}, '${widgetId}')"></i>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderFavorites(widgetId, favorites) {
+    const modal = document.getElementById(`modal-${widgetId}`);
+    const container = modal.querySelector('.favorites-container');
+    
+    if (favorites.length === 0) {
+        container.innerHTML = '<p class="text-muted">No favorites yet. Click the star icon to add favorites.</p>';
+        return;
+    }
+    
+    container.innerHTML = favorites.map(head => `
+        <div class="budget-head-card" onclick="selectBudgetHead('${widgetId}', ${head.id}, '${head.code} - ${head.name}')">
+            <h6><code class="text-primary">${head.code}</code> ${head.name}</h6>
+        </div>
+    `).join('');
+}
+
+function renderRecentlyUsed(widgetId, recentlyUsed) {
+    const modal = document.getElementById(`modal-${widgetId}`);
+    const container = modal.querySelector('.recent-container');
+    
+    if (recentlyUsed.length === 0) {
+        container.innerHTML = '<p class="text-muted">No recently used budget heads.</p>';
+        return;
+    }
+    
+    container.innerHTML = recentlyUsed.map(head => `
+        <div class="budget-head-card" onclick="selectBudgetHead('${widgetId}', ${head.id}, '${head.code} - ${head.name}')">
+            <h6>
+                <code class="text-primary">${head.code}</code> ${head.name}
+                <span class="badge bg-light text-dark ms-2">${head.usage_count}x used</span>
+            </h6>
+        </div>
+    `).join('');
+}
+
+function selectBudgetHead(widgetId, headId, displayText) {
+    // Update hidden input
+    document.getElementById(widgetId).querySelector('input[type="hidden"]').value = headId;
+    
+    // Update display
+    document.getElementById(widgetId).querySelector('.selected-display').innerHTML = displayText;
+    
+    // Close modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById(`modal-${widgetId}`));
+    modal.hide();
+    
+    // Trigger change event
+    const event = new Event('change', { bubbles: true });
+    document.getElementById(widgetId).querySelector('input[type="hidden"]').dispatchEvent(event);
+}
+
+function toggleFavorite(event, headId, widgetId) {
+    event.stopPropagation();
+    
+    // TODO: Implement favorite toggle via AJAX
+    const icon = event.target;
+    if (icon.classList.contains('bi-star-fill')) {
+        icon.classList.remove('bi-star-fill');
+        icon.classList.add('bi-star');
+        // Call API to remove favorite
+    } else {
+        icon.classList.remove('bi-star');
+        icon.classList.add('bi-star-fill');
+        // Call API to add favorite
+    }
+}
+</script>

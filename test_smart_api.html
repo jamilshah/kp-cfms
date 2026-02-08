@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Smart Budget Head API</title>
+</head>
+<body>
+    <h1>Testing Smart Budget Head Search API</h1>
+    <p>Department ID: <input type="text" id="dept_id" value="1"></p>
+    <p>Function ID: <input type="text" id="func_id" value="1"></p>
+    <p>Search: <input type="text" id="search" value=""></p>
+    <button onclick="testAPI()">Test API</button>
+    <pre id="result"></pre>
+    
+    <script>
+        function testAPI() {
+            const dept = document.getElementById('dept_id').value;
+            const func = document.getElementById('func_id').value;
+            const search = document.getElementById('search').value;
+            
+            const url = `/finance/ajax/smart-budget-head-search/?q=${search}&department_id=${dept}&function_id=${func}&page=1`;
+            console.log('Testing URL:', url);
+            
+            fetch(url)
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Data:', data);
+                    document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('result').textContent = 'ERROR: ' + error.message;
+                });
+        }
+    </script>
+</body>
+</html>

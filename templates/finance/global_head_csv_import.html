@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load i18n %}
+
+{% block title %}Import Master CoA (Global Heads) - Bulk CSV Upload{% endblock %}
+
+{% block extra_css %}
+<style>
+    .code-example {
+        background-color: #f8f9fa;
+        border-left: 4px solid #0d6efd;
+        padding: 10px;
+        margin: 10px 0;
+        font-family: monospace;
+        font-size: 0.9em;
+    }
+    .instruction-step {
+        margin-bottom: 1rem;
+        padding-left: 1.5rem;
+    }
+    .error-list {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-file-csv"></i> Bulk Import Master CoA (Global Heads)
+                    </h4>
+                </div>
+                <div class="card-body">
+                    {% if errors %}
+                    <div class="alert alert-danger">
+                        <h5><i class="fas fa-exclamation-triangle"></i> Import Errors ({{ error_count }})</h5>
+                        <p>Please fix the following errors and try again:</p>
+                        <div class="error-list">
+                            <ul>
+                                {% for error in errors %}
+                                <li>{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% if success_count > 0 %}
+                        <p class="mt-3"><strong>Note:</strong> {{ success_count }} records were validated but not imported due to errors. All records must be valid for import to succeed.</p>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="row">
+                        <!-- Instructions Column -->
+                        <div class="col-md-6">
+                            <div class="alert alert-info">
+                                <h5><i class="fas fa-info-circle"></i> CSV Format Instructions</h5>
+                                <div class="instruction-step">
+                                    <strong>1. Download Template</strong>
+                                    <p>Click the button below to download a CSV template with example data.</p>
+                                </div>
+                                <div class="instruction-step">
+                                    <strong>2. Fill in Your Data</strong>
+                                    <p>Edit the CSV file with your Global Head (CoA) data. Required columns:</p>
+                                    <ul>
+                                        <li><strong>Object Code:</strong> Unique code (e.g., A01101, C03880)</li>
+                                        <li><strong>Object Name:</strong> Description of the account head</li>
+                                        <li><strong>Minor Head Code:</strong> Parent minor head code (e.g., A011)</li>
+                                        <li><strong>Account Type:</strong> EXP, REV, AST, LIA, or EQT</li>
+                                        <li><strong>Scope:</strong> UNIVERSAL or DEPARTMENTAL</li>
+                                    </ul>
+                                    <p>Optional columns:</p>
+                                    <ul>
+                                        <li><strong>System Code:</strong> Internal system reference code</li>
+                                        <li><strong>Applicable Departments:</strong> Comma-separated department codes (for DEPARTMENTAL scope only)</li>
+                                        <li><strong>Applicable Functions:</strong> Comma-separated function codes</li>
+                                    </ul>
+                                </div>
+                                <div class="instruction-step">
+                                    <strong>3. Upload CSV File</strong>
+                                    <p>Select your completed CSV file and click Import.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="alert alert-warning">
+                                <h6><i class="fas fa-lightbulb"></i> Tips</h6>
+                                <ul class="mb-0">
+                                    <li>Make sure Minor Head codes exist in the system before importing</li>
+                                    <li>Department codes: ADM, FIN, WNS, SWM, etc.</li>
+                                    <li>Function codes: 011205, 020101, etc.</li>
+                                    <li>DEPARTMENTAL scope requires applicable_departments</li>
+                                    <li>UNIVERSAL scope is accessible across all departments</li>
+                                    <li>All imports use transactions - if any row fails, nothing is imported</li>
+                                    <li>Duplicate Object Codes will be rejected</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <!-- Action Column -->
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-light">
+                                    <h5 class="mb-0">Step 1: Download Template</h5>
+                                </div>
+                                <div class="card-body text-center">
+                                    <a href="{% url 'finance:global_head_csv_template' %}" 
+                                       class="btn btn-outline-primary btn-lg">
+                                        <i class="fas fa-download"></i> Download CSV Template
+                                    </a>
+                                    <p class="text-muted mt-3">Template includes example data to guide you</p>
+                                </div>
+                            </div>
+                            
+                            <div class="card mt-4">
+                                <div class="card-header bg-light">
+                                    <h5 class="mb-0">Step 2: Upload Completed CSV</h5>
+                                </div>
+                                <div class="card-body">
+                                    <form method="post" enctype="multipart/form-data">
+                                        {% csrf_token %}
+                                        <div class="mb-3">
+                                            <label for="csv_file" class="form-label">Select CSV File:</label>
+                                            <input type="file" 
+                                                   class="form-control" 
+                                                   id="csv_file" 
+                                                   name="csv_file" 
+                                                   accept=".csv"
+                                                   required>
+                                        </div>
+                                        <div class="d-grid gap-2">
+                                            <button type="submit" class="btn btn-success btn-lg">
+                                                <i class="fas fa-upload"></i> Import Global Heads
+                                            </button>
+                                            <a href="{% url 'finance:coa_hub' %}" class="btn btn-outline-secondary">
+                                                <i class="fas fa-arrow-left"></i> Back to CoA Hub
+                                            </a>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            
+                            <div class="alert alert-light mt-4">
+                                <h6><i class="fas fa-code"></i> Example CSV Data:</h6>
+                                <div class="code-example">
+Object Code,Object Name,Minor Head Code,Account Type,Scope,System Code,Applicable Departments,Applicable Functions<br>
+A01101,Basic Pay - Officers,A011,EXP,UNIVERSAL,,,<br>
+C03880,TMA Other Non-tax Revenues,C038,REV,UNIVERSAL,,,<br>
+A01999,Department Specific Allowance,A019,EXP,DEPARTMENTAL,,ADM,FIN,011205
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // File input validation
+    document.getElementById('csv_file').addEventListener('change', function(e) {
+        const fileName = e.target.files[0]?.name;
+        if (fileName && !fileName.endsWith('.csv')) {
+            alert('Please select a valid CSV file.');
+            this.value = '';
+        }
+    });
+</script>
+{% endblock %}

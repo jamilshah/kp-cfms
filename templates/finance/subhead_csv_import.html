@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Import Sub-Heads from CSV - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3 border-bottom">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0 text-primary">
+                        <i class="bi bi-file-earmark-spreadsheet me-2"></i>Bulk Import Sub-Heads from CSV
+                    </h4>
+                    <a href="{% url 'budgeting:setup_coa_list' %}" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-1"></i>Back to Budget Heads
+                    </a>
+                </div>
+            </div>
+            
+            <div class="card-body p-4">
+                {% if errors %}
+                <div class="alert alert-danger">
+                    <h5><i class="bi bi-exclamation-triangle me-2"></i>Import Errors ({{ error_count }})</h5>
+                    <ul class="mb-0">
+                        {% for error in errors %}
+                        <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                    <p class="mt-3 mb-0">
+                        <strong>{{ success_count }} sub-heads</strong> were successfully validated before the error occurred.
+                        No changes have been saved. Please fix the errors and try again.
+                    </p>
+                </div>
+                {% endif %}
+                
+                <!-- Instructions -->
+                <div class="alert alert-info mb-4">
+                    <h5><i class="bi bi-info-circle me-2"></i>Instructions</h5>
+                    <ol class="mb-2">
+                        <li><strong>Download the template</strong> by clicking the button below</li>
+                        <li><strong>Fill in the data</strong> using Excel/Google Sheets:
+                            <ul class="mt-2">
+                                <li><strong>Department Code:</strong> e.g., ADM, REG, FIN</li>
+                                <li><strong>Fund Code:</strong> e.g., GEN, DEV</li>
+                                <li><strong>Function Code:</strong> e.g., 011205, 020101</li>
+                                <li><strong>Global Head Code:</strong> e.g., C03880, A01101</li>
+                                <li><strong>Sub Code:</strong> 01-99 (must be unique per combination)</li>
+                                <li><strong>Local Description:</strong> Custom name for the sub-head</li>
+                                <li><strong>Boolean fields:</strong> Use Y or N</li>
+                            </ul>
+                        </li>
+                        <li><strong>Save as CSV</strong> format</li>
+                        <li><strong>Upload the file</strong> using the form below</li>
+                    </ol>
+                    <div class="alert alert-warning mb-0 mt-3">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        <strong>Important:</strong> The import will validate all rows first. If any errors are found, 
+                        <strong>no changes will be saved</strong>. Fix all errors and re-upload.
+                    </div>
+                </div>
+                
+                <!-- Download Template Button -->
+                <div class="text-center mb-4 p-4 bg-light rounded">
+                    <a href="{% url 'finance:subhead_csv_template' %}" class="btn btn-success btn-lg">
+                        <i class="bi bi-download me-2"></i>Download CSV Template
+                    </a>
+                    <p class="text-muted mt-2 mb-0">
+                        <small>The template includes example rows to help you get started</small>
+                    </p>
+                </div>
+                
+                <!-- Upload Form -->
+                <form method="post" enctype="multipart/form-data" class="border p-4 rounded">
+                    {% csrf_token %}
+                    
+                    <div class="mb-4">
+                        <label for="csv_file" class="form-label">
+                            <strong>Select CSV File</strong>
+                        </label>
+                        <input type="file" 
+                               name="csv_file" 
+                               id="csv_file" 
+                               class="form-control" 
+                               accept=".csv"
+                               required>
+                        <div class="form-text">
+                            Only CSV files are accepted. Maximum file size: 5MB
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{% url 'budgeting:setup_coa_list' %}" class="btn btn-light border">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-4">
+                            <i class="bi bi-upload me-1"></i>Import Sub-Heads
+                        </button>
+                    </div>
+                </form>
+                
+                <!-- Tips -->
+                <div class="mt-4">
+                    <h5>Tips for Success</h5>
+                    <ul>
+                        <li>Make sure all codes (Department, Fund, Function, Global Head) exist in the system</li>
+                        <li>Sub-codes must be unique within each Department-Fund-Function-GlobalHead combination</li>
+                        <li>Sub-codes must be between 01 and 99 (not 00)</li>
+                        <li>Local Description is required and should be descriptive</li>
+                        <li>Test with a small file (5-10 rows) before importing large datasets</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

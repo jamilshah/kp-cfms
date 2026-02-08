@@ -1,0 +1,543 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Chart of Accounts Management Hub - KP-CFMS{% endblock %}
+
+{% block extra_css %}
+<style>
+    .workflow-step {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        padding: 24px;
+        margin-bottom: 24px;
+        border-left: 4px solid #dee2e6;
+        transition: all 0.3s ease;
+    }
+    
+    .workflow-step:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+    }
+    
+    .workflow-step.active {
+        border-left-color: #0d6efd;
+        background: linear-gradient(to right, #f8f9ff 0%, white 100%);
+    }
+    
+    .workflow-step.complete {
+        border-left-color: #198754;
+        background: linear-gradient(to right, #f0fdf4 0%, white 100%);
+    }
+    
+    .workflow-step.needed {
+        border-left-color: #ffc107;
+        background: linear-gradient(to right, #fffbf0 0%, white 100%);
+    }
+    
+    .step-number {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: #e9ecef;
+        color: #495057;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 1.25rem;
+        margin-right: 16px;
+        flex-shrink: 0;
+    }
+    
+    .workflow-step.active .step-number {
+        background: #0d6efd;
+        color: white;
+    }
+    
+    .workflow-step.complete .step-number {
+        background: #198754;
+        color: white;
+    }
+    
+    .workflow-step.needed .step-number {
+        background: #ffc107;
+        color: #000;
+    }
+    
+    .stat-card {
+        background: white;
+        border-radius: 8px;
+        padding: 16px;
+        border: 1px solid #e9ecef;
+        text-align: center;
+        transition: all 0.2s ease;
+    }
+    
+    .stat-card:hover {
+        border-color: #0d6efd;
+        box-shadow: 0 2px 6px rgba(13,110,253,0.15);
+    }
+    
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #0d6efd;
+        line-height: 1;
+        margin-bottom: 8px;
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .action-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        border-radius: 6px;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        font-weight: 500;
+    }
+    
+    .action-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    
+    .progress-ring {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto 16px;
+    }
+    
+    .progress-ring-circle {
+        transition: stroke-dashoffset 0.5s ease;
+        transform: rotate(-90deg);
+        transform-origin: 50% 50%;
+    }
+    
+    .dept-stat-row {
+        padding: 8px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .dept-stat-row:last-child {
+        border-bottom: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="bg-white rounded-3 shadow-sm p-4">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h2 class="mb-2">
+                            <i class="bi bi-diagram-3 text-primary me-2"></i>
+                            Chart of Accounts Management Hub
+                        </h2>
+                        <p class="text-muted mb-1">
+                            <strong>Provincial Level:</strong> Import master CoA → Configure Dept-Function-Head mappings → Lock
+                        </p>
+                        <p class="text-muted mb-0">
+                            <strong>TMA Level:</strong> Select from configured mappings to create budget allocations, add local sub-heads as needed
+                        </p>
+                    </div>
+                    <div class="text-end">
+                        <svg class="progress-ring" viewBox="0 0 120 120">
+                            <circle
+                                stroke="#e9ecef"
+                                stroke-width="8"
+                                fill="transparent"
+                                r="52"
+                                cx="60"
+                                cy="60"/>
+                            <circle
+                                class="progress-ring-circle"
+                                stroke="{% if mapping_percentage >= 90 %}#198754{% elif mapping_percentage >= 50 %}#0d6efd{% else %}#ffc107{% endif %}"
+                                stroke-width="8"
+                                fill="transparent"
+                                r="52"
+                                cx="60"
+                                cy="60"
+                                stroke-dasharray="326.73"
+                                stroke-dashoffset="{{ progress_offset|floatformat:2 }}"
+                                stroke-linecap="round"/>
+                            <text x="60" y="60" text-anchor="middle" dy=".3em" font-size="24" font-weight="bold" fill="#212529">
+                                {{ mapping_percentage }}%
+                            </text>
+                            <text x="60" y="80" text-anchor="middle" font-size="10" fill="#6c757d">
+                                MAPPED
+                            </text>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number">{{ budget_heads_total }}</div>
+                <div class="stat-label">Total Budget Heads</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-success">{{ budget_heads_mapped }}</div>
+                <div class="stat-label">Mapped to Departments</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-warning">{{ budget_heads_unmapped }}</div>
+                <div class="stat-label">Unmapped</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-info">{{ sub_heads_count }}</div>
+                <div class="stat-label">Sub-Heads</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow Steps -->
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Step 1: Provincial - Import Master CoA -->
+            <div class="workflow-step {% if step1_complete %}complete{% else %}active{% endif %}">
+                <div class="d-flex">
+                    <div class="step-number">1</div>
+                    <div class="flex-grow-1">
+                        <h4 class="mb-2">
+                            Provincial Level: Import Master CoA
+                            {% if step1_complete %}
+                                <span class="badge bg-success ms-2"><i class="bi bi-check-circle me-1"></i>Complete</span>
+                            {% else %}
+                                <span class="badge bg-primary ms-2"><i class="bi bi-arrow-right me-1"></i>Start Here</span>
+                            {% endif %}
+                        </h4>
+                        <p class="text-muted mb-3">
+                            <strong>One-time setup:</strong> Import the complete provincial master CoA from CSV. This CoA is universal for all TMAs.
+                        </p>
+                        
+                        <div class="alert alert-warning mb-3" role="alert">
+                            <i class="bi bi-lock me-2"></i>
+                            <strong>Important:</strong> Once imported and locked, the master CoA structure (Fund → Major → Minor → Sub-Head) cannot be modified except at provincial level.
+                        </div>
+                        
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-4">
+                                <div class="border rounded p-2 text-center">
+                                    <div class="fw-bold text-primary">{{ global_heads_count }}</div>
+                                    <small class="text-muted">Global Heads</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded p-2 text-center">
+                                    <div class="fw-bold text-success">{{ universal_global_heads }}</div>
+                                    <small class="text-muted">Universal</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded p-2 text-center">
+                                    <div class="fw-bold text-info">{{ departmental_global_heads }}</div>
+                                    <small class="text-muted">Departmental</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="{% url 'finance:global_head_csv_import' %}" class="action-btn btn btn-primary btn-sm">
+                                <i class="bi bi-upload"></i> Bulk Import Master CoA (CSV)
+                            </a>
+                            <a href="{% url 'system_admin:global_head_list' %}" class="action-btn btn btn-outline-primary btn-sm">
+                                <i class="bi bi-grid-3x3"></i> View Global Heads
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Provincial - Configure Department-Function-Head Mappings -->
+            <div class="workflow-step {% if step2_ready %}active{% endif %}">
+                <div class="d-flex">
+                    <div class="step-number">2</div>
+                    <div class="flex-grow-1">
+                        <h4 class="mb-2">
+                            Provincial Level: Configure Dept-Function-Head Mappings
+                            {% if not step2_ready %}
+                                <span class="badge bg-secondary ms-2"><i class="bi bi-lock me-1"></i>Complete Step 1 First</span>
+                            {% endif %}
+                        </h4>
+                        <p class="text-muted mb-3">
+                            Define valid Department-Function-Head combinations. Setup departments, functions, and specify which CoA heads are available for each combination. TMAs can only create budgets from these configured mappings.
+                        </p>
+                        
+                        <div class="alert alert-info mb-3" role="alert">
+                            <i class="bi bi-lightbulb me-2"></i>
+                            <strong>Universal heads</strong> (like Basic Pay) are available to all Dept-Func combinations. 
+                            <strong>Specific heads</strong> (like POL for Fire Brigade) only appear for selected combinations.
+                        </div>
+                        
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-4">
+                                <div class="border rounded p-2 text-center">
+                                    <div class="fw-bold text-primary">{{ departments_count }}</div>
+                                    <small class="text-muted">Departments</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded p-2 text-center">
+                                    <div class="fw-bold text-primary">{{ functions_count }}</div>
+                                    <small class="text-muted">Functions</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="border rounded p-2 text-center">
+                                    <div class="fw-bold text-info">{{ sub_heads_count }}</div>
+                                    <small class="text-muted">Sub-Heads</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="{% url 'finance:dept_func_config_matrix' %}" class="action-btn btn btn-primary btn-sm">
+                                <i class="bi bi-grid-3x3"></i> Configuration Matrix
+                            </a>
+                            <a href="{% url 'finance:configure_dept_func_head' %}" class="action-btn btn btn-outline-primary btn-sm">
+                                <i class="bi bi-gear"></i> Configure Mappings (Old)
+                            </a>
+                            <a href="{% url 'budgeting:setup_departments' %}" class="action-btn btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-building"></i> Manage Departments
+                            </a>
+                            <a href="{% url 'system_admin:master_data_seed' %}" class="action-btn btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-list-ol"></i> Manage Functions
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: TMA Level - Annual Budget Preparation -->
+            <div class="workflow-step {% if step2_ready %}active{% endif %}">
+                <div class="d-flex">
+                    <div class="step-number">3</div>
+                    <div class="flex-grow-1">
+                        <h4 class="mb-2">
+                            TMA Level: Annual Budget Preparation
+                        </h4>
+                        <p class="text-muted mb-3">
+                            <strong>Annual activity:</strong> Each TMA department selects from configured Dept-Function-Head combinations to create budget allocations. 
+                            TMAs can also create local sub-heads under existing CoA heads for more granular tracking.
+                        </p>
+                        
+                        <div class="alert alert-info mb-3" role="alert">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>Workflow:</strong> Select Department → Select Function → View available Global Heads → Create Budget Head<br>
+                            <small>Example: "Admin Dept + General Administration + Electricity" = Budget line for admin electricity</small>
+                        </div>
+                        
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-6">
+                                <div class="border rounded p-2 text-center">
+                                    <div class="fw-bold text-primary">{{ budget_heads_total }}</div>
+                                    <small class="text-muted">Total Budget Heads</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="border rounded p-2 text-center">
+                                    <div class="fw-bold text-success">{{ budget_heads_mapped }}</div>
+                                    <small class="text-muted">With Departments</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="{% url 'budgeting:setup_coa_add' %}" class="action-btn btn btn-primary btn-sm" {% if not step2_ready %}disabled{% endif %}>
+                                <i class="bi bi-plus-circle"></i> Create Budget Head
+                            </a>
+                            <a href="{% url 'budgeting:setup_coa_list' %}" class="action-btn btn btn-outline-primary btn-sm">
+                                <i class="bi bi-list-ul"></i> View All Budget Heads
+                            </a>
+                            <a href="{% url 'budgeting:setup_coa_add' %}?mode=subhead" class="action-btn btn btn-outline-info btn-sm" {% if not step2_ready %}disabled{% endif %}>
+                                <i class="bi bi-diagram-2"></i> Create Sub-Head
+                            </a>
+                            <a href="{% url 'finance:subhead_csv_import' %}" class="action-btn btn btn-outline-success btn-sm" {% if not step2_ready %}disabled{% endif %}>
+                                <i class="bi bi-file-earmark-spreadsheet"></i> Bulk Import Sub-Heads
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 4: Data Cleanup (if migrating) -->
+            <div class="workflow-step {% if step3_needed %}needed{% endif %}">
+                <div class="d-flex">
+                    <div class="step-number">4</div>
+                    <div class="flex-grow-1">
+                        <h4 class="mb-2">
+                            Maintenance: Department Assignment (Migration Only)
+                            {% if step3_needed %}
+                                <span class="badge bg-warning text-dark ms-2"><i class="bi bi-exclamation-triangle me-1"></i>Action Needed</span>
+                            {% else %}
+                                <span class="badge bg-success ms-2"><i class="bi bi-check-circle me-1"></i>All Mapped</span>
+                            {% endif %}
+                        </h4>
+                        <p class="text-muted mb-3">
+                            Assign departments to legacy budget heads created before the restructuring.
+                        </p>
+                        
+                        {% if step3_needed %}
+                        <div class="alert alert-warning mb-3" role="alert">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            <strong>{{ budget_heads_unmapped }} budget heads</strong> need department assignment.
+                        </div>
+                        {% endif %}
+                        
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="{% url 'finance:budget_head_departments' %}" class="action-btn btn btn-warning text-dark btn-sm">
+                                <i class="bi bi-tools"></i> Bulk Assignment Tool
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 5: Verification -->
+            <div class="workflow-step">
+                <div class="d-flex">
+                    <div class="step-number">5</div>
+                    <div class="flex-grow-1">
+                        <h4 class="mb-2">Reports & Verification</h4>
+                        <p class="text-muted mb-3">
+                            Review statistics, verify data integrity, and generate reports.
+                        </p>
+                        
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="{% url 'budgeting:setup_coa_list' %}" class="action-btn btn btn-outline-primary btn-sm">
+                                <i class="bi bi-bar-chart"></i> View Statistics
+                            </a>
+                            <a href="{% url 'finance:budget_head_list' %}" class="action-btn btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-table"></i> Full CoA Report
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar: Department Statistics -->
+        <div class="col-lg-4">
+            <div class="bg-white rounded-3 shadow-sm p-4">
+                <h5 class="mb-3">
+                    <i class="bi bi-pie-chart text-primary me-2"></i>
+                    Department Coverage
+                </h5>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <small class="text-muted">Overall Progress</small>
+                        <small class="text-muted fw-bold">{{ mapping_percentage }}%</small>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar {% if mapping_percentage >= 90 %}bg-success{% elif mapping_percentage >= 50 %}bg-primary{% else %}bg-warning{% endif %}" 
+                             role="progressbar" 
+                             style="width: {{ mapping_percentage }}%"
+                             aria-valuenow="{{ mapping_percentage }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <h6 class="text-muted mb-3">Top Departments (Budget Heads)</h6>
+                {% for dept in department_stats %}
+                <div class="dept-stat-row">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="fw-medium small">{{ dept.name|truncatewords:4 }}</div>
+                            <small class="text-muted">{{ dept.functions }} functions</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-primary">{{ dept.budget_heads }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                
+                <div class="mt-3 pt-3 border-top">
+                    <a href="{% url 'budgeting:setup_departments' %}" class="btn btn-sm btn-outline-primary w-100">
+                        <i class="bi bi-arrow-right-circle me-1"></i>
+                        View All Departments
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Quick Links -->
+            <div class="bg-white rounded-3 shadow-sm p-4 mt-3">
+                <h5 class="mb-3">
+                    <i class="bi bi-link-45deg text-primary me-2"></i>
+                    Quick Links
+                </h5>
+                
+                <div class="d-grid gap-2">
+                    <a href="{% url 'system_admin:master_data_seed' %}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-database me-2"></i> Master Data Seed
+                    </a>
+                    <a href="{% url 'finance:fund_list' %}" class="btn btn-sm btn-outline-secondary text-start">
+                        <i class="bi bi-cash-stack me-2"></i> Manage Funds
+                    </a>
+                    <a href="{% url 'budgeting:setup_coa_list' %}?unmapped=true" class="btn btn-sm btn-outline-warning text-start">
+                        <i class="bi bi-filter-circle me-2"></i> View Unmapped Heads
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Help Section -->
+            <div class="bg-light rounded-3 p-4 mt-3">
+                <h6 class="text-primary mb-2">
+                    <i class="bi bi-question-circle me-1"></i> Need Help?
+                </h6>
+                <p class="small text-muted mb-2">
+                    Follow the steps in order from top to bottom. Each step builds on the previous one.
+                </p>
+                <p class="small text-muted mb-0">
+                    <strong>Tip:</strong> Complete master data setup before creating budget heads.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-refresh stats every 30 seconds if on the page
+let refreshInterval;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Add tooltips if Bootstrap tooltip is available
+    if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+});
+</script>
+{% endblock %}

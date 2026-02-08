@@ -7,8 +7,28 @@
 <div class="container-fluid py-4">
     <div class="row mb-4">
         <div class="col">
-            <h2><i class="bi bi-diagram-3"></i> Chart of Accounts - Department Mapping</h2>
-            <p class="text-muted">Configure which departments can access each CoA head</p>
+            <h2><i class="bi bi-shield-lock"></i> Global Head Access Control</h2>
+            <p class="text-muted">
+                Configure which departments can <strong>create budget heads</strong> from each global head.
+                This controls access during budget head creation.
+            </p>
+        </div>
+    </div>
+
+    <!-- Info Alert -->
+    <div class="alert alert-info mb-4">
+        <div class="d-flex align-items-start">
+            <i class="bi bi-info-circle-fill fs-4 me-3 mt-1"></i>
+            <div>
+                <strong>Understanding Access Control vs Department Assignment:</strong>
+                <ul class="mb-0 mt-2">
+                    <li><strong>This Page (Global Head Access):</strong> Controls which departments can CREATE new budget heads from each global head</li>
+                    <li><strong>Budget Head Departments:</strong> Assigns ownership of existing budget heads to departments</li>
+                </ul>
+                <a href="{% url 'finance:budget_head_departments' %}" class="btn btn-sm btn-info mt-2">
+                    <i class="bi bi-arrow-right-circle"></i> Manage Budget Head Department Assignments
+                </a>
+            </div>
         </div>
     </div>
 

@@ -88,8 +88,36 @@ class FiscalYearForm(forms.ModelForm):
 class BudgetAllocationBaseForm(forms.ModelForm):
     """
     Base form for budget allocation entries.
-    Contains common fields and validation.
+    
+    ENHANCED (after CoA restructuring):
+    - Includes department and function filter fields for cascading dropdowns
+    - Budget heads are filtered by selected department + function
+    - Reduces dropdown from 3000+ options to ~100 relevant heads
     """
+    
+    # Filter fields (not saved to model, only used for filtering budget_head dropdown)
+    department = forms.ModelChoiceField(
+        queryset=Department.objects.filter(is_active=True).order_by('name'),
+        required=False,
+        label=_('Department'),
+        widget=forms.Select(attrs={
+            'class': 'form-select',
+            'onchange': 'loadFunctions(this.value)',
+        }),
+        help_text=_('Select department to filter available budget heads')
+    )
+    
+    function = forms.ModelChoiceField(
+        queryset=None,  # Will be populated dynamically
+        required=False,
+        label=_('Function'),
+        widget=forms.Select(attrs={
+            'class': 'form-select',
+            'onchange': 'loadBudgetHeads(this.value)',
+            'disabled': 'disabled',
+        }),
+        help_text=_('Select function within the department')
+    )
     
     class Meta:
         model = BudgetAllocation
@@ -136,6 +164,37 @@ class BudgetAllocationBaseForm(forms.ModelForm):
         self.budget_proposal = budget_proposal
         super().__init__(*args, **kwargs)
         
+        # Initialize function queryset (empty until department selected)
+        from apps.finance.models import FunctionCode
+        self.fields['function'].queryset = FunctionCode.objects.none()
+        
+        # Start with empty budget_head queryset - force user to select department/function first
+        # This prevents showing all 3000+ budget heads on page load
+        self.fields['budget_head'].queryset = BudgetHead.objects.none()
+        self.fields['budget_head'].help_text = _('Select Department and Function above to filter budget heads')
+        
+        # If editing existing allocation, populate the filter fields
+        if self.instance and self.instance.pk and self.instance.budget_head:
+            budget_head = self.instance.budget_head
+            if budget_head.department:
+                self.initial['department'] = budget_head.department
+                # Populate function queryset for this department
+                self.fields['function'].queryset = budget_head.department.related_functions.filter(is_active=True)
+                self.fields['function'].widget.attrs.pop('disabled', None)
+                self.initial['function'] = budget_head.function
+                
+                # Populate budget_head queryset for editing
+                self.fields['budget_head'].queryset = BudgetHead.objects.filter(
+                    department=budget_head.department,
+                    function=budget_head.function,
+                    is_active=True
+                )
+        
+        # Reorder fields to put filters first
+        field_order = ['department', 'function', 'budget_head', 'previous_year_actual', 
+                       'current_year_budget', 'original_allocation', 'remarks']
+        self.fields = {k: self.fields[k] for k in field_order if k in self.fields}
+        
         # Check if budget is editable via BudgetProposal
         if budget_proposal and not budget_proposal.can_edit_budget():
             for field in self.fields.values():
@@ -148,18 +207,26 @@ class ReceiptEstimateForm(BudgetAllocationBaseForm):
     
     Used by Dealing Assistant to enter revenue budget estimates.
     Enforces 15% growth cap on estimates.
+    
+    ENHANCED: Now includes department filtering for cascading dropdowns.
     """
+    
+    # Store account type for filtering
+    account_type = AccountType.REVENUE
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Filter to revenue heads only
-        self.fields['budget_head'].queryset = BudgetHead.objects.filter(
-            global_head__account_type=AccountType.REVENUE,
-            is_active=True
-        )
+        # Update labels for revenue context
         self.fields['budget_head'].label = _('Revenue Head')
+        self.fields['budget_head'].help_text = _('Select Department and Function above to filter revenue heads')
         self.fields['original_allocation'].label = _('Next Year Estimate')
+        
+        # If editing, apply account type filter to budget_head queryset
+        if self.instance and self.instance.pk and self.instance.budget_head:
+            self.fields['budget_head'].queryset = self.fields['budget_head'].queryset.filter(
+                global_head__account_type=AccountType.REVENUE
+            )
     
     def clean(self) -> Dict[str, Any]:
         """Validate 15% growth cap."""
@@ -188,17 +255,26 @@ class ExpenditureEstimateForm(BudgetAllocationBaseForm):
     
     Used by Dealing Assistant to enter expenditure budget estimates.
     Salary heads require linkage to Schedule of Establishment.
+    
+    ENHANCED: Now includes department filtering for cascading dropdowns.
     """
+    
+    # Store account type for filtering
+    account_type = AccountType.EXPENDITURE
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
-        # Filter to expenditure heads only
-        self.fields['budget_head'].queryset = BudgetHead.objects.filter(
-            global_head__account_type=AccountType.EXPENDITURE,
-            is_active=True
-        )
+        # Update labels for expenditure context
         self.fields['budget_head'].label = _('Expenditure Head')
+        self.fields['budget_head'].help_text = _('Select Department and Function above to filter expenditure heads')
+        self.fields['original_allocation'].label = _('Proposed Budget')
+        
+        # If editing, apply account type filter to budget_head queryset
+        if self.instance and self.instance.pk and self.instance.budget_head:
+            self.fields['budget_head'].queryset = self.fields['budget_head'].queryset.filter(
+                global_head__account_type=AccountType.EXPENDITURE
+            )
         self.fields['original_allocation'].label = _('Proposed Budget')
     
     def clean(self) -> Dict[str, Any]:

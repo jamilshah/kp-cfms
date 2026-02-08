@@ -190,6 +190,13 @@ class FiscalYear(AuditLogMixin):
             start_date__lte=today,
             end_date__gte=today
         ).first()
+    
+    def can_edit_budget(self) -> bool:
+        """
+        Check if budget entries can be created/modified.
+        Returns True if either planning or revision window is open.
+        """
+        return self.is_planning_active or self.is_revision_active
 
 
 class BudgetProposalStatus(models.TextChoices):

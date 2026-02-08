@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% load static %}
+{% load finance_filters %}
+
+{% block title %}Department-Function Configuration Matrix{% endblock %}
+
+{% block extra_css %}
+<style>
+    .config-matrix {
+        overflow-x: auto;
+        max-height: 700px;
+        overflow-y: auto;
+    }
+    .config-matrix table {
+        font-size: 0.85rem;
+    }
+    .config-matrix th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 10;
+        white-space: nowrap;
+    }
+    .config-matrix th:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 11;
+        background-color: #f8f9fa;
+    }
+    .config-matrix td {
+        text-align: center;
+        padding: 0.5rem;
+        min-width: 80px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .config-matrix td:first-child {
+        position: sticky;
+        left: 0;
+        background-color: #fff;
+        font-weight: 500;
+        text-align: left;
+        white-space: nowrap;
+    }
+    .config-matrix td:hover:not(:first-child) {
+        background-color: #e3f2fd;
+        transform: scale(1.05);
+    }
+    .status-not-configured {
+        background-color: #ffebee;
+        color: #c62828;
+    }
+    .status-incomplete {
+        background-color: #fff3e0;
+        color: #ef6c00;
+    }
+    .status-complete {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+    }
+    .status-over {
+        background-color: #e1f5fe;
+        color: #01579b;
+    }
+    .status-locked {
+        border: 2px solid #1976d2;
+    }
+    .stats-card {
+        border-left: 4px solid;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    .stats-card.primary { border-color: #1976d2; }
+    .stats-card.success { border-color: #2e7d32; }
+    .stats-card.warning { border-color: #ef6c00; }
+    .stats-card.danger { border-color: #c62828; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="bi bi-grid-3x3"></i> Department-Function Configuration Matrix</h2>
+                    <p class="text-muted mb-0">
+                        Configure which global heads are available for each department-function combination.
+                        Click any cell to configure.
+                    </p>
+                </div>
+                <div>
+                    <a href="{% url 'finance:coa_hub' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to CoA Hub
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stats-card primary">
+                <h4 class="mb-0">{{ total_combinations }}</h4>
+                <small class="text-muted">Total Combinations</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card success">
+                <h4 class="mb-0">{{ complete_count }}</h4>
+                <small class="text-muted">Complete (≥10 heads)</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card warning">
+                <h4 class="mb-0">{{ configured_count|add:'-'|add:complete_count|default:0 }}</h4>
+                <small class="text-muted">Incomplete (<10 heads)</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card danger">
+                <h4 class="mb-0">{{ total_combinations|add:'-'|add:configured_count }}</h4>
+                <small class="text-muted">Not Configured</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="mb-2">Overall Completion: {{ completion_percentage }}%</h6>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar bg-success" role="progressbar" 
+                             style="width: {{ completion_percentage }}%"
+                             aria-valuenow="{{ completion_percentage }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                            {{ completion_percentage }}%
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body py-2">
+                    <strong>Legend:</strong>
+                    <span class="badge status-not-configured ms-2">Not Configured</span>
+                    <span class="badge status-incomplete ms-2">Incomplete (<10 heads)</span>
+                    <span class="badge status-complete ms-2">Complete (10-99 heads)</span>
+                    <span class="badge status-over ms-2">Over-configured (≥100 heads)</span>
+                    <span class="badge bg-primary ms-2">🔒 Locked</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Matrix -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="config-matrix">
+                        <table class="table table-bordered table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Department / Function</th>
+                                    {% for func in functions %}
+                                    <th>
+                                        <div class="text-center">
+                                            <strong>{{ func.code }}</strong><br>
+                                            <small class="text-muted">{{ func.name|truncatewords:2 }}</small>
+                                        </div>
+                                    </th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for dept in departments %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ dept.name }}</strong><br>
+                                        <small class="text-muted">{{ dept.code }}</small>
+                                    </td>
+                                    {% for func in functions %}
+                                    {% with cell=matrix|get_item:dept.id|get_item:func.id %}
+                                    <td class="
+                                        {% if cell.head_count == 0 %}status-not-configured
+                                        {% elif cell.head_count < 10 %}status-incomplete
+                                        {% elif cell.head_count < 100 %}status-complete
+                                        {% else %}status-over{% endif %}
+                                        {% if cell.is_locked %}status-locked{% endif %}"
+                                        onclick="window.location.href='{% url 'finance:dept_func_config_detail' dept_id=dept.id func_id=func.id %}'">
+                                        <strong>{{ cell.head_count }}</strong>
+                                        {% if cell.is_locked %}
+                                        <br><i class="bi bi-lock-fill text-primary"></i>
+                                        {% endif %}
+                                    </td>
+                                    {% endwith %}
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Text -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <h6><i class="bi bi-info-circle"></i> How to Use:</h6>
+                <ul class="mb-0">
+                    <li><strong>Click any cell</strong> to configure allowed global heads for that department-function combination</li>
+                    <li><strong>Target:</strong> Each cell should have 10-100 heads configured</li>
+                    <li><strong>Lock</strong> configurations before fiscal year to prevent changes during budget preparation</li>
+                    <li><strong>Color coding</strong> helps identify incomplete configurations at a glance</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Custom template filter for dict access -->
+{% load custom_filters %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Tooltip for cells
+    document.querySelectorAll('.config-matrix td:not(:first-child)').forEach(cell => {
+        cell.setAttribute('title', 'Click to configure');
+    });
+</script>
+{% endblock %}

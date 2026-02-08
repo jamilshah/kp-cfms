@@ -470,7 +470,7 @@ class TehsilDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
 
 
 class GlobalHeadListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
-    """List all global heads."""
+    """List all global heads with scope and department information."""
     model = GlobalHead
     template_name = 'system_admin/master_data/global_head_list.html'
     context_object_name = 'global_heads'
@@ -479,7 +479,7 @@ class GlobalHeadListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
     def get_queryset(self):
         queryset = GlobalHead.objects.select_related(
             'minor', 'minor__major'
-        ).order_by('code')
+        ).prefetch_related('applicable_departments').order_by('code')
         
         # Search filter
         search_query = self.request.GET.get('search')
@@ -490,12 +490,18 @@ class GlobalHeadListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
                 Q(name__icontains=search_query) |
                 Q(minor__code__icontains=search_query) 
             )
+        
+        # Scope filter
+        scope = self.request.GET.get('scope')
+        if scope in ['UNIVERSAL', 'DEPARTMENTAL']:
+            queryset = queryset.filter(scope=scope)
             
         return queryset
         
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['search_query'] = self.request.GET.get('search', '')
+        context['selected_scope'] = self.request.GET.get('scope', '')
         return context
 
 

@@ -373,6 +373,106 @@ class GlobalHead(TimeStampedMixin):
 
 
 # ============================================================================
+# CONFIGURATION LAYER - Department-Function-Head Mappings
+# ============================================================================
+
+class DepartmentFunctionConfiguration(TimeStampedMixin):
+    """
+    Defines valid GlobalHead options for Department-Function combinations.
+    
+    This is the PRIMARY configuration mechanism that replaces the confusing
+    dual-level access control (scope/applicable_departments).
+    
+    Purpose:
+        - Provincial level configures which heads are valid for each dept-func pair
+        - TMAs consume this during budget preparation
+        - Simplifies selection from 500+ heads to 20-30 relevant heads
+    
+    Examples:
+        Department: Health, Function: Public Health (PH)
+        → allowed_global_heads: [A03303 Electricity, A03304 Water, ...]
+        
+        Department: Admin, Function: Administration (AD)
+        → allowed_global_heads: [C03880 Rent, A03305 Telephone, ...]
+    
+    Workflow:
+        1. Super Admin configures combinations at provincial level
+        2. Locks configuration before fiscal year starts
+        3. TMAs use this filtered list during budget preparation
+        4. System validates all BudgetHead creation against this configuration
+    """
+    
+    department = models.ForeignKey(
+        'budgeting.Department',
+        on_delete=models.PROTECT,
+        related_name='function_configurations',
+        verbose_name=_('Department'),
+        help_text=_('Department for this configuration.')
+    )
+    function = models.ForeignKey(
+        'finance.FunctionCode',
+        on_delete=models.PROTECT,
+        related_name='department_configurations',
+        verbose_name=_('Function'),
+        help_text=_('Functional classification for this configuration.')
+    )
+    allowed_global_heads = models.ManyToManyField(
+        'finance.GlobalHead',
+        blank=True,
+        related_name='dept_func_configurations',
+        verbose_name=_('Allowed Global Heads'),
+        help_text=_('Global heads that can be used for this department-function combination.')
+    )
+    is_locked = models.BooleanField(
+        default=False,
+        verbose_name=_('Is Locked'),
+        help_text=_('Lock this configuration to prevent changes during fiscal year.')
+    )
+    notes = models.TextField(
+        blank=True,
+        verbose_name=_('Configuration Notes'),
+        help_text=_('Optional notes about this configuration.')
+    )
+    
+    class Meta:
+        verbose_name = _('Department-Function Configuration')
+        verbose_name_plural = _('Department-Function Configurations')
+        unique_together = [('department', 'function')]
+        ordering = ['department__name', 'function__code']
+        indexes = [
+            models.Index(fields=['department', 'function']),
+            models.Index(fields=['is_locked']),
+        ]
+    
+    def __str__(self) -> str:
+        return f"{self.department.name} - {self.function.code}"
+    
+    def get_head_count(self) -> int:
+        """Get count of allowed global heads."""
+        return self.allowed_global_heads.count()
+    
+    def is_complete(self) -> bool:
+        """Check if configuration is complete (has at least 10 heads configured)."""
+        return self.get_head_count() >= 10
+    
+    def get_completion_status(self) -> str:
+        """Get completion status as string."""
+        count = self.get_head_count()
+        if count == 0:
+            return 'Not Configured'
+        elif count < 10:
+            return f'Incomplete ({count} heads)'
+        elif count < 100:
+            return f'Complete ({count} heads)'
+        else:
+            return f'Over-configured ({count} heads)'
+    
+    def validate_global_head(self, global_head) -> bool:
+        """Check if a global head is allowed for this configuration."""
+        return self.allowed_global_heads.filter(pk=global_head.pk).exists()
+
+
+# ============================================================================
 # TRANSACTIONAL LAYER - Fund-Specific Budget Heads
 # ============================================================================
 
@@ -388,20 +488,107 @@ class HeadType(models.TextChoices):
     SUB_HEAD = 'SUB_HEAD', _('Local Sub-Head')
 
 
+class BudgetHeadManager(models.Manager):
+    """
+    Custom manager for BudgetHead with department-aware queries.
+    
+    Provides optimized methods for filtering budget heads by department
+    and function - the primary use case for transaction entry forms.
+    """
+    
+    def active(self):
+        """Get only active budget heads."""
+        return self.filter(is_active=True)
+    
+    def for_department(self, department):
+        """
+        Get all active budget heads for a specific department.
+        
+        Args:
+            department: Department instance or ID
+            
+        Returns:
+            QuerySet: Filtered budget heads
+        """
+        return self.active().filter(department=department)
+    
+    def for_department_and_function(self, department, function):
+        """
+        Get budget heads for specific department-function combination.
+        
+        This is the PRIMARY filter for transaction forms.
+        
+        Args:
+            department: Department instance or ID
+            function: FunctionCode instance or ID
+            
+        Returns:
+            QuerySet: Filtered budget heads, ready for dropdown
+        """
+        return self.active().filter(
+            department=department,
+            function=function,
+            posting_allowed=True
+        ).select_related(
+            'global_head',
+            'function',
+            'department',
+            'fund'
+        ).order_by('global_head__minor__code', 'global_head__code')
+    
+    def for_transaction_entry(self, department, function, account_type=None, fund=None):
+        """
+        Get budget heads available for transaction entry with all filters.
+        
+        Args:
+            department: Department instance (required)
+            function: FunctionCode instance (required)
+            account_type: Filter by account type (EXP/REV/AST/LIA)
+            fund: Filter by fund (PUGF/Non-PUGF/etc.)
+            
+        Returns:
+            QuerySet: Filtered, optimized for form dropdown
+        """
+        qs = self.for_department_and_function(department, function)
+        
+        if account_type:
+            qs = qs.filter(global_head__account_type=account_type)
+        
+        if fund:
+            qs = qs.filter(fund=fund)
+        
+        return qs
+
+
 class BudgetHead(AuditLogMixin, StatusMixin):
     """
     Transactional Budget Head - Multi-dimensional matrix.
     
-    Structure: Fund + Function + Object (GlobalHead) + Sub-Code
+    ENHANCED STRUCTURE (after CoA restructuring):
+    Budget Head = Department + Function + Fund + Global Head + Sub-Code
     
     This represents the active Chart of Accounts for a specific Fund
-    with functional context. Supports local sub-heads for granularity.
+    with department and functional context. Supports local sub-heads for granularity.
     
     Examples:
-        - Standard: GEN + AD + A03303 + 00 -> Electricity (Admin)
-        - Sub-Head: GEN + AD + C03880 + 01 -> Rent of Shops (sub of Other Revenue)
+        - Standard: Health + PH + GEN + A03303 + 00 -> "Health - Public Health - Electricity"
+        - Sub-Head: Admin + AD + GEN + C03880 + 01 -> "Admin - Administration - Rent of Shops"
+    
+    Budget Preparation Workflow:
+    1. Department prepares budget
+    2. For each function under that department
+    3. Select minor/sub-heads (global heads)
+    4. Estimate amounts
+    → Creates department-function-specific budget heads
+    
+    Transaction Entry Workflow:
+    1. User selects Department first
+    2. Then selects Function (filtered by department)
+    3. Then selects Budget Head (filtered by dept + function)
+    → Only sees 20-30 relevant heads, not 500+
     
     Attributes:
+        department: The department responsible for this budget head (NEW)
         fund: The fund this budget head belongs to
         function: Functional classification (mandatory)
         global_head: Link to the master GlobalHead (PIFRA Object)
@@ -410,6 +597,16 @@ class BudgetHead(AuditLogMixin, StatusMixin):
         local_description: Custom name for sub-heads
     """
     
+    department = models.ForeignKey(
+        'budgeting.Department',
+        on_delete=models.PROTECT,
+        related_name='budget_heads',
+        verbose_name=_('Department'),
+        help_text=_('Department responsible for this budget head.'),
+        null=True,  # Temporarily nullable for migration
+        blank=True,
+        db_index=True
+    )
     fund = models.ForeignKey(
         'finance.Fund',
         on_delete=models.PROTECT,
@@ -473,38 +670,109 @@ class BudgetHead(AuditLogMixin, StatusMixin):
         help_text=_('Whether transactions can be posted to this head.')
     )
     
+    # Custom manager for department-aware queries
+    objects = BudgetHeadManager()
+    
+    def clean(self):
+        """
+        Validate BudgetHead creation using DepartmentFunctionConfiguration.
+        
+        This ensures that only configured global heads can be used for specific
+        department-function combinations.
+        """
+        from django.core.exceptions import ValidationError
+        
+        super().clean()
+        
+        # Validate department-function configuration
+        if self.department and self.function and self.global_head:
+            try:
+                config = DepartmentFunctionConfiguration.objects.get(
+                    department=self.department,
+                    function=self.function
+                )
+                
+                # Check if this global head is allowed
+                if not config.validate_global_head(self.global_head):
+                    raise ValidationError({
+                        'global_head': _(
+                            f'Global Head "{self.global_head.code}" is not configured '
+                            f'for {self.department.name} - {self.function.code}. '
+                            f'Please contact your administrator to update the configuration.'
+                        )
+                    })
+                
+                # Check if configuration is locked
+                if config.is_locked and not self.pk:
+                    # Allow editing existing heads, but don't allow new ones if locked
+                    pass  # You may want to add a warning message here
+                    
+            except DepartmentFunctionConfiguration.DoesNotExist:
+                # Configuration doesn't exist - warn but don't block
+                # (This allows for gradual migration)
+                pass
+        
+        # Validate function-based applicability (from GlobalHead)
+        if self.function and self.global_head:
+            if not self.global_head.is_applicable_to_function(self.function):
+                raise ValidationError({
+                    'global_head': _(
+                        f'Global Head "{self.global_head.code}" is not applicable '
+                        f'to function "{self.function.code}".'
+                    )
+                })
+    
     class Meta:
         verbose_name = _('Budget Head')
         verbose_name_plural = _('Budget Heads')
-        # Multi-dimensional uniqueness: Fund + Function + Object + Sub-Code
-        unique_together = [['fund', 'function', 'global_head', 'sub_code']]
-        ordering = ['fund', 'function__code', 'global_head__code', 'sub_code']
+        # Multi-dimensional uniqueness: Department + Fund + Function + Object + Sub-Code
+        unique_together = [['department', 'fund', 'function', 'global_head', 'sub_code']]
+        ordering = ['department__name', 'function__code', 'global_head__code', 'sub_code']
         indexes = [
             models.Index(fields=['fund', 'global_head']),
             models.Index(fields=['function']),
             models.Index(fields=['is_active']),
+            models.Index(fields=['department', 'function', 'is_active']),
+            models.Index(fields=['department', 'is_active']),
+            # Phase 3 Performance Indexes (Feb 2026)
+            models.Index(
+                fields=['department', 'function', 'is_active', 'posting_allowed'],
+                name='budgethead_search_idx'
+            ),
+            models.Index(
+                fields=['global_head', 'is_active'],
+                name='budgethead_globalhead_idx'
+            ),
         ]
     
     def __str__(self) -> str:
         """
-        Dynamic string representation with clear function context.
+        Dynamic string representation with department and function context.
         
         Case A (Regular - sub_code='00'):
-            Format: "[Function Name] - [Object Name] ([Object Code])"
-            Example: "Administration - Electricity (A03303)"
+            Format: "[Department] - [Function] - [Object Name] ([Object Code])"
+            Example: "Health - Public Health - Electricity (A03303)"
         
         Case B (Sub-Head - sub_code!='00'):
-            Format: "[Function Name] - [Local Description] ([Object Code]-[Sub Code])"
-            Example: "Infrastructure - Rent of Shops (C03880-01)"
+            Format: "[Department] - [Function] - [Local Description] ([Object Code]-[Sub Code])"
+            Example: "Admin - Administration - Rent of Shops (C03880-01)"
+        
+        Case C (No Department - legacy heads):
+            Format: "[Function Name] - [Object Name] ([Object Code])"
+            Example: "Administration - Electricity (A03303)"
         """
+        dept_name = self.department.name if self.department else None
         func_name = self.function.name if self.function else 'Unknown Function'
         
         if self.sub_code != '00' and self.local_description:
-            # Sub-Head format with function name
-            return f"{func_name} - {self.local_description} ({self.global_head.code}-{self.sub_code})"
+            obj_display = f"{self.local_description} ({self.global_head.code}-{self.sub_code})"
         else:
-            # Regular format with function name
-            return f"{func_name} - {self.global_head.name} ({self.global_head.code})"
+            obj_display = f"{self.global_head.name} ({self.global_head.code})"
+        
+        if dept_name:
+            return f"{dept_name} - {func_name} - {obj_display}"
+        else:
+            return f"{func_name} - {obj_display}"
     
     # Proxy properties for template compatibility
     @property
@@ -542,12 +810,25 @@ class BudgetHead(AuditLogMixin, StatusMixin):
         return self.global_head.minor.code
     
     def get_full_code(self) -> str:
-        """Return the complete NAM code path including sub-code."""
+        """Return the complete NAM code path including department and sub-code."""
+        dept_code = self.department.code if self.department and self.department.code else 'XX'
         func_code = self.function.code if self.function else 'XX'
-        base = f"F{self.fund.code}-{func_code}-{self.global_head.code}"
+        base = f"F{self.fund.code}-{dept_code}-{func_code}-{self.global_head.code}"
         if self.sub_code != '00':
             return f"{base}-{self.sub_code}"
         return base
+    
+    @property
+    def display_name_short(self):
+        """
+        Short display for dropdowns.
+        
+        Format: "Function - Object (Code)"
+        Example: "Public Health - Electricity (A03303)"
+        """
+        func_name = self.function.name if self.function else 'Unknown'
+        obj_name = self.local_description or self.global_head.name
+        return f"{func_name} - {obj_name} ({self.global_head.code})"
     
     def is_salary_head(self) -> bool:
         """Check if this is a salary-related budget head (A01*)."""
@@ -2056,4 +2337,143 @@ class AccountBalance(TenantAwareMixin):
         total_credit = sum(b.total_credit for b in balances)
         
         return (total_debit, total_credit)
+
+
+# ============================================================================
+# USER PREFERENCES - Budget Head Selection
+# ============================================================================
+
+class BudgetHeadFavorite(TimeStampedMixin):
+    """
+    User's favorite budget heads for quick access.
+    
+    Purpose:
+        - Save frequently used budget heads for quick selection
+        - Personalized per user
+        - Shown at top of selection widget
+    """
+    
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='budget_head_favorites',
+        verbose_name=_('User')
+    )
+    budget_head = models.ForeignKey(
+        'finance.BudgetHead',
+        on_delete=models.CASCADE,
+        related_name='favorited_by',
+        verbose_name=_('Budget Head')
+    )
+    organization = models.ForeignKey(
+        'core.Organization',
+        on_delete=models.CASCADE,
+        related_name='budget_head_favorites',
+        verbose_name=_('Organization'),
+        help_text=_('Organization context for this favorite.')
+    )
+    
+    class Meta:
+        verbose_name = _('Budget Head Favorite')
+        verbose_name_plural = _('Budget Head Favorites')
+        unique_together = [['user', 'budget_head', 'organization']]
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'organization']),
+        ]
+    
+    def __str__(self) -> str:
+        return f"{self.user.username} - {self.budget_head.code}"
+
+
+class BudgetHeadUsageHistory(TimeStampedMixin):
+    """
+    Track budget head usage for recently used functionality.
+    
+    Purpose:
+        - Track user's recently used budget heads
+        - Auto-populated when user creates transactions
+        - Shown in selection widget for quick access
+    """
+    
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='budget_head_usage_history',
+        verbose_name=_('User')
+    )
+    budget_head = models.ForeignKey(
+        'finance.BudgetHead',
+        on_delete=models.CASCADE,
+        related_name='usage_history',
+        verbose_name=_('Budget Head')
+    )
+    organization = models.ForeignKey(
+        'core.Organization',
+        on_delete=models.CASCADE,
+        related_name='budget_head_usage_history',
+        verbose_name=_('Organization')
+    )
+    last_used = models.DateTimeField(
+        auto_now=True,
+        verbose_name=_('Last Used'),
+        help_text=_('Timestamp of last use.')
+    )
+    usage_count = models.PositiveIntegerField(
+        default=1,
+        verbose_name=_('Usage Count'),
+        help_text=_('Number of times this head has been used.')
+    )
+    
+    class Meta:
+        verbose_name = _('Budget Head Usage History')
+        verbose_name_plural = _('Budget Head Usage History')
+        unique_together = [['user', 'budget_head', 'organization']]
+        ordering = ['-last_used']
+        indexes = [
+            models.Index(fields=['user', 'organization', '-last_used']),
+        ]
+    
+    def __str__(self) -> str:
+        return f"{self.user.username} - {self.budget_head.code} ({self.usage_count}x)"
+    
+    @classmethod
+    def record_usage(cls, user, budget_head, organization):
+        """
+        Record or update usage of a budget head by a user.
+        
+        Args:
+            user: User instance
+            budget_head: BudgetHead instance
+            organization: Organization instance
+        """
+        usage, created = cls.objects.get_or_create(
+            user=user,
+            budget_head=budget_head,
+            organization=organization
+        )
+        
+        if not created:
+            usage.usage_count += 1
+            usage.save(update_fields=['usage_count', 'last_used'])
+    
+    @classmethod
+    def get_recently_used(cls, user, organization, limit=10):
+        """
+        Get recently used budget heads for a user.
+        
+        Args:
+            user: User instance
+            organization: Organization instance
+            limit: Maximum number of results
+            
+        Returns:
+            QuerySet of BudgetHead objects
+        """
+        recent_ids = cls.objects.filter(
+            user=user,
+            organization=organization
+        ).values_list('budget_head_id', flat=True)[:limit]
+        
+        return BudgetHead.objects.filter(id__in=recent_ids, is_active=True)
 

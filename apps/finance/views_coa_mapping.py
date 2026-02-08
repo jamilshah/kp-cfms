@@ -9,7 +9,7 @@ from django.urls import reverse_lazy
 from django.views.generic import ListView, FormView
 from django.utils.translation import gettext_lazy as _
 
-from apps.finance.models import GlobalHead, AccountType
+from apps.finance.models import GlobalHead, AccountType, BudgetHead, FunctionCode
 from apps.budgeting.models import Department
 from apps.users.permissions import SuperAdminRequiredMixin
 
@@ -143,5 +143,124 @@ class CoADepartmentMappingView(LoginRequiredMixin, SuperAdminRequiredMixin, List
             global_head.applicable_departments.set(dept_ids)
             dept_count = len(dept_ids)
             messages.success(request, f'Updated {global_head.code}: {dept_count} departments assigned')
+        
+        return redirect(request.get_full_path())
+
+
+class BudgetHeadDepartmentAssignmentView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
+    """
+    View for managing BudgetHead department assignments.
+    Assigns each budget head to a specific department for filtering and access control.
+    """
+    model = BudgetHead
+    template_name = 'finance/budget_head_department_assignment.html'
+    context_object_name = 'budget_heads'
+    paginate_by = 100
+    
+    def get_queryset(self):
+        queryset = BudgetHead.objects.select_related(
+            'global_head', 'function', 'department', 'fund'
+        ).order_by('function__code', 'global_head__code')
+        
+        # Filter by function
+        function_id = self.request.GET.get('function')
+        if function_id:
+            queryset = queryset.filter(function_id=function_id)
+        
+        # Filter by account type
+        account_type = self.request.GET.get('account_type')
+        if account_type and account_type in dict(AccountType.choices):
+            queryset = queryset.filter(global_head__account_type=account_type)
+        
+        # Filter by department (including unmapped)
+        dept_filter = self.request.GET.get('department')
+        if dept_filter == 'UNMAPPED':
+            queryset = queryset.filter(department__isnull=True)
+        elif dept_filter:
+            queryset = queryset.filter(department_id=dept_filter)
+        
+        # Search by code or name
+        search = self.request.GET.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(global_head__code__icontains=search) | 
+                Q(global_head__name__icontains=search)
+            )
+        
+        return queryset
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['departments'] = Department.objects.filter(is_active=True).order_by('name')
+        context['functions'] = FunctionCode.objects.filter(is_active=True).order_by('code')
+        context['account_types'] = AccountType.choices
+        
+        # Current filter values
+        context['selected_function'] = self.request.GET.get('function', '')
+        context['selected_account_type'] = self.request.GET.get('account_type', '')
+        context['selected_department'] = self.request.GET.get('department', '')
+        context['search_query'] = self.request.GET.get('search', '')
+        
+        # Statistics
+        context['total_heads'] = BudgetHead.objects.count()
+        context['assigned_count'] = BudgetHead.objects.filter(department__isnull=False).count()
+        context['unmapped_count'] = BudgetHead.objects.filter(department__isnull=True).count()
+        
+        # Unmapped functions summary
+        unmapped_functions = BudgetHead.objects.filter(
+            department__isnull=True
+        ).values('function__code', 'function__name').annotate(
+            count=Count('id')
+        ).order_by('function__code')[:10]
+        context['unmapped_functions'] = unmapped_functions
+        
+        # Build query string for pagination
+        query_params = []
+        for key, value in self.request.GET.items():
+            if key != 'page' and value:
+                query_params.append(f'{key}={value}')
+        context['query_string'] = '&' + '&'.join(query_params) if query_params else ''
+        
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        """Handle bulk assignment of departments to budget heads."""
+        action = request.POST.get('action')
+        
+        if action == 'bulk_assign':
+            head_ids = request.POST.getlist('selected_heads')
+            department_id = request.POST.get('bulk_department')
+            
+            if head_ids and department_id:
+                try:
+                    department = Department.objects.get(id=department_id)
+                    updated = BudgetHead.objects.filter(pk__in=head_ids).update(
+                        department=department
+                    )
+                    messages.success(
+                        request, 
+                        f'Assigned {updated} budget head(s) to {department.name}'
+                    )
+                except Department.DoesNotExist:
+                    messages.error(request, 'Invalid department selected')
+            else:
+                messages.warning(request, 'Please select budget heads and a department')
+        
+        elif action == 'assign_single':
+            head_id = request.POST.get('head_id')
+            department_id = request.POST.get('department')
+            
+            if head_id and department_id:
+                try:
+                    budget_head = BudgetHead.objects.get(pk=head_id)
+                    department = Department.objects.get(id=department_id)
+                    budget_head.department = department
+                    budget_head.save()
+                    messages.success(
+                        request, 
+                        f'{budget_head.code} assigned to {department.name}'
+                    )
+                except (BudgetHead.DoesNotExist, Department.DoesNotExist):
+                    messages.error(request, 'Invalid budget head or department')
         
         return redirect(request.get_full_path())

@@ -13,7 +13,8 @@ from django.utils.translation import gettext_lazy as _
 from .models import (
     FunctionCode, BudgetHead, Fund, Voucher, JournalEntry, 
     ChequeBook, ChequeLeaf, BankStatement, BankStatementLine,
-    MajorHead, MinorHead, GlobalHead
+    MajorHead, MinorHead, GlobalHead, DepartmentFunctionConfiguration,
+    BudgetHeadFavorite, BudgetHeadUsageHistory
 )
 
 
@@ -88,31 +89,118 @@ class GlobalHeadAdmin(admin.ModelAdmin):
     get_dept_display.short_description = 'Departments'
 
 
+@admin.register(DepartmentFunctionConfiguration)
+class DepartmentFunctionConfigurationAdmin(admin.ModelAdmin):
+    """Admin configuration for DepartmentFunctionConfiguration model."""
+    
+    list_display = ('department', 'function', 'get_head_count', 'get_completion_status', 'is_locked', 'updated_at')
+    list_filter = ('is_locked', 'department', 'function')
+    search_fields = ('department__name', 'function__code', 'function__name')
+    ordering = ('department__name', 'function__code')
+    filter_horizontal = ('allowed_global_heads',)
+    readonly_fields = ('get_head_count', 'get_completion_status', 'created_at', 'updated_at')
+    actions = ['lock_configurations', 'unlock_configurations', 'export_configurations']
+    
+    fieldsets = (
+        (_('Configuration'), {
+            'fields': ('department', 'function', 'is_locked')
+        }),
+        (_('Allowed Global Heads'), {
+            'fields': ('allowed_global_heads',),
+            'description': _('Select which global heads are available for this department-function combination.')
+        }),
+        (_('Additional Information'), {
+            'fields': ('notes', 'get_head_count', 'get_completion_status'),
+            'classes': ('collapse',)
+        }),
+        (_('Timestamps'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_head_count(self, obj):
+        """Display count of allowed heads."""
+        return obj.get_head_count()
+    get_head_count.short_description = 'Head Count'
+    
+    def get_completion_status(self, obj):
+        """Display completion status."""
+        return obj.get_completion_status()
+    get_completion_status.short_description = 'Status'
+    
+    @admin.action(description='Lock selected configurations')
+    def lock_configurations(self, request, queryset):
+        """Bulk lock configurations."""
+        updated = queryset.update(is_locked=True)
+        self.message_user(request, f'Locked {updated} configuration(s)')
+    
+    @admin.action(description='Unlock selected configurations')
+    def unlock_configurations(self, request, queryset):
+        """Bulk unlock configurations."""
+        updated = queryset.update(is_locked=False)
+        self.message_user(request, f'Unlocked {updated} configuration(s)')
+    
+    @admin.action(description='Export selected configurations to CSV')
+    def export_configurations(self, request, queryset):
+        """Export selected configurations to CSV."""
+        import csv
+        from django.http import HttpResponse
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="dept_func_configs.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'Department Code', 'Department Name', 'Function Code', 'Function Name',
+            'Allowed Global Heads', 'Head Count', 'Is Locked', 'Notes'
+        ])
+        
+        for config in queryset.prefetch_related('allowed_global_heads'):
+            head_codes = ', '.join(config.allowed_global_heads.values_list('code', flat=True))
+            writer.writerow([
+                config.department.code,
+                config.department.name,
+                config.function.code,
+                config.function.name,
+                head_codes,
+                config.get_head_count(),
+                'Yes' if config.is_locked else 'No',
+                config.notes
+            ])
+        
+        self.message_user(request, f'Exported {queryset.count()} configuration(s)')
+        return response
+
+
 
 @admin.register(BudgetHead)
 class BudgetHeadAdmin(admin.ModelAdmin):
     """Admin configuration for BudgetHead model."""
     
     list_display = (
-        'fund', 'get_function', 'get_code', 'get_name', 'sub_code', 'head_type',
+        'get_department', 'fund', 'get_function', 'get_code', 'get_name', 'sub_code', 'head_type',
         'get_account_type', 'budget_control', 'is_active'
     )
     list_filter = (
-        'fund', 'function', 'head_type', 'global_head__account_type',
+        'department', 'fund', 'function', 'head_type', 'global_head__account_type',
         'budget_control', 'project_required', 'is_active'
     )
     search_fields = (
-        'global_head__code', 'global_head__name', 'local_description', 'sub_code'
+        'global_head__code', 'global_head__name', 'local_description', 'sub_code',
+        'department__name', 'department__code'
     )
-    ordering = ('fund', 'function__code', 'global_head__code', 'sub_code')
+    ordering = ('department__name', 'function__code', 'global_head__code', 'sub_code')
     list_editable = ('sub_code', 'head_type')
+    actions = ['activate_heads', 'deactivate_heads', 'enable_posting', 'disable_posting']
     
     readonly_fields = ('created_at', 'updated_at', 'created_by', 'updated_by')
-    autocomplete_fields = ['fund', 'function', 'global_head']
+    autocomplete_fields = ['department', 'fund', 'function', 'global_head']
     
     fieldsets = (
-        (_('Classification'), {
-            'fields': ('fund', 'function', 'global_head')
+        (_('Department & Classification'), {
+            'fields': ('department', 'fund', 'function', 'global_head'),
+            'description': _('Select department first, then fund, function, and object head.')
         }),
         (_('Sub-Head Configuration'), {
             'fields': ('head_type', 'sub_code', 'local_description'),
@@ -129,6 +217,11 @@ class BudgetHeadAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+    
+    def get_department(self, obj):
+        return obj.department.code if obj.department else '-'
+    get_department.short_description = 'Dept'
+    get_department.admin_order_field = 'department__code'
     
     def get_function(self, obj):
         return obj.function.code if obj.function else '-'
@@ -148,6 +241,30 @@ class BudgetHeadAdmin(admin.ModelAdmin):
         return obj.global_head.get_account_type_display()
     get_account_type.short_description = 'Account Type'
     get_account_type.admin_order_field = 'global_head__account_type'
+    
+    @admin.action(description='Activate selected budget heads')
+    def activate_heads(self, request, queryset):
+        """Bulk activate budget heads."""
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'Activated {updated} budget head(s)')
+    
+    @admin.action(description='Deactivate selected budget heads')
+    def deactivate_heads(self, request, queryset):
+        """Bulk deactivate budget heads."""
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'Deactivated {updated} budget head(s)')
+    
+    @admin.action(description='Enable posting for selected budget heads')
+    def enable_posting(self, request, queryset):
+        """Bulk enable posting."""
+        updated = queryset.update(posting_allowed=True)
+        self.message_user(request, f'Enabled posting for {updated} budget head(s)')
+    
+    @admin.action(description='Disable posting for selected budget heads')
+    def disable_posting(self, request, queryset):
+        """Bulk disable posting."""
+        updated = queryset.update(posting_allowed=False)
+        self.message_user(request, f'Disabled posting for {updated} budget head(s)')
 
 
 
@@ -470,5 +587,47 @@ class BankStatementLineAdmin(admin.ModelAdmin):
             return f'{obj.description[:40]}...'
         return obj.description
     description_short.short_description = _('Description')
+
+
+@admin.register(BudgetHeadFavorite)
+class BudgetHeadFavoriteAdmin(admin.ModelAdmin):
+    """Admin configuration for BudgetHeadFavorite model."""
+    
+    list_display = ('user', 'budget_head', 'organization', 'created_at')
+    list_filter = ('organization', 'created_at')
+    search_fields = ('user__username', 'budget_head__global_head__code', 'budget_head__global_head__name')
+    ordering = ('-created_at',)
+    readonly_fields = ('created_at', 'updated_at')
+    
+    fieldsets = (
+        (_('Favorite'), {
+            'fields': ('user', 'budget_head', 'organization')
+        }),
+        (_('Timestamps'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(BudgetHeadUsageHistory)
+class BudgetHeadUsageHistoryAdmin(admin.ModelAdmin):
+    """Admin configuration for BudgetHeadUsageHistory model."""
+    
+    list_display = ('user', 'budget_head', 'organization', 'usage_count', 'last_used')
+    list_filter = ('organization', 'last_used')
+    search_fields = ('user__username', 'budget_head__global_head__code', 'budget_head__global_head__name')
+    ordering = ('-last_used',)
+    readonly_fields = ('created_at', 'updated_at', 'last_used')
+    
+    fieldsets = (
+        (_('Usage'), {
+            'fields': ('user', 'budget_head', 'organization', 'usage_count')
+        }),
+        (_('Timestamps'), {
+            'fields': ('last_used', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
 
 

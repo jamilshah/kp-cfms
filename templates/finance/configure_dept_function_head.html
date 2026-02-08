@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+
+{% block title %}Configure Department-Function-Head Mappings - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <!-- Main Content Area (Left) -->
+        <div class="col-lg-9">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="bi bi-diagram-3 text-primary me-2"></i>
+                        Configure Department-Function-Head Mappings
+                    </h2>
+                    <p class="text-muted mb-0">
+                        Provincial Level: Define valid CoA combinations for TMA budget preparation
+                    </p>
+                </div>
+                <a href="{% url 'finance:coa_hub' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i> Back to CoA Hub
+                </a>
+            </div>
+
+            <!-- Statistics Cards -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="card border-primary">
+                        <div class="card-body text-center">
+                            <h3 class="text-primary mb-0">{{ total_global_heads }}</h3>
+                            <small class="text-muted">Total Global Heads</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-success">
+                        <div class="card-body text-center">
+                            <h3 class="text-success mb-0">{{ universal_heads }}</h3>
+                            <small class="text-muted">Universal (All Dept-Func)</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-info">
+                        <div class="card-body text-center">
+                            <h3 class="text-info mb-0">{% if configured_count %}{{ configured_count }}{% else %}—{% endif %}</h3>
+                            <small class="text-muted">Configured for Selection</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-funnel me-2"></i>Filters</h5>
+                </div>
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Department</label>
+                            <select name="department" class="form-select" onchange="this.form.submit()">
+                                <option value="">All Departments</option>
+                                {% for dept in departments %}
+                                <option value="{{ dept.id }}" {% if selected_dept == dept.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ dept.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Function</label>
+                            <select name="function" class="form-select" onchange="this.form.submit()">
+                                <option value="">All Functions</option>
+                                {% for func in functions %}
+                                <option value="{{ func.id }}" {% if selected_func == func.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ func.code }} - {{ func.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Account Type</label>
+                            <select name="account_type" class="form-select" onchange="this.form.submit()">
+                                <option value="">All Types</option>
+                                {% for value, label in account_types %}
+                                <option value="{{ value }}" {% if selected_account_type == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Search</label>
+                            <input type="text" name="search" class="form-control" placeholder="Code or name..." value="{{ search_query }}">
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="bi bi-search me-1"></i> Apply Filters
+                            </button>
+                            <a href="{% url 'finance:configure_dept_func_head' %}" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-x-circle me-1"></i> Clear
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {% if selected_dept and selected_func %}
+            <!-- Context Banner -->
+            <div class="alert alert-info mb-4">
+                <i class="bi bi-info-circle me-2"></i>
+                <strong>Viewing configuration for:</strong>
+                {{ selected_dept_obj.name }} → {{ selected_func_obj.code }} ({{ selected_func_obj.name }})
+                <br>
+                <small>Showing {{ configured_count }} head(s) configured for this Department-Function combination</small>
+            </div>
+            {% endif %}
+
+            <!-- Bulk Actions Form -->
+            <form method="post" id="bulkActionForm">
+                {% csrf_token %}
+                
+                <!-- Bulk Action Toolbar -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-body">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label small">Bulk Action</label>
+                                <select name="action" id="bulkAction" class="form-select form-select-sm">
+                                    <option value="">Select action...</option>
+                                    <option value="assign_to_department">Assign to Department(s)</option>
+                                    <option value="assign_to_function">Assign to Function(s)</option>
+                                    <option value="mark_universal">Mark as Universal</option>
+                                    <option value="remove_from_department">Remove from Department(s)</option>
+                                    <option value="remove_from_function">Remove from Function(s)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3" id="deptSelectDiv" style="display:none;">
+                                <label class="form-label small">Select Department(s)</label>
+                                <select name="departments" id="deptSelect" class="form-select form-select-sm" multiple size="1">
+                                    {% for dept in departments %}
+                                    <option value="{{ dept.id }}">{{ dept.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3" id="funcSelectDiv" style="display:none;">
+                                <label class="form-label small">Select Function(s)</label>
+                                <select name="functions" id="funcSelect" class="form-select form-select-sm" multiple size="1">
+                                    {% for func in functions %}
+                                    <option value="{{ func.id }}">{{ func.code }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <button type="submit" class="btn btn-primary btn-sm w-100" id="applyBulkBtn" disabled>
+                                    <i class="bi bi-check-circle me-1"></i> Apply to Selected
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <span id="selectedCount">0</span> head(s) selected
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Global Heads Table -->
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Global Heads</h5>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="selectAll">
+                                <label class="form-check-label" for="selectAll">
+                                    Select All
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="40"></th>
+                                    <th>Code</th>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th class="text-center">Scope</th>
+                                    <th class="text-center">Departments</th>
+                                    <th class="text-center">Functions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for head in global_heads %}
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input head-checkbox" 
+                                               name="selected_heads" value="{{ head.id }}">
+                                    </td>
+                                    <td class="font-monospace small">{{ head.code }}</td>
+                                    <td>
+                                        {{ head.name|truncatewords:8 }}
+                                        <br><small class="text-muted">{{ head.minor.major.name }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{% if head.account_type == 'EXP' %}danger{% elif head.account_type == 'REV' %}success{% else %}secondary{% endif %}">
+                                            {{ head.get_account_type_display }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if head.scope == 'UNIVERSAL' %}
+                                        <span class="badge bg-success">Universal</span>
+                                        {% else %}
+                                        <span class="badge bg-info">Specific</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if head.scope == 'UNIVERSAL' %}
+                                        <span class="text-muted small">All</span>
+                                        {% else %}
+                                        <span class="badge bg-primary">{{ head.dept_count }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if head.func_count > 0 %}
+                                        <span class="badge bg-primary">{{ head.func_count }}</span>
+                                        {% else %}
+                                        <span class="text-muted small">All</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">
+                                        <i class="bi bi-inbox display-4 d-block mb-2"></i>
+                                        No global heads found. Try adjusting your filters.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Instructions Sidebar (Right) -->
+        <div class="col-lg-3">
+            <div class="card shadow-sm sticky-top" style="top: 20px;">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-question-circle me-2"></i>How It Works
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-primary">Purpose</h6>
+                    <p class="small">
+                        Configure which Global Heads (CoA objects) are available for each Department-Function combination.
+                        This creates the lookup table TMAs use during budget preparation.
+                    </p>
+
+                    <hr>
+
+                    <h6 class="text-primary">Universal vs Specific</h6>
+                    <ul class="small">
+                        <li><strong>Universal:</strong> Available to all Dept-Func combinations (e.g., Basic Pay, Electricity)</li>
+                        <li><strong>Specific:</strong> Only for selected Dept-Func (e.g., POL for Fire Brigade)</li>
+                    </ul>
+
+                    <hr>
+
+                    <h6 class="text-primary">Workflow</h6>
+                    <ol class="small">
+                        <li>Use filters to narrow down heads</li>
+                        <li>Select heads using checkboxes</li>
+                        <li>Choose bulk action</li>
+                        <li>Select Department(s) or Function(s)</li>
+                        <li>Click "Apply to Selected"</li>
+                    </ol>
+
+                    <hr>
+
+                    <h6 class="text-primary">Bulk Actions</h6>
+                    <dl class="small mb-0">
+                        <dt>Assign to Department(s)</dt>
+                        <dd>Make heads available to selected departments</dd>
+                        
+                        <dt>Assign to Function(s)</dt>
+                        <dd>Restrict heads to specific functions</dd>
+                        
+                        <dt>Mark as Universal</dt>
+                        <dd>Make heads available everywhere</dd>
+                        
+                        <dt>Remove from Dept/Func</dt>
+                        <dd>Revoke previous assignments</dd>
+                    </dl>
+
+                    <hr>
+
+                    <div class="alert alert-warning small mb-0">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        <strong>Important:</strong> Once locked at provincial level, these configurations cannot be changed by TMAs.
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <a href="{% url 'finance:coa_hub' %}" class="btn btn-sm btn-outline-primary w-100">
+                        <i class="bi bi-arrow-left me-1"></i> Back to CoA Hub
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAllCb = document.getElementById('selectAll');
+    const headCheckboxes = document.querySelectorAll('.head-checkbox');
+    const selectedCountSpan = document.getElementById('selectedCount');
+    const bulkActionSelect = document.getElementById('bulkAction');
+    const applyBtn = document.getElementById('applyBulkBtn');
+    const deptSelectDiv = document.getElementById('deptSelectDiv');
+    const funcSelectDiv = document.getElementById('funcSelectDiv');
+    const deptSelect = document.getElementById('deptSelect');
+    const funcSelect = document.getElementById('funcSelect');
+
+    // Select all toggle
+    selectAllCb.addEventListener('change', function() {
+        headCheckboxes.forEach(cb => cb.checked = this.checked);
+        updateSelectedCount();
+    });
+
+    // Individual checkbox change
+    headCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateSelectedCount);
+    });
+
+    // Update selected count
+    function updateSelectedCount() {
+        const checkedCount = document.querySelectorAll('.head-checkbox:checked').length;
+        selectedCountSpan.textContent = checkedCount;
+        applyBtn.disabled = checkedCount === 0 || !bulkActionSelect.value;
+    }
+
+    // Show/hide department/function selects based on action
+    bulkActionSelect.addEventListener('change', function() {
+        const action = this.value;
+        
+        // Hide all
+        deptSelectDiv.style.display = 'none';
+        funcSelectDiv.style.display = 'none';
+        deptSelect.removeAttribute('required');
+        funcSelect.removeAttribute('required');
+        
+        // Show relevant
+        if (action === 'assign_to_department' || action === 'remove_from_department') {
+            deptSelectDiv.style.display = 'block';
+            deptselect.setAttribute('required', 'required');
+        } else if (action === 'assign_to_function' || action === 'remove_from_function') {
+            funcSelectDiv.style.display = 'block';
+            funcSelect.setAttribute('required', 'required');
+        }
+        
+        updateSelectedCount();
+    });
+
+    // Prevent form submission if no heads selected
+    document.getElementById('bulkActionForm').addEventListener('submit', function(e) {
+        const checkedCount = document.querySelectorAll('.head-checkbox:checked').length;
+        if (checkedCount === 0) {
+            e.preventDefault();
+            alert('Please select at least one head');
+            return false;
+        }
+        
+        if (!bulkActionSelect.value) {
+            e.preventDefault();
+            alert('Please select a bulk action');
+            return false;
+        }
+        
+        return confirm(`Apply "${bulkActionSelect.options[bulkActionSelect.selectedIndex].text}" to ${checkedCount} head(s)?`);
+    });
+});
+</script>
+{% endblock %}

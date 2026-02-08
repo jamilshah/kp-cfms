@@ -1,0 +1,63 @@
+{% if existing_subheads %}
+    <div class="mb-2">
+        <strong>{{ existing_subheads|length }} sub-code(s) already in use:</strong>
+        <input type="text" id="subhead-search" class="form-control form-control-sm mt-2 mb-2" 
+               placeholder="Search by description..." onkeyup="filterSubheads(this.value)">
+    </div>
+    <div style="max-height: 200px; overflow-y: auto;">
+        <table class="table table-sm table-bordered">
+            <thead>
+                <tr>
+                    <th width="80">Code</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody id="subhead-list">
+                {% for sh in existing_subheads %}
+                <tr class="subhead-row" data-description="{{ sh.local_description|lower }}">
+                    <td><strong>{{ sh.sub_code }}</strong></td>
+                    <td>{{ sh.local_description }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="mb-0 mt-2 text-success">
+        <i class="bi bi-lightbulb me-1"></i>
+        <strong>Suggested next code: {{ next_available_code }}</strong>
+    </p>
+    <script>
+    function filterSubheads(searchText) {
+        const search = searchText.toLowerCase();
+        const rows = document.querySelectorAll('.subhead-row');
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            const description = row.getAttribute('data-description');
+            if (description.includes(search)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Show message if no results
+        const tbody = document.getElementById('subhead-list');
+        const existingMsg = tbody.querySelector('.no-results-msg');
+        if (existingMsg) existingMsg.remove();
+        
+        if (visibleCount === 0 && search) {
+            const noResultsRow = document.createElement('tr');
+            noResultsRow.className = 'no-results-msg';
+            noResultsRow.innerHTML = '<td colspan="2" class="text-center text-muted">No sub-heads match "' + searchText + '"</td>';
+            tbody.appendChild(noResultsRow);
+        }
+    }
+    </script>
+{% else %}
+    <p class="mb-0 text-muted">
+        <i class="bi bi-check-circle me-1"></i>
+        No existing sub-heads for this combination. You can use any code from 01-99.
+    </p>
+{% endif %}

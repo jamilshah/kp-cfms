@@ -17,20 +17,29 @@ from django.urls import reverse_lazy
 class BudgetHeadForm(forms.ModelForm):
     """
     Form for creating/editing Budget Heads (Chart of Accounts).
-    Links a Fund to a GlobalHead.
+    
+    ENHANCED (after CoA restructuring):
+    - Department is now a direct FK on BudgetHead (saved to model)
+    - Selecting department filters the available functions
+    - Selecting function filters the available global heads
     """
     
     class Meta:
         model = BudgetHead
         fields = [
-            'fund', 'global_head', 'function',
+            'department', 'fund', 'global_head', 'function',
+            'head_type', 'sub_code', 'local_description',
             'is_active',
             'budget_control', 'posting_allowed', 'project_required'
         ]
         widgets = {
-            'fund': forms.Select(attrs={'class': 'form-select select2-enable'}),
-            'global_head': forms.Select(attrs={'class': 'form-select select2-enable'}),
-            'function': forms.Select(attrs={'class': 'form-select select2-enable'}),
+            'department': forms.Select(attrs={'class': 'form-select'}),
+            'fund': forms.Select(attrs={'class': 'form-select'}),
+            'global_head': forms.Select(attrs={'class': 'form-select searchable-select', 'id': 'id_global_head'}),
+            'function': forms.Select(attrs={'class': 'form-select', 'id': 'id_function'}),
+            'head_type': forms.Select(attrs={'class': 'form-select'}),
+            'sub_code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '00'}),
+            'local_description': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Custom name for sub-head'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'budget_control': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'posting_allowed': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -39,39 +48,54 @@ class BudgetHeadForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         self.request = kwargs.pop('request', None)
+        mode = kwargs.pop('mode', '')
         super().__init__(*args, **kwargs)
         
-        # Add Department filter field (not part of model)
-        self.fields['department'] = forms.ModelChoiceField(
-            queryset=Department.objects.filter(is_active=True).order_by('name'),
-            label=_('Department (Filter)'),
-            required=False,
-            widget=forms.Select(attrs={
-                'class': 'form-select select2-enable',
-                'hx-get': reverse_lazy('finance:load_functions'),
-                'hx-target': '#id_function',
-                'hx-trigger': 'change',
-            }),
-            help_text=_('Select your department to filter the function list.')
-        )
+        # Set initial values for sub-head mode
+        if mode == 'subhead' and not self.instance.pk:
+            self.fields['head_type'].initial = 'SUB_HEAD'
+            self.fields['sub_code'].initial = '01'
+        
+        # Department is now a model field - configure it for HTMX filtering
+        self.fields['department'].queryset = Department.objects.filter(is_active=True).order_by('name')
+        self.fields['department'].widget.attrs.update({
+            'hx-get': f"{reverse_lazy('finance:load_functions')}?template=finance",
+            'hx-target': '#id_function',
+            'hx-swap': 'innerHTML',
+            'hx-trigger': 'change',
+            'hx-include': '[name="department"]',
+        })
+        self.fields['department'].help_text = _('Select the department responsible for this budget head.')
         
         # Add HTMX to function field to filter GlobalHead
         self.fields['function'].widget.attrs.update({
             'hx-get': reverse_lazy('finance:load_global_heads'),
             'hx-target': '#id_global_head',
+            'hx-swap': 'innerHTML',
             'hx-trigger': 'change',
+            'hx-include': '[name="department"],[name="function"]',
         })
         
         # Reorder fields to put department first
-        field_order = ['fund', 'department', 'function', 'global_head', 'is_active', 'budget_control', 'posting_allowed', 'project_required']
+        field_order = ['department', 'fund', 'function', 'global_head', 'head_type', 'sub_code', 'local_description', 'is_active', 'budget_control', 'posting_allowed', 'project_required']
         self.fields = {k: self.fields[k] for k in field_order if k in self.fields}
         
         # Rename labels for clarity
-        self.fields['function'].label = _('Department Code (Function)')
-        self.fields['function'].help_text = _('The official PIFRA code for your department/shoba.')
+        self.fields['function'].label = _('Function Code')
+        self.fields['function'].help_text = _('The PIFRA functional classification code.')
         
         self.fields['global_head'].label = _('Bill Item / Object')
         self.fields['global_head'].help_text = _('What is this expense for? (e.g., Electricity, Salary, Petrol)')
+        
+        # Add help text for sub-head fields
+        self.fields['head_type'].help_text = _('Select "Local Sub-Head" to create a subdivision of the object.')
+        self.fields['sub_code'].help_text = _('Use "00" for regular head, "01"-"99" for sub-heads.')
+        self.fields['local_description'].help_text = _('Custom name for sub-heads (e.g., "Rent of Shops", "Annual Sports Festival").')
+        
+        # Add JavaScript trigger to show/hide sub-head fields
+        self.fields['head_type'].widget.attrs.update({
+            'onchange': 'toggleSubHeadFields(this.value)',
+        })
         
         # Order global heads by code for easier selection
         # Filter by function if available (for edit mode or when function is pre-selected)
@@ -106,6 +130,78 @@ class BudgetHeadForm(forms.ModelForm):
                 self.fields['department'].disabled = True
                 self.fields['function'].disabled = True
                 self.fields['global_head'].disabled = True
+    
+    def clean(self):
+        """
+        Validate budget head uniqueness and provide helpful error messages.
+        
+        Checks for duplicates based on the unique_together constraint:
+        department + fund + function + global_head + sub_code
+        """
+        cleaned_data = super().clean()
+        
+        department = cleaned_data.get('department')
+        fund = cleaned_data.get('fund')
+        function = cleaned_data.get('function')
+        global_head = cleaned_data.get('global_head')
+        sub_code = cleaned_data.get('sub_code', '00')
+        head_type = cleaned_data.get('head_type')
+        local_description = cleaned_data.get('local_description')
+        
+        # Validate sub-head requirements
+        if head_type == 'SUB_HEAD':
+            if sub_code == '00':
+                self.add_error('sub_code', _('Sub-heads must use codes 01-99, not 00.'))
+            
+            if not local_description or not local_description.strip():
+                self.add_error('local_description', _('Local description is required for sub-heads.'))
+        
+        # Check for duplicates
+        if department and fund and function and global_head and sub_code:
+            # Build the query to check for existing budget heads
+            duplicate_query = BudgetHead.objects.filter(
+                department=department,
+                fund=fund,
+                function=function,
+                global_head=global_head,
+                sub_code=sub_code
+            )
+            
+            # Exclude current instance if editing
+            if self.instance and self.instance.pk:
+                duplicate_query = duplicate_query.exclude(pk=self.instance.pk)
+            
+            if duplicate_query.exists():
+                existing = duplicate_query.first()
+                error_msg = _(
+                    f'This budget head already exists: {existing}. '
+                    f'Each combination of Department + Fund + Function + Object + Sub-Code must be unique.'
+                )
+                
+                if head_type == 'SUB_HEAD':
+                    # Show existing sub-heads for this combination
+                    existing_subheads = BudgetHead.objects.filter(
+                        department=department,
+                        fund=fund,
+                        function=function,
+                        global_head=global_head,
+                        head_type='SUB_HEAD'
+                    ).order_by('sub_code')
+                    
+                    if existing_subheads.exists():
+                        used_codes = [sh.sub_code for sh in existing_subheads]
+                        error_msg += f' Used sub-codes: {", ".join(used_codes)}.'
+                        
+                        # Suggest next available sub-code
+                        for code_num in range(1, 100):
+                            suggested_code = f'{code_num:02d}'
+                            if suggested_code not in used_codes:
+                                error_msg += f' Try using sub-code: {suggested_code}'
+                                break
+                
+                raise ValidationError(error_msg)
+        
+        return cleaned_data
 
 
 class ChequeBookForm(forms.ModelForm):

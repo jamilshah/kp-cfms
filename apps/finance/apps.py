@@ -16,3 +16,7 @@ class FinanceConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.finance'
     verbose_name = 'Finance & Chart of Accounts'
+    
+    def ready(self):
+        """Import signals when the app is ready."""
+        import apps.finance.signals  # noqa: F401
