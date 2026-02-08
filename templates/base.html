@@ -241,9 +241,54 @@ Description: Base template with Bootstrap 5 and navigation.
             font-weight: 500;
         }
         
+        /* Responsive Sidebar */
+        @media (min-width: 992px) {
+            .sidebar {
+                transform: none !important;
+                visibility: visible !important;
+            }
+        }
+
+        @media (max-width: 991.98px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease-in-out;
+                width: 260px; /* Slightly wider for mobile comfort */
+            }
+            
+            .sidebar.show {
+                transform: translateX(0);
+                box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            /* Overlay backdrop */
+            .sidebar-overlay {
+                position: fixed;
+                top: 56px;
+                left: 0;
+                width: 100vw;
+                height: calc(100vh - 56px);
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 99; /* Just below sidebar (z-index 100) */
+                display: none;
+                opacity: 0;
+                transition: opacity 0.3s ease-in-out;
+                backdrop-filter: blur(2px);
+            }
+            
+            .sidebar-overlay.show {
+                display: block;
+                opacity: 1;
+            }
+        }
+
         /* Print styles */
         @media print {
-            .sidebar, .navbar, .no-print {
+            .sidebar, .navbar, .no-print, .sidebar-overlay, #sidebarToggle {
                 display: none !important;
             }
             .main-content {
@@ -258,6 +303,9 @@ Description: Base template with Bootstrap 5 and navigation.
     <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark fixed-top" style="background-color: var(--cfms-primary);">
         <div class="container-fluid">
+            <button class="btn btn-link text-white d-lg-none me-2 p-0" type="button" id="sidebarToggle">
+                <i class="bi bi-list fs-3"></i>
+            </button>
             <a class="navbar-brand" href="{% url 'dashboard:workspace_redirect' %}">
                 <i class="bi bi-bank"></i> KP-CFMS
             </a>
@@ -795,6 +843,51 @@ Description: Base template with Bootstrap 5 and navigation.
                 if (searchInput) searchInput.focus();
             }
         });
+
+        // 4. Mobile Sidebar Toggle
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebar = document.querySelector('.sidebar');
+        
+        // Create overlay element
+        const overlay = document.createElement('div');
+        overlay.className = 'sidebar-overlay';
+        document.body.appendChild(overlay);
+
+        if (sidebarToggle) {
+            function toggleSidebar() {
+                sidebar.classList.toggle('show');
+                
+                if (sidebar.classList.contains('show')) {
+                    overlay.style.display = 'block';
+                    // small delay to allow display:block to apply before opacity transition
+                    setTimeout(() => overlay.classList.add('show'), 10);
+                } else {
+                    overlay.classList.remove('show');
+                    setTimeout(() => {
+                        if (!overlay.classList.contains('show')) {
+                            overlay.style.display = 'none';
+                        }
+                    }, 300); // match transition duration
+                }
+            }
+
+            sidebarToggle.addEventListener('click', function(e) {
+                e.stopPropagation();
+                toggleSidebar();
+            });
+
+            // Close on overlay click
+            overlay.addEventListener('click', toggleSidebar);
+
+            // Close on link click (optional, but good UX for mobile nav)
+            sidebar.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', function() {
+                    if (window.innerWidth < 992 && sidebar.classList.contains('show')) {
+                        toggleSidebar();
+                    }
+                });
+            });
+        }
     </script>
     
     {% block extra_js %}{% endblock %}
