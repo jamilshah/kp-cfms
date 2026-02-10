@@ -147,7 +147,7 @@ class PropertyAdmin(admin.ModelAdmin):
         'district', 'is_active', 'court_case_status'
     )
     search_fields = (
-        'property_code', 'name', 'address', 'tenant_name',
+        'property_code', 'name', 'address',
         'ownership_title', 'remarks'
     )
     
@@ -183,13 +183,6 @@ class PropertyAdmin(admin.ModelAdmin):
             'fields': (
                 'annual_rent', 'monthly_rent', 'last_rent_revision'
             )
-        }),
-        (_('Tenant Information'), {
-            'fields': (
-                'current_tenant', 'tenant_name', 'tenant_cnic', 'tenant_contact',
-                'lease_start_date', 'lease_end_date'
-            ),
-            'classes': ('collapse',)
         }),
         (_('Litigation'), {
             'fields': (

@@ -14,10 +14,10 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from apps.property.models import (
-    District, Mauza, Village, Property,
+    Mauza, Village, Property,
     PropertyType, PropertySubType, PropertyStatus, CourtCaseStatus
 )
-from apps.core.models import Organization
+from apps.core.models import District, Organization
 
 
 class DistrictModelTest(TestCase):

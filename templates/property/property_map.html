@@ -499,7 +499,7 @@
             <!-- Rent Range -->
             <div class="filter-group">
                 <label>
-                    <i class="bi bi-cash"></i> Annual Rent (₨)
+                    <i class="bi bi-cash"></i> Annual Rent (PKR)
                 </label>
                 <div class="row g-2">
                     <div class="col-6">
@@ -578,6 +578,16 @@
         loadProperties();
         setupEventListeners();
     });
+
+    function escapeHtml(value) {
+        const str = String(value ?? '');
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
     
     function initializeMap() {
         // Create map centered on Peshawar
@@ -780,34 +790,41 @@
                 fetch(`/property/api/property/${props.id}/`)
                     .then(response => response.json())
                     .then(data => {
+                        const name = escapeHtml(data.name || 'N/A');
+                        const type = escapeHtml(data.type || 'N/A');
+                        const status = escapeHtml(data.status || 'N/A');
+                        const area = escapeHtml(data.area_marlas || '0');
+                        const rent = escapeHtml(data.annual_rent || 'N/A');
+                        const district = escapeHtml(data.district || 'N/A');
+                        const mauza = escapeHtml(data.mauza || 'N/A');
                         const popupContent = `
                             <div class="popup-header">
-                                <h6 class="mb-0">${data.name || 'N/A'}</h6>
+                                <h6 class="mb-0">${name}</h6>
                             </div>
                             <div class="popup-body">
                                 <div class="popup-row">
                                     <span class="popup-label">Type:</span>
-                                    <span class="popup-value">${data.type || 'N/A'}</span>
+                                    <span class="popup-value">${type}</span>
                                 </div>
                                 <div class="popup-row">
                                     <span class="popup-label">Status:</span>
-                                    <span class="popup-value badge" style="background: ${props.color};">${data.status || 'N/A'}</span>
+                                    <span class="popup-value badge" style="background: ${props.color};">${status}</span>
                                 </div>
                                 <div class="popup-row">
                                     <span class="popup-label">Area:</span>
-                                    <span class="popup-value">${data.area_marlas || '0'} marlas</span>
+                                    <span class="popup-value">${area} marlas</span>
                                 </div>
                                 <div class="popup-row">
                                     <span class="popup-label">Annual Rent:</span>
-                                    <span class="popup-value">₨ ${data.annual_rent || 'N/A'}</span>
+                                    <span class="popup-value">PKR ${rent}</span>
                                 </div>
                                 <div class="popup-row">
                                     <span class="popup-label">District:</span>
-                                    <span class="popup-value">${data.district || 'N/A'}</span>
+                                    <span class="popup-value">${district}</span>
                                 </div>
                                 <div class="popup-row">
                                     <span class="popup-label">Mauza:</span>
-                                    <span class="popup-value">${data.mauza || 'N/A'}</span>
+                                    <span class="popup-value">${mauza}</span>
                                 </div>
                             </div>
                             <div class="popup-actions">
@@ -831,7 +848,7 @@
             });
             
             // Add simple tooltip for quick info (no API call needed)
-            marker.bindTooltip(props.name, {
+            marker.bindTooltip(escapeHtml(props.name), {
                 permanent: false,
                 direction: 'top',
                 className: 'marker-tooltip'
@@ -936,9 +953,9 @@
                 });
                 
                 circle.bindPopup(`
-                    <strong>${feature.properties.name}</strong><br>
-                    Annual Rent: ₨ ${rent.toLocaleString()}<br>
-                    Status: ${feature.properties.status}<br>
+                    <strong>${escapeHtml(feature.properties.name)}</strong><br>
+                    Annual Rent: PKR ${rent.toLocaleString()}<br>
+                    Status: ${escapeHtml(feature.properties.status || 'N/A')}<br>
                     <small>Circle size = Revenue potential</small>
                 `);
                 
@@ -1042,13 +1059,13 @@
                         <h6 style="color: ${borderColor}; margin: 0 0 10px 0;">
                             ${iconHtml} Ghost Asset Detected
                         </h6>
-                        <strong>${feature.properties.name}</strong><br>
+                        <strong>${escapeHtml(feature.properties.name)}</strong><br>
                         <span style="color: ${borderColor};">Severity: ${severity}</span><br>
                         <hr style="margin: 8px 0;">
-                        Status: <strong>${feature.properties.status}</strong><br>
-                        Annual Rent: <strong>₨ ${rent.toLocaleString()}</strong><br>
-                        Type: ${feature.properties.type}<br>
-                        District: ${feature.properties.district}<br>
+                        Status: <strong>${escapeHtml(feature.properties.status || 'N/A')}</strong><br>
+                        Annual Rent: <strong>PKR ${rent.toLocaleString()}</strong><br>
+                        Type: ${escapeHtml(feature.properties.type || 'N/A')}<br>
+                        District: ${escapeHtml(feature.properties.district || 'N/A')}<br>
                         <hr style="margin: 8px 0;">
                         <small style="color: #666;">
                             ${rent === 0 ? '⚠️ No revenue generated' : ''}
@@ -1154,15 +1171,6 @@
                 });
             } else {
                 alert('Geolocation is not supported by your browser');
-            }
-        });
-        
-        // Fullscreen
-        document.getElementById('fullscreen').addEventListener('click', function() {
-            if (!document.fullscreenElement) {
-                document.getElementById('map-container').requestFullscreen();
-            } else {
-                document.exitFullscreen();
             }
         });
         

@@ -9,7 +9,7 @@ Description: Property Management models for TMA GIS System
 -------------------------------------------------------------------------
 """
 from decimal import Decimal
-from django.db import models
+from django.db import models, IntegrityError, transaction
 from django.core.validators import MinValueValidator, URLValidator, RegexValidator
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
@@ -403,13 +403,18 @@ class Property(AuditLogMixin, TenantAwareMixin):
     def save(self, *args, **kwargs):
         """Override save to auto-calculate area conversions and monthly rent."""
         # Calculate area conversions (1 Marla = 225 sq.ft = 20.9 sq.m)
-        if self.area_marlas:
+        if self.area_marlas is not None:
             self.area_sqft = self.area_marlas * Decimal('225.00')
             self.area_sqm = self.area_marlas * Decimal('20.90')
+        else:
+            self.area_sqft = None
+            self.area_sqm = None
         
         # Calculate monthly rent
-        if self.annual_rent:
+        if self.annual_rent is not None:
             self.monthly_rent = self.annual_rent / Decimal('12.00')
+        else:
+            self.monthly_rent = None
         
         super().save(*args, **kwargs)
     
@@ -607,14 +612,34 @@ class PropertyLease(AuditLogMixin, TenantAwareMixin):
         2. Validate only one active lease per property
         3. Auto-expire lease if end date passed
         """
-        # Auto-generate lease number
-        if not self.lease_number:
+        def _generate_lease_number():
             from django.utils import timezone
             year = timezone.now().year
-            count = PropertyLease.objects.filter(
-                lease_number__startswith=f'LEASE-{year}'
-            ).count() + 1
-            self.lease_number = f'LEASE-{year}-{count:04d}'
+            prefix = f'LEASE-{year}-'
+            last_lease = PropertyLease.objects.filter(
+                lease_number__startswith=prefix
+            ).order_by('-lease_number').values_list('lease_number', flat=True).first()
+            last_seq = int(last_lease.split('-')[-1]) if last_lease else 0
+            return f'{prefix}{last_seq + 1:04d}'
+        
+        # Auto-generate lease number with retry to avoid race conditions
+        if not self.lease_number:
+            for attempt in range(5):
+                self.lease_number = _generate_lease_number()
+                try:
+                    with transaction.atomic():
+                        # Check for lease end date and auto-expire
+                        if self.lease_end_date and self.status == LeaseStatus.ACTIVE:
+                            from django.utils import timezone
+                            if self.lease_end_date < timezone.now().date():
+                                self.status = LeaseStatus.EXPIRED
+                        super().save(*args, **kwargs)
+                    return
+                except IntegrityError:
+                    self.lease_number = None
+                    if attempt == 4:
+                        raise
+            return
         
         # Check for lease end date and auto-expire
         if self.lease_end_date and self.status == LeaseStatus.ACTIVE:

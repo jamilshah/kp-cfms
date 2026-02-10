@@ -644,59 +644,6 @@ class PropertyFilterForm(forms.Form):
             self.fields['village'].queryset = Village.objects.none()
 
 
-# ============================================================================
-# PROPERTY PHOTOS AND DOCUMENTS FORMS
-# ============================================================================
-
-class PropertyPhotoForm(forms.ModelForm):
-    """Form for uploading property photos"""
-    
-    class Meta:
-        model = PropertyPhoto
-        fields = ['photo', 'caption']
-        widgets = {
-            'photo': forms.FileInput(attrs={
-                'class': 'form-control-file',
-                'accept': 'image/*'
-            }),
-            'caption': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Brief description'
-            }),
-        }
-        labels = {
-            'photo': 'Photo',
-            'caption': 'Description',
-        }
-
-
-class PropertyDocumentForm(forms.ModelForm):
-    """Form for uploading property documents"""
-    
-    class Meta:
-        model = PropertyDocument
-        fields = ['document_type', 'document', 'description']
-        widgets = {
-            'document_type': forms.Select(attrs={
-                'class': 'form-control'
-            }),
-            'document': forms.FileInput(attrs={
-                'class': 'form-control-file',
-                'accept': '.pdf,.doc,.docx,.jpg,.jpeg,.png'
-            }),
-            'description': forms.Textarea(attrs={
-                'class': 'form-control',
-                'rows': 2,
-                'placeholder': 'Brief description'
-            }),
-        }
-        labels = {
-            'document_type': 'Type',
-            'document': 'File',
-            'description': 'Description',
-        }
-
-
 # Inline formsets for photos and documents
 PropertyPhotoFormSet = inlineformset_factory(
     Property,

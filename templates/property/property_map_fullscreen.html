@@ -688,7 +688,7 @@
     <div id="analysis-panel">
         <div class="analysis-header">
             <h6><i class="bi bi-bar-chart"></i> Shape Analysis</h6>
-            <button class="analysis-close" onclick="closeAnalysisPanel()">×</button>
+            <button class="analysis-close" onclick="closeAnalysisPanel()">X</button>
         </div>
         <div id="analysis-results">
             <div class="analysis-stat">
@@ -709,7 +709,7 @@
             </div>
             <div class="analysis-stat">
                 <span class="analysis-label">Annual Revenue:</span>
-                <span class="analysis-value primary" id="stat-revenue-in-shape">₨ 0</span>
+                <span class="analysis-value primary" id="stat-revenue-in-shape">PKR 0</span>
             </div>
             <div class="analysis-stat">
                 <span class="analysis-label">Area Covered:</span>
@@ -871,16 +871,23 @@
                 fetch(`/property/api/property/${props.id}/`)
                     .then(response => response.json())
                     .then(data => {
+                        const name = escapeHtml(data.name || 'N/A');
+                        const type = escapeHtml(data.type || 'N/A');
+                        const status = escapeHtml(data.status || 'N/A');
+                        const area = escapeHtml(data.area_marlas || '0');
+                        const rent = escapeHtml(data.annual_rent || 'N/A');
+                        const district = escapeHtml(data.district || 'N/A');
+                        const mauza = escapeHtml(data.mauza || 'N/A');
                         const popupContent = `
                             <div style="padding: 12px; min-width: 250px;">
-                                <h6 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600;">${data.name || 'N/A'}</h6>
+                                <h6 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600;">${name}</h6>
                                 <div style="font-size: 12px; line-height: 1.8;">
-                                    <div><strong>Type:</strong> ${data.type || 'N/A'}</div>
-                                    <div><strong>Status:</strong> <span style="color: ${props.color}; font-weight: 600;">${data.status || 'N/A'}</span></div>
-                                    <div><strong>Area:</strong> ${data.area_marlas || '0'} marlas</div>
-                                    <div><strong>Annual Rent:</strong> ₨ ${data.annual_rent || 'N/A'}</div>
-                                    <div><strong>District:</strong> ${data.district || 'N/A'}</div>
-                                    <div><strong>Mauza:</strong> ${data.mauza || 'N/A'}</div>
+                                    <div><strong>Type:</strong> ${type}</div>
+                                    <div><strong>Status:</strong> <span style="color: ${props.color}; font-weight: 600;">${status}</span></div>
+                                    <div><strong>Area:</strong> ${area} marlas</div>
+                                    <div><strong>Annual Rent:</strong> PKR ${rent}</div>
+                                    <div><strong>District:</strong> ${district}</div>
+                                    <div><strong>Mauza:</strong> ${mauza}</div>
                                 </div>
                                 <div style="margin-top: 12px; display: flex; gap: 8px;">
                                     <a href="/property/properties/${props.id}/" style="flex: 1; padding: 6px; background: #667eea; color: white; text-align: center; text-decoration: none; border-radius: 4px; font-size: 12px;">View</a>
@@ -896,7 +903,7 @@
                     });
             });
             
-            marker.bindTooltip(props.name, {
+            marker.bindTooltip(escapeHtml(props.name), {
                 permanent: false,
                 direction: 'top',
                 className: 'marker-tooltip'
@@ -1009,7 +1016,7 @@
         document.getElementById('stat-rented-in-shape').textContent = stats.rented;
         document.getElementById('stat-vacant-in-shape').textContent = stats.vacant;
         document.getElementById('stat-litigation-in-shape').textContent = stats.litigation;
-        document.getElementById('stat-revenue-in-shape').textContent = '₨ ' + stats.revenue.toLocaleString();
+        document.getElementById('stat-revenue-in-shape').textContent = 'PKR ' + stats.revenue.toLocaleString();
         
         if (area > 1000000) {
             document.getElementById('stat-area-in-shape').textContent = (area / 1000000).toFixed(2) + ' km²';
@@ -1087,8 +1094,8 @@
                 
                 circle.bindPopup(`
                     <div style="padding: 8px;">
-                        <strong>${props.name}</strong><br>
-                        Annual Rent: ₨ ${rent.toLocaleString()}<br>
+                        <strong>${escapeHtml(props.name)}</strong><br>
+                        Annual Rent: PKR ${rent.toLocaleString()}<br>
                         <small>Circle size represents revenue</small>
                     </div>
                 `);
@@ -1147,9 +1154,9 @@
             marker.bindPopup(`
                 <div style="padding: 12px;">
                     <div style="background: ${color}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-bottom: 8px;">${severity} Priority</div>
-                    <strong>${props.name}</strong><br>
+                    <strong>${escapeHtml(props.name)}</strong><br>
                     <small>Status: ${props.status_code || 'Unknown'}</small><br>
-                    <small>Revenue: ₨ ${(props.annual_rent || 0).toLocaleString()}</small><br>
+                    <small>Revenue: PKR ${(props.annual_rent || 0).toLocaleString()}</small><br>
                     <a href="/property/properties/${props.id}/" style="margin-top: 8px; display: inline-block; padding: 4px 12px; background: ${color}; color: white; text-decoration: none; border-radius: 4px; font-size: 12px;">Investigate</a>
                 </div>
             `);
@@ -1231,6 +1238,16 @@
     
     // Initialize on load
     document.addEventListener('DOMContentLoaded', initMap);
+
+    function escapeHtml(value) {
+        const str = String(value ?? '');
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
     </script>
 </body>
 </html>

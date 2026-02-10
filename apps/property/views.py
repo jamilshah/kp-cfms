@@ -12,13 +12,11 @@ from django.views.generic import (
 )
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect, render, get_object_or_404
 from django.http import JsonResponse, HttpResponse
 from django.db.models import Q, Count, Sum
 from django.contrib import messages
 from django.db import transaction
-from django.views.decorators.cache import cache_page
-from django.utils.decorators import method_decorator
 from typing import Dict, Any
 from decimal import Decimal
 import csv
@@ -249,7 +247,7 @@ class PropertyCreateView(LoginRequiredMixin, CreateView):
                 property=self.object,
                 action='CREATED',
                 changed_by=self.request.user,
-                description=f'Property {self.object.property_code} created'
+                remarks=f'Property {self.object.property_code} created'
             )
             
             messages.success(
@@ -297,7 +295,7 @@ class PropertyUpdateView(LoginRequiredMixin, UpdateView):
         for field in form.changed_data:
             old_value = getattr(self.object, field, None)
             new_value = form.cleaned_data.get(field)
-            changed_fields.append(f'{field}: {old_value} → {new_value}')
+            changed_fields.append(f'{field}: {old_value} -> {new_value}')
         
         if photo_formset.is_valid() and document_formset.is_valid():
             self.object = form.save()
@@ -312,7 +310,8 @@ class PropertyUpdateView(LoginRequiredMixin, UpdateView):
                     property=self.object,
                     action='UPDATED',
                     changed_by=self.request.user,
-                    description=f'Updated fields: {", ".join(changed_fields)}'
+                    field_changed=', '.join(form.changed_data),
+                    remarks=f'Updated fields: {", ".join(changed_fields)}'
                 )
             
             messages.success(
@@ -545,14 +544,30 @@ class PropertyLeaseTerminateView(LoginRequiredMixin, TemplateView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        lease = PropertyLease.objects.get(pk=kwargs['pk'])
+        user = self.request.user
+        if user.is_superuser:
+            lease = get_object_or_404(PropertyLease, pk=kwargs['pk'])
+        else:
+            lease = get_object_or_404(
+                PropertyLease,
+                pk=kwargs['pk'],
+                organization=user.organization
+            )
         context['lease'] = lease
         return context
     
     def post(self, request, *args, **kwargs):
         from django.utils import timezone
         
-        lease = PropertyLease.objects.get(pk=kwargs['pk'])
+        user = request.user
+        if user.is_superuser:
+            lease = get_object_or_404(PropertyLease, pk=kwargs['pk'])
+        else:
+            lease = get_object_or_404(
+                PropertyLease,
+                pk=kwargs['pk'],
+                organization=user.organization
+            )
         termination_reason = request.POST.get('termination_reason', '')
         
         lease.terminate(
@@ -899,7 +914,6 @@ class PropertyCSVImportView(LoginRequiredMixin, TemplateView):
                 for row_data in validated_rows:
                     property_obj, created = Property.objects.update_or_create(
                         property_code=row_data['property_code'],
-                        district=row_data['district'],
                         defaults={
                             'name': row_data['name'],
                             'address': row_data['address'],
@@ -1073,7 +1087,6 @@ class PropertyMapFullscreenView(LoginRequiredMixin, TemplateView):
 class PropertyGeoJSONAPIView(LoginRequiredMixin, View):
     """API endpoint to return properties as GeoJSON for map rendering."""
     
-    @method_decorator(cache_page(60 * 5))  # Cache for 5 minutes
     def get(self, request, *args, **kwargs):
         try:
             user = request.user
@@ -1155,8 +1168,12 @@ class PropertyGeoJSONAPIView(LoginRequiredMixin, View):
                             'id': prop.id,
                             'name': prop.name or 'N/A',
                             'status_code': prop.status or '',
+                            'status': prop.get_status_display() if prop.status else '',
+                            'type': prop.get_property_type_display() if prop.property_type else '',
                             'annual_rent': float(annual_rent_val),
                             'color': color,
+                            'district': prop.district.name if prop.district else '',
+                            'mauza': prop.mauza.name if prop.mauza else '',
                         }
                     }
                     features.append(feature)
