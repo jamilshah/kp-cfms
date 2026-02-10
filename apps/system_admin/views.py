@@ -538,3 +538,78 @@ class RoleDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
     def delete(self, request, *args, **kwargs):
         messages.success(request, 'Role deleted successfully.')
         return super().delete(request, *args, **kwargs)
+
+
+class OrganizationSettingsView(LoginRequiredMixin, UpdateView):
+    """
+    Organization settings page for TMA Admin or Super Admin.
+    
+    Allows toggling department-level access control.
+    TMA Admins can only edit their own organization settings.
+    Super Admins can edit any organization.
+    """
+    model = Organization
+    template_name = 'system_admin/organization_settings.html'
+    fields = ['enforce_department_isolation']
+    success_url = reverse_lazy('system_admin:organization_settings')
+    
+    def dispatch(self, request, *args, **kwargs):
+        """Check permissions and ensure user edits their own organization."""
+        user = request.user
+        
+        # Superusers can edit any organization (pass pk in URL)
+        if user.is_superuser:
+            return super().dispatch(request, *args, **kwargs)
+        
+        # TMA Admins can only edit their own organization
+        if user.is_tma_admin() and user.organization:
+            # Override pk to always use user's organization
+            self.kwargs['pk'] = user.organization.pk
+            return super().dispatch(request, *args, **kwargs)
+        
+        # No permission
+        messages.error(request, 'You do not have permission to access organization settings.')
+        return redirect('home')
+    
+    def get_object(self, queryset=None):
+        """Get organization - either from URL (superuser) or from user (TMA admin)."""
+        user = self.request.user
+        
+        if user.is_superuser and 'pk' in self.kwargs:
+            return super().get_object(queryset)
+        
+        # TMA Admin: always their own organization
+        if user.organization:
+            return user.organization
+        
+        # Fallback
+        return super().get_object(queryset)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        org = self.get_object()
+        
+        # Count users who would be affected by department isolation
+        if org:
+            from django.db.models import Q
+            affected_users = CustomUser.objects.filter(
+                organization=org,
+                department__isnull=False
+            ).exclude(
+                Q(is_superuser=True) |
+                Q(roles__code__in=['TMO', 'FINANCE_OFFICER', 'TMA_ADMIN'])
+            ).count()
+            
+            context['affected_users_count'] = affected_users
+            context['total_users'] = CustomUser.objects.filter(organization=org).count()
+        
+        return context
+    
+    def form_valid(self, form):
+        org = form.instance
+        status = "enabled" if org.enforce_department_isolation else "disabled"
+        messages.success(
+            self.request,
+            f'Department isolation has been {status} for {org.name}.'
+        )
+        return super().form_valid(form)

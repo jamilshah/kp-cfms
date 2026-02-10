@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Immoveable Property Management (GIS) - e-Baldia{% endblock %}
+
+{% block extra_css %}
+<style>
+    .gis-card {
+        border-left: 4px solid #0d6efd;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .gis-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    }
+    .phase-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="bi bi-geo-alt-fill text-primary"></i>
+                        Immoveable Property Management
+                    </h2>
+                    <p class="text-muted mb-0">Geographic Information System (GIS) Module</p>
+                </div>
+                <div>
+                    <span class="badge bg-warning phase-badge">
+                        <i class="bi bi-tools"></i> Under Development
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Implementation Info -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card gis-card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-info-circle text-info"></i>
+                        Implementation Status
+                    </h5>
+                    <p class="card-text">
+                        The GIS Property Management System is currently under development following an 8-week implementation plan.
+                    </p>
+                    
+                    <div class="row mt-3">
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted">Phase</h6>
+                                    <h3 class="mb-0">1/8</h3>
+                                    <small>Foundation & Setup</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted">Progress</h6>
+                                    <h3 class="mb-0">10%</h3>
+                                    <small>App Structure Created</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted">Target</h6>
+                                    <h3 class="mb-0">8 Weeks</h3>
+                                    <small>Full Deployment</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted">Start Date</h6>
+                                    <h3 class="mb-0">Feb 10</h3>
+                                    <small>2026</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Planned Features -->
+    <div class="row">
+        <div class="col-md-12">
+            <h4 class="mb-3">
+                <i class="bi bi-list-check"></i>
+                Planned Features
+            </h4>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-map text-success"></i>
+                        Interactive GIS Mapping
+                    </h5>
+                    <ul class="list-unstyled">
+                        <li><i class="bi bi-check2-circle text-success"></i> GPS-enabled property mapping</li>
+                        <li><i class="bi bi-check2-circle text-success"></i> Color-coded markers by status</li>
+                        <li><i class="bi bi-check2-circle text-success"></i> Search and filter properties</li>
+                        <li><i class="bi bi-check2-circle text-success"></i> Heat map visualization</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-building text-primary"></i>
+                        Property Management
+                    </h5>
+                    <ul class="list-unstyled">
+                        <li><i class="bi bi-check2-circle text-success"></i> Shops, buildings, land tracking</li>
+                        <li><i class="bi bi-check2-circle text-success"></i> Document management</li>
+                        <li><i class="bi bi-check2-circle text-success"></i> Photo gallery</li>
+                        <li><i class="bi bi-check2-circle text-success"></i> Litigation tracking</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-cash-coin text-warning"></i>
+                        Revenue Integration
+                    </h5>
+                    <ul class="list-unstyled">
+                        <li><i class="bi bi-check2-circle text-success"></i> Auto rent demand generation</li>
+                        <li><i class="bi bi-check2-circle text-success"></i> Tenant management</li>
+                        <li><i class="bi bi-check2-circle text-success"></i> Collection tracking</li>
+                        <li><i class="bi bi-check2-circle text-success"></i> Financial reports</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Implementation Roadmap -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <h4 class="mb-3">
+                <i class="bi bi-calendar-check"></i>
+                Implementation Roadmap
+            </h4>
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Phase</th>
+                                    <th>Deliverable</th>
+                                    <th>Duration</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>Phase 1</strong></td>
+                                    <td>Foundation & Database Models</td>
+                                    <td>Week 1</td>
+                                    <td><span class="badge bg-warning">In Progress</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Phase 2</strong></td>
+                                    <td>CRUD Operations & Forms</td>
+                                    <td>Week 2</td>
+                                    <td><span class="badge bg-secondary">Pending</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Phase 3</strong></td>
+                                    <td>GIS Mapping Integration</td>
+                                    <td>Week 3-4</td>
+                                    <td><span class="badge bg-secondary">Pending</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Phase 4</strong></td>
+                                    <td>Data Import & Migration</td>
+                                    <td>Week 5</td>
+                                    <td><span class="badge bg-secondary">Pending</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Phase 5</strong></td>
+                                    <td>Revenue Integration</td>
+                                    <td>Week 6</td>
+                                    <td><span class="badge bg-secondary">Pending</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Phase 6</strong></td>
+                                    <td>Dashboard & Analytics</td>
+                                    <td>Week 7</td>
+                                    <td><span class="badge bg-secondary">Pending</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Phase 7</strong></td>
+                                    <td>UX Polish & Permissions</td>
+                                    <td>Week 7</td>
+                                    <td><span class="badge bg-secondary">Pending</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Phase 8</strong></td>
+                                    <td>Testing & Deployment</td>
+                                    <td>Week 8</td>
+                                    <td><span class="badge bg-secondary">Pending</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="row mt-4 mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="bi bi-link-45deg"></i>
+                        Documentation & Resources
+                    </h5>
+                    <div class="btn-group" role="group">
+                        <a href="{% url 'dashboard:index' %}" class="btn btn-outline-primary">
+                            <i class="bi bi-arrow-left"></i> Back to e-Baldia
+                        </a>
+                        <button class="btn btn-outline-secondary" disabled>
+                            <i class="bi bi-file-earmark-text"></i> User Manual
+                        </button>
+                        <button class="btn btn-outline-secondary" disabled>
+                            <i class="bi bi-book"></i> Implementation Guide
+                        </button>
+                        <button class="btn btn-outline-secondary" disabled>
+                            <i class="bi bi-code-square"></i> API Documentation
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

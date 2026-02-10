@@ -86,7 +86,7 @@
                 <div>
                     <h2><i class="bi bi-grid-3x3"></i> Department-Function Configuration Matrix</h2>
                     <p class="text-muted mb-0">
-                        Configure which global heads are available for each department-function combination.
+                        Configure which NAM heads are available for each department-function combination.
                         Click any cell to configure.
                     </p>
                 </div>
@@ -94,6 +94,35 @@
                     <a href="{% url 'finance:coa_hub' %}" class="btn btn-outline-secondary">
                         <i class="bi bi-arrow-left"></i> Back to CoA Hub
                     </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fund Configuration Info -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <div class="d-flex align-items-start">
+                    <i class="bi bi-info-circle-fill fs-4 me-3 mt-1"></i>
+                    <div class="flex-grow-1">
+                        <h5 class="alert-heading mb-2">About Fund Configuration</h5>
+                        <p class="mb-2">
+                            This configuration is <strong>fund-agnostic</strong>. You define which NAM heads are allowed 
+                            for each department-function combination, and this configuration applies to <strong>all funds</strong> (GEN, DEV, etc.).
+                        </p>
+                        <hr class="my-2">
+                        <p class="mb-2"><strong>To create actual budget heads:</strong></p>
+                        <ol class="mb-2">
+                            <li>Configure allowed NAM heads here (this page)</li>
+                            <li>Click <strong>"Bulk Create Budget Heads"</strong> button above and select fund (GEN, DEV, etc.)</li>
+                            <li>Or run command line: <code class="text-dark">python manage.py create_budget_heads_from_config --fund GEN</code></li>
+                        </ol>
+                        <p class="mb-0 small">
+                            <i class="bi bi-lightbulb"></i> <strong>Example:</strong> If you configure "Admin + Municipal Administration" with 98 NAM heads, 
+                            creating budget heads will generate 98 budget heads for the selected fund, all ready to use (posting_allowed=True).
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -151,13 +180,20 @@
     <div class="row mb-3">
         <div class="col-12">
             <div class="card">
-                <div class="card-body py-2">
-                    <strong>Legend:</strong>
-                    <span class="badge status-not-configured ms-2">Not Configured</span>
-                    <span class="badge status-incomplete ms-2">Incomplete (<10 heads)</span>
-                    <span class="badge status-complete ms-2">Complete (10-99 heads)</span>
-                    <span class="badge status-over ms-2">Over-configured (≥100 heads)</span>
-                    <span class="badge bg-primary ms-2">🔒 Locked</span>
+                <div class="card-body py-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Legend:</strong>
+                        <span class="badge status-not-configured ms-2">Not Configured</span>
+                        <span class="badge status-incomplete ms-2">Incomplete (<10 heads)</span>
+                        <span class="badge status-complete ms-2">Complete (10-99 heads)</span>
+                        <span class="badge status-over ms-2">Over-configured (≥100 heads)</span>
+                        <span class="badge bg-primary ms-2">🔒 Locked</span>
+                    </div>
+                    <div>
+                        <a href="{% url 'finance:create_budget_heads_from_config_ui' %}" class="btn btn-success">
+                            <i class="bi bi-lightning-charge"></i> Bulk Create Budget Heads
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -222,11 +258,73 @@
             <div class="alert alert-info">
                 <h6><i class="bi bi-info-circle"></i> How to Use:</h6>
                 <ul class="mb-0">
-                    <li><strong>Click any cell</strong> to configure allowed global heads for that department-function combination</li>
+                    <li><strong>Click any cell</strong> to configure allowed NAM heads for that department-function combination</li>
                     <li><strong>Target:</strong> Each cell should have 10-100 heads configured</li>
                     <li><strong>Lock</strong> configurations before fiscal year to prevent changes during budget preparation</li>
                     <li><strong>Color coding</strong> helps identify incomplete configurations at a glance</li>
                 </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Budget Heads Modal -->
+<div class="modal fade" id="createBudgetHeadsModal" tabindex="-1" aria-labelledby="createBudgetHeadsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-icon" id="createBudgetHeadsModalLabel">
+                    <i class="bi bi-plus-circle"></i> Create Budget Heads from Configuration
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> This will create BudgetHead records for all configured department-function combinations.
+                </div>
+                
+                <form id="createBudgetHeadsForm" method="post" action="#">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="fundSelect" class="form-label"><strong>Select Fund:</strong></label>
+                        <p class="text-muted small mb-2">Choose which fund to create budget heads for. You can run this multiple times for different funds.</p>
+                        
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="fund" id="fundGEN" value="GEN" checked>
+                            <label class="form-check-label" for="fundGEN">
+                                <strong>GEN - General Fund</strong><br>
+                                <small class="text-muted">Regular operational budget</small>
+                            </label>
+                        </div>
+                        
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="fund" id="fundDEV" value="DEV">
+                            <label class="form-check-label" for="fundDEV">
+                                <strong>DEV - Development Fund</strong><br>
+                                <small class="text-muted">Capital development projects</small>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="overwrite" id="overwriteCheck">
+                            <label class="form-check-label" for="overwriteCheck">
+                                Update existing budget heads (reactivate if disabled)
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> <strong>Note:</strong> Budget heads for configurations with 0 NAM heads will be skipped.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="createBudgetHeads()">
+                    <i class="bi bi-check-circle"></i> Create Budget Heads
+                </button>
             </div>
         </div>
     </div>
@@ -242,5 +340,60 @@
     document.querySelectorAll('.config-matrix td:not(:first-child)').forEach(cell => {
         cell.setAttribute('title', 'Click to configure');
     });
+    
+    function createBudgetHeads() {
+        const form = document.getElementById('createBudgetHeadsForm');
+        const fundValue = form.querySelector('input[name="fund"]:checked').value;
+        const overwrite = form.querySelector('#overwriteCheck').checked;
+        
+        // Confirm action
+        if (!confirm(`Create budget heads for ${fundValue} fund?\n\nThis will process all configured department-function combinations.`)) {
+            return;
+        }
+        
+        // Show loading state
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+        
+        // Submit via fetch
+        fetch('{% url "finance:create_budget_heads_from_config_ui" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                fund: fundValue,
+                overwrite: overwrite
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            
+            if (data.success) {
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('createBudgetHeadsModal')).hide();
+                
+                // Show success message
+                alert(`Success!\n\nCreated: ${data.created}\nUpdated: ${data.updated}\nSkipped: ${data.skipped}\n\nView at: /budgeting/setup/coa/`);
+                
+                // Optionally reload page to show updated stats
+                if (confirm('Would you like to view the created budget heads?')) {
+                    window.location.href = '/budgeting/setup/coa/';
+                }
+            } else {
+                alert(`Error: ${data.error || 'Unknown error occurred'}`);
+            }
+        })
+        .catch(error => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            alert(`Error: ${error.message || 'Network error occurred'}`);
+        });
+    }
 </script>
 {% endblock %}

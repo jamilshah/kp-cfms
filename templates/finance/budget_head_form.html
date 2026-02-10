@@ -53,80 +53,47 @@
                         </div>
                     </div>
                     
-                    <h5 class="mb-3 text-muted">Object Code</h5>
-                    <div class="mb-4">
-                        <label for="{{ form.global_head.id_for_label }}" class="form-label">
-                            {{ form.global_head.label }} <span class="text-danger">*</span>
-                        </label>
-                        {{ form.global_head }}
-                        <div class="form-text">
-                            <i class="bi bi-search me-1"></i>{{ form.global_head.help_text }}
-                            <strong class="d-block mt-1">Tip: Type to search by code or name</strong>
-                        </div>
-                        {% if form.global_head.errors %}
-                            <div class="text-danger small">{{ form.global_head.errors.0 }}</div>
-                        {% endif %}
-                    </div>
-                    
-                    <h5 class="mb-3 text-muted">Sub-Head Configuration (Optional)</h5>
+                    <h5 class="mb-3 text-muted">Object Code (NAM Head or Sub-Head)</h5>
                     <div class="alert alert-info small mb-3">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <i class="bi bi-info-circle me-2"></i>
-                                Use sub-heads to create more specific subdivisions of an object. For example, split generic "POL, Electricity & Fuel" into 
-                                "Petrol for Generator", "Electricity Bills", etc.
-                            </div>
-                            <a href="{% url 'finance:subhead_csv_import' %}" class="btn btn-sm btn-outline-primary ms-3 flex-shrink-0">
-                                <i class="bi bi-file-earmark-spreadsheet me-1"></i>Bulk Import CSV
-                            </a>
-                        </div>
+                        <i class="bi bi-info-circle me-2"></i>
+                        Select <strong>either</strong> NAM Head (Level 4) <strong>or</strong> Sub-Head (Level 5), not both.
+                        Sub-Heads are for more specific subdivisions.
                     </div>
                     <div class="row g-3 mb-4">
-                        <div class="col-md-3">
-                            <label for="{{ form.head_type.id_for_label }}" class="form-label">{{ form.head_type.label }}</label>
-                            {{ form.head_type }}
-                            <div class="form-text">{{ form.head_type.help_text }}</div>
-                            {% if form.head_type.errors %}
-                                <div class="text-danger small">{{ form.head_type.errors.0 }}</div>
-                            {% endif %}
-                        </div>
-                        <div class="col-md-2" id="sub-code-field">
-                            <label for="{{ form.sub_code.id_for_label }}" class="form-label">{{ form.sub_code.label }}</label>
-                            {{ form.sub_code }}
-                            <div class="form-text">{{ form.sub_code.help_text }}</div>
-                            {% if form.sub_code.errors %}
-                                <div class="text-danger small">{{ form.sub_code.errors.0 }}</div>
-                            {% endif %}
-                        </div>
-                        <div class="col-md-7" id="local-desc-field">
-                            <label for="{{ form.local_description.id_for_label }}" class="form-label">
-                                {{ form.local_description.label }}
-                                {% if is_subhead_mode %}<span class="text-danger">*</span>{% endif %}
+                        <div class="col-md-6">
+                            <label for="{{ form.nam_head.id_for_label }}" class="form-label">
+                                {{ form.nam_head.label }}
                             </label>
-                            {{ form.local_description }}
-                            <div class="form-text">{{ form.local_description.help_text }}</div>
-                            {% if form.local_description.errors %}
-                                <div class="text-danger small">{{ form.local_description.errors.0 }}</div>
+                            {{ form.nam_head }}
+                            <div class="form-text">{{ form.nam_head.help_text }}</div>
+                            {% if form.nam_head.errors %}
+                                <div class="text-danger small">{{ form.nam_head.errors.0 }}</div>
                             {% endif %}
                         </div>
-                    </div>
-                    
-                    <!-- Existing Sub-Heads Display (shown when creating sub-heads) -->
-                    <div id="existing-subheads-container" class="mt-3" 
-                         style="{% if is_subhead_mode %}display: block;{% else %}display: none;{% endif %} border: 2px solid orange; padding: 10px;">
-                        <div class="alert alert-warning mb-2">
-                            <strong><i class="bi bi-exclamation-triangle me-2"></i>Existing Sub-Heads</strong>
+                        <div class="col-md-6">
+                            <label for="{{ form.sub_head.id_for_label }}" class="form-label">
+                                {{ form.sub_head.label }}
+                            </label>
+                            {{ form.sub_head }}
+                            <div class="form-text">{{ form.sub_head.help_text }}</div>
+                            {% if form.sub_head.errors %}
+                                <div class="text-danger small">{{ form.sub_head.errors.0 }}</div>
+                            {% endif %}
                         </div>
-                        <div id="existing-subheads-list" class="mb-2">
-                            <p class="text-muted mb-0"><i class="bi bi-info-circle me-1"></i>Select all fields above to see existing sub-heads for this combination.</p>
-                        </div>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="console.log('Refresh clicked'); checkAndShowExistingSubheads();">
-                            <i class="bi bi-arrow-clockwise me-1"></i>Refresh Sub-Heads
-                        </button>
                     </div>
                     
                     <h5 class="mb-3 text-muted">Budget & Settings</h5>
 
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="{{ form.current_budget.id_for_label }}" class="form-label">{{ form.current_budget.label }}</label>
+                            {{ form.current_budget }}
+                            <div class="form-text">Initial budget allocation for this head (optional)</div>
+                            {% if form.current_budget.errors %}
+                                <div class="text-danger small">{{ form.current_budget.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
 
                     <div class="row g-3 mb-4">
                         <div class="col-md-3 pt-2">
@@ -177,248 +144,60 @@
 </div>
 
 <script>
-// Initialize Select2 for global_head with custom formatting
-function initGlobalHeadSelect2() {
-    const $globalHead = $('#id_global_head');
-    
-    if ($globalHead.length && typeof $.fn.select2 !== 'undefined') {
-        // Destroy existing instance if present
-        if ($globalHead.hasClass('select2-hidden-accessible')) {
-            $globalHead.select2('destroy');
-        }
-        
-        // Initialize with custom formatting and search
-        $globalHead.select2({
-            theme: 'bootstrap-5',
-            placeholder: 'Type to search by code or name...',
-            allowClear: true,
-            width: '100%',
-            templateResult: formatGlobalHead,
-            templateSelection: formatGlobalHeadSelection,
-            matcher: matchCustom
-        });
-    }
-}
-
-// Custom matcher for better search
-function matchCustom(params, data) {
-    // If there are no search terms, return all data
-    if ($.trim(params.term) === '') {
-        return data;
-    }
-
-    // Skip if there is no 'text' property
-    if (typeof data.text === 'undefined') {
-        return null;
-    }
-
-    // Search in both code and name
-    const searchTerm = params.term.toLowerCase();
-    const text = data.text.toLowerCase();
-    
-    if (text.indexOf(searchTerm) > -1) {
-        return data;
-    }
-
-    return null;
-}
-
+// Initialize Select2 for NAM head and Sub-head dropdowns
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Page loaded - checking initial state');
-    
-    // Wait for base.html's Select2 initialization, then override
-    setTimeout(function() {
-        initGlobalHeadSelect2();
-        console.log('Select2 initialized for global_head');
-    }, 100);
-    
-    const headTypeSelect = document.querySelector('[name="head_type"]');
-    if (headTypeSelect) {
-        console.log('Initial head_type value:', headTypeSelect.value);
-        // Set initial state
-        toggleSubHeadFields(headTypeSelect.value);
-        
-        // Add event listener for head_type changes
-        headTypeSelect.addEventListener('change', function() {
-            console.log('Head type changed to:', this.value);
-            toggleSubHeadFields(this.value);
+    // Initialize Select2 for searchable selects
+    if (typeof $.fn.select2 !== 'undefined') {
+        $('.searchable-select').each(function() {
+            const $select = $(this);
+            if (!$select.hasClass('select2-hidden-accessible')) {
+                $select.select2({
+                    theme: 'bootstrap-5',
+                    placeholder: 'Type to search...',
+                    allowClear: true,
+                    width: '100%'
+                });
+            }
         });
     }
     
-    // Add event listeners to check existing sub-heads when fields change
-    // For regular select fields (department, fund, function)
-    const fieldsToWatch = ['department', 'fund', 'function'];
-    fieldsToWatch.forEach(fieldName => {
-        const field = document.querySelector(`[name="${fieldName}"]`);
-        if (field) {
-            console.log('Adding listener to:', fieldName, 'current value:', field.value);
-            field.addEventListener('change', function() {
-                console.log(fieldName, 'changed to:', this.value);
-                const headType = document.querySelector('[name="head_type"]')?.value;
-                if (headType === 'SUB_HEAD') {
-                    checkAndShowExistingSubheads();
-                }
-            });
-        }
-    });
+    // Add mutual exclusivity between NAM head and Sub-head
+    const namHeadSelect = document.getElementById('id_nam_head');
+    const subHeadSelect = document.getElementById('id_sub_head');
     
-    // For Select2 field (global_head) - use Select2 events
-    setTimeout(function() {
-        $('#id_global_head').on('select2:select select2:clear', function() {
-            console.log('Global head changed via Select2');
-            const headType = document.querySelector('[name="head_type"]')?.value;
-            if (headType === 'SUB_HEAD') {
-                checkAndShowExistingSubheads();
+    if (namHeadSelect && subHeadSelect) {
+        // Clear sub_head when nam_head is selected
+        $('#id_nam_head').on('select2:select', function() {
+            if (this.value) {
+                $('#id_sub_head').val(null).trigger('change');
             }
         });
-    }, 200); // Wait for Select2 to be fully initialized
+        
+        // Clear nam_head when sub_head is selected
+        $('#id_sub_head').on('select2:select', function() {
+            if (this.value) {
+                $('#id_nam_head').val(null).trigger('change');
+            }
+        });
+    }
 });
 
-// Reinitialize Select2 after HTMX swaps content
+// Reinitialize Select2 after HTMX content swaps
 document.body.addEventListener('htmx:afterSwap', function(evt) {
-    if (evt.detail.target.id === 'id_global_head') {
-        initGlobalHeadSelect2();
-        
-        // Re-bind Select2 event listener after reload
-        setTimeout(function() {
-            $('#id_global_head').on('select2:select select2:clear', function() {
-                const headType = document.querySelector('[name="head_type"]')?.value;
-                if (headType === 'SUB_HEAD') {
-                    checkAndShowExistingSubheads();
-                }
-            });
-        }, 100);
-    }
-    
-    // When function dropdown is loaded, check if a value is selected and load global heads
-    if (evt.detail.target.id === 'id_function') {
-        const functionSelect = document.getElementById('id_function');
-        if (functionSelect && functionSelect.value) {
-            // Function is auto-selected, manually trigger global_heads load
-            const department = document.querySelector('[name="department"]')?.value;
-            if (department) {
-                // Use htmx to load global heads
-                htmx.ajax('GET', 
-                    `/finance/ajax/load-global-heads/?function=${functionSelect.value}&department=${department}`,
-                    {target: '#id_global_head', swap: 'innerHTML'});
+    if (typeof $.fn.select2 !== 'undefined') {
+        $('.searchable-select').each(function() {
+            const $select = $(this);
+            if ($select.hasClass('select2-hidden-accessible')) {
+                $select.select2('destroy');
             }
-        }
+            $select.select2({
+                theme: 'bootstrap-5',
+                placeholder: 'Type to search...',
+                allowClear: true,
+                width: '100%'
+            });
+        });
     }
 });
-
-// Format function for global head dropdown
-function formatGlobalHead(head) {
-    if (!head.id) return head.text;
-    
-    // Extract code and name from the option text
-    // Format: "A01101 - Basic Pay - Officers"
-    const text = head.text;
-    const parts = text.split(' - ');
-    if (parts.length >= 2) {
-        const code = parts[0];
-        const name = parts.slice(1).join(' - ');
-        return $('<span><strong>' + code + '</strong> - ' + name + '</span>');
-    }
-    return $('<span>' + text + '</span>');
-}
-
-function formatGlobalHeadSelection(head) {
-    return head.text;
-}
-
-// Toggle sub-head fields visibility based on head_type selection
-function toggleSubHeadFields(headType) {
-    const subCodeField = document.getElementById('sub-code-field');
-    const localDescField = document.getElementById('local-desc-field');
-    const subCodeInput = document.querySelector('[name="sub_code"]');
-    const existingSubheadsContainer = document.getElementById('existing-subheads-container');
-    
-    console.log('toggleSubHeadFields called with:', headType);
-    
-    if (headType === 'SUB_HEAD') {
-        // Show sub-head fields when SUB_HEAD is selected
-        subCodeField.style.display = 'block';
-        localDescField.style.display = 'block';
-        
-        // Always show the container when SUB_HEAD is selected
-        if (existingSubheadsContainer) {
-            existingSubheadsContainer.style.display = 'block';
-            console.log('Showing existing subheads container');
-        }
-        
-        // Check and load existing sub-heads if all fields are selected
-        checkAndShowExistingSubheads();
-        
-        // Set default sub-code if it's '00'
-        if (subCodeInput && subCodeInput.value === '00') {
-            subCodeInput.value = '01';
-        }
-    } else {
-        // Hide sub-head fields for REGULAR heads
-        subCodeField.style.display = 'none';
-        localDescField.style.display = 'none';
-        if (existingSubheadsContainer) {
-            existingSubheadsContainer.style.display = 'none';
-            console.log('Hiding existing subheads container');
-        }
-        // Reset to default '00' for regular heads
-        if (subCodeInput) {
-            subCodeInput.value = '00';
-        }
-    }
-}
-
-// Check if we should show existing sub-heads
-function checkAndShowExistingSubheads() {
-    const headType = document.querySelector('[name="head_type"]')?.value;
-    const department = document.querySelector('[name="department"]')?.value;
-    const fund = document.querySelector('[name="fund"]')?.value;
-    const func = document.querySelector('[name="function"]')?.value;
-    const globalHead = document.querySelector('[name="global_head"]')?.value;
-    const container = document.getElementById('existing-subheads-container');
-    const listDiv = document.getElementById('existing-subheads-list');
-    
-    console.log('Checking existing sub-heads:', {headType, department, fund, func, globalHead});
-    
-    if (headType === 'SUB_HEAD' && department && fund && func && globalHead) {
-        // Show container
-        if (container) container.style.display = 'block';
-        
-        // Show loading message
-        if (listDiv) {
-            listDiv.innerHTML = '<p class="text-muted mb-0"><i class="bi bi-hourglass-split me-1"></i>Loading...</p>';
-        }
-        
-        // Fetch existing sub-heads via simple fetch
-        const url = `/finance/ajax/existing-subheads/?department=${department}&fund=${fund}&function=${func}&global_head=${globalHead}`;
-        console.log('Fetching from:', url);
-        
-        fetch(url)
-            .then(response => {
-                console.log('Response status:', response.status);
-                return response.text();
-            })
-            .then(html => {
-                console.log('Received HTML length:', html.length);
-                if (listDiv) {
-                    listDiv.innerHTML = html;
-                }
-            })
-            .catch(error => {
-                console.error('Error loading existing sub-heads:', error);
-                if (listDiv) {
-                    listDiv.innerHTML = '<p class="text-danger mb-0"><i class="bi bi-exclamation-circle me-1"></i>Error loading sub-heads</p>';
-                }
-            });
-    } else if (headType === 'SUB_HEAD') {
-        // Show placeholder when not all fields are selected
-        if (listDiv) {
-            listDiv.innerHTML = '<p class="text-muted mb-0"><i class="bi bi-info-circle me-1"></i>Select Department, Fund, Function, and Bill Item/Object to see existing sub-heads.</p>';
-        }
-        if (container) container.style.display = 'block';
-    } else {
-        if (container) container.style.display = 'none';
-    }
-}
 </script>
 {% endblock %}

@@ -1,0 +1,402 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ page_title }} - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <h2>
+                <i class="fas fa-list text-primary"></i> {{ page_title }}
+            </h2>
+        </div>
+        <div class="col-md-6 text-right">
+            <a href="{% url 'property:create' %}" class="btn btn-primary">
+                <i class="fas fa-plus-circle"></i> Add New Property
+            </a>
+            <a href="{% url 'property:csv_import' %}" class="btn btn-success">
+                <i class="fas fa-file-import"></i> Import from CSV
+            </a>
+            <a href="{% url 'property:dashboard' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-home"></i> Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Search and Filter Card -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-filter"></i> Search & Filter
+            </h6>
+        </div>
+        <div class="card-body">
+            <form method="get" action="" id="filter-form">
+                <div class="row">
+                    <!-- Search Box -->
+                    <div class="col-md-4 mb-3">
+                        {{ filter_form.search.label_tag }}
+                        {{ filter_form.search }}
+                    </div>
+                    
+                    <!-- Geographic Hierarchy (Dynamic based on user role) -->
+                    {% if filter_form.division %}
+                    <div class="col-md-2 mb-3">
+                        {{ filter_form.division.label_tag }}
+                        {{ filter_form.division }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if filter_form.district %}
+                    <div class="col-md-2 mb-3">
+                        {{ filter_form.district.label_tag }}
+                        {{ filter_form.district }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if filter_form.tehsil %}
+                    <div class="col-md-2 mb-3">
+                        {{ filter_form.tehsil.label_tag }}
+                        {{ filter_form.tehsil }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if filter_form.mauza %}
+                    <div class="col-md-2 mb-3">
+                        {{ filter_form.mauza.label_tag }}
+                        {{ filter_form.mauza }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if filter_form.village %}
+                    <div class="col-md-2 mb-3">
+                        {{ filter_form.village.label_tag }}
+                        {{ filter_form.village }}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Property Filters -->
+                    <div class="col-md-2 mb-3">
+                        {{ filter_form.property_type.label_tag }}
+                        {{ filter_form.property_type }}
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        {{ filter_form.status.label_tag }}
+                        {{ filter_form.status }}
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        {{ filter_form.is_rented.label_tag }}
+                        {{ filter_form.is_rented }}
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        {{ filter_form.has_litigation.label_tag }}
+                        {{ filter_form.has_litigation }}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-search"></i> Apply Filters
+                        </button>
+                        <a href="{% url 'property:list' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-redo"></i> Clear Filters
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Properties Table Card -->
+    <div class="card shadow">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                Properties ({{ page_obj.paginator.count|intcomma }} total)
+            </h6>
+        </div>
+        <div class="card-body">
+            {% if properties %}
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Code</th>
+                            <th>Location</th>
+                            <th>Type</th>
+                            <th>Area</th>
+                            <th>Status</th>
+                            <th>Tenant</th>
+                            <th>Annual Rent</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for property in properties %}
+                        <tr>
+                            <td>
+                                <strong>{{ property.property_code }}</strong>
+                            </td>
+                            <td>
+                                <div>{{ property.district.name }}</div>
+                                <small class="text-muted">{{ property.mauza.name }}</small>
+                                {% if property.village %}
+                                    <br><small class="text-muted">{{ property.village.name }}</small>
+                                {% endif %}
+                            </td>
+                            <td style="vertical-align: middle;">
+                                <span class="badge" style="background-color: #17a2b8; color: white; font-size: 0.8rem; padding: 0.35rem 0.6rem; display: inline-block;">{{ property.get_property_type_display }}</span>
+                            </td>
+                            <td>
+                                <strong>{{ property.area_marlas }} M</strong>
+                                <br><small class="text-muted">{{ property.area_sqft|floatformat:0 }} sqft</small>
+                            </td>
+                            <td style="vertical-align: middle;">
+                                {% if property.status == 'RENTED_OUT' %}
+                                    <span class="badge" style="background-color: #28a745; color: white; font-size: 0.8rem; padding: 0.35rem 0.6rem; display: inline-block;">{{ property.get_status_display }}</span>
+                                {% elif property.status == 'VACANT' %}
+                                    <span class="badge" style="background-color: #dc3545; color: white; font-size: 0.8rem; padding: 0.35rem 0.6rem; display: inline-block;">{{ property.get_status_display }}</span>
+                                {% elif property.status == 'SELF_USE' %}
+                                    <span class="badge" style="background-color: #007bff; color: white; font-size: 0.8rem; padding: 0.35rem 0.6rem; display: inline-block;">{{ property.get_status_display }}</span>
+                                {% elif property.status == 'UNDER_CONSTRUCTION' %}
+                                    <span class="badge" style="background-color: #ff8c00; color: white; font-size: 0.8rem; padding: 0.35rem 0.6rem; display: inline-block;">{{ property.get_status_display }}</span>
+                                {% elif property.status == 'UNDER_LITIGATION' %}
+                                    <span class="badge" style="background-color: #dc3545; color: white; font-size: 0.8rem; padding: 0.35rem 0.6rem; display: inline-block;">{{ property.get_status_display }}</span>
+                                {% elif property.status == 'DEMOLISHED' %}
+                                    <span class="badge" style="background-color: #343a40; color: white; font-size: 0.8rem; padding: 0.35rem 0.6rem; display: inline-block;">{{ property.get_status_display }}</span>
+                                {% elif property.status == 'ENCROACHED' %}
+                                    <span class="badge" style="background-color: #dc3545; color: white; font-size: 0.8rem; padding: 0.35rem 0.6rem; display: inline-block;">{{ property.get_status_display }}</span>
+                                {% else %}
+                                    <span class="badge" style="background-color: #6c757d; color: white; font-size: 0.8rem; padding: 0.35rem 0.6rem; display: inline-block;">{{ property.get_status_display }}</span>
+                                {% endif %}
+                                
+                                {% if property.court_case_status != 'NO_CASE' %}
+                                    <br><span class="badge" style="background-color: #dc3545; color: white; font-size: 0.75rem; padding: 0.3rem 0.5rem; display: inline-block; margin-top: 0.4rem;">
+                                        <i class="fas fa-gavel"></i> Litigation
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if property.status == 'RENTED_OUT' %}
+                                    {% if property.current_lease %}
+                                        {{ property.current_lease.tenant_name }}
+                                    {% else %}
+                                        <span class="text-muted">Rented</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">Vacant</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if property.annual_rent and property.annual_rent > 0 %}
+                                    Rs. {{ property.annual_rent|floatformat:0|intcomma }}
+                                    <br><small class="text-muted">Monthly: Rs. {{ property.monthly_rent|floatformat:0|intcomma }}</small>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center" style="vertical-align: middle;">
+                                <a href="{% url 'property:detail' property.pk %}" 
+                                   class="btn" 
+                                   style="background-color: #0891b2; color: white; padding: 0.45rem 0.85rem; font-size: 0.85rem; border: none; cursor: pointer; border-radius: 0.375rem; display: inline-block; text-decoration: none; margin-right: 0.3rem;"
+                                   title="View Details">
+                                    <i class="fas fa-eye" style="margin-right: 0.25rem;"></i>View
+                                </a>
+                                <a href="{% url 'property:update' property.pk %}" 
+                                   class="btn" 
+                                   style="background-color: #f59e0b; color: white; padding: 0.45rem 0.85rem; font-size: 0.85rem; border: none; cursor: pointer; border-radius: 0.375rem; display: inline-block; text-decoration: none;"
+                                   title="Edit">
+                                    <i class="fas fa-edit" style="margin-right: 0.25rem;"></i>Edit
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if is_paginated %}
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">First</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Previous</a>
+                        </li>
+                    {% endif %}
+
+                    <li class="page-item active">
+                        <span class="page-link">
+                            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                        </span>
+                    </li>
+
+                    {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Next</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Last</a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+                <h5>No Properties Found</h5>
+                <p class="text-muted">
+                    {% if request.GET %}
+                        No properties match your search criteria. Try adjusting your filters.
+                    {% else %}
+                        Start by adding your first property.
+                    {% endif %}
+                </p>
+                <a href="{% url 'property:create' %}" class="btn btn-primary">
+                    <i class="fas fa-plus-circle"></i> Add New Property
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Cascading Filter Script -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle Division → District cascading
+    const divisionSelect = document.getElementById('id_filter_division');
+    const districtSelect = document.getElementById('id_filter_district');
+    
+    if (divisionSelect && districtSelect) {
+        divisionSelect.addEventListener('change', function() {
+            const divisionId = this.value;
+            
+            if (!divisionId) {
+                // Reset district dropdown
+                districtSelect.innerHTML = '<option value="">All Districts</option>';
+                districtSelect.disabled = true;
+                // Also reset dependent selects
+                resetTehsilSelect();
+                resetMauzaSelect();
+                resetVillageSelect();
+                return;
+            }
+            
+            // Fetch districts
+            fetch(`{% url 'property:ajax_load_districts' %}?division_id=${divisionId}`)
+                .then(response => response.json())
+                .then(data => {
+                    districtSelect.innerHTML = '<option value="">All Districts</option>';
+                    data.districts.forEach(district => {
+                        const option = document.createElement('option');
+                        option.value = district.id;
+                        option.textContent = district.name;
+                        districtSelect.appendChild(option);
+                    });
+                    districtSelect.disabled = false;
+                    // Reset dependent selects
+                    resetTehsilSelect();
+                    resetMauzaSelect();
+                    resetVillageSelect();
+                })
+                .catch(error => console.error('Error loading districts:', error));
+        });
+    }
+    
+    // Handle District → Tehsil cascading
+    if (districtSelect) {
+        districtSelect.addEventListener('change', function() {
+            const districtId = this.value;
+            const tehsilSelect = document.getElementById('id_filter_tehsil');
+            
+            if (!districtId || !tehsilSelect) {
+                resetTehsilSelect();
+                resetMauzaSelect();
+                resetVillageSelect();
+                return;
+            }
+            
+            // Fetch tehsils
+            fetch(`{% url 'property:ajax_load_tehsils' %}?district_id=${districtId}`)
+                .then(response => response.json())
+                .then(data => {
+                    tehsilSelect.innerHTML = '<option value="">All Tehsils</option>';
+                    data.tehsils.forEach(tehsil => {
+                        const option = document.createElement('option');
+                        option.value = tehsil.id;
+                        option.textContent = tehsil.name;
+                        tehsilSelect.appendChild(option);
+                    });
+                    tehsilSelect.disabled = false;
+                    // Reset dependent selects
+                    resetMauzaSelect();
+                    resetVillageSelect();
+                })
+                .catch(error => console.error('Error loading tehsils:', error));
+        });
+    }
+    
+    // Handle Mauza → Village cascading
+    const mauzaSelect = document.getElementById('id_filter_mauza');
+    const villageSelect = document.getElementById('id_filter_village');
+    
+    if (mauzaSelect && villageSelect) {
+        mauzaSelect.addEventListener('change', function() {
+            const mauzaId = this.value;
+            
+            if (!mauzaId) {
+                resetVillageSelect();
+                return;
+            }
+            
+            // Fetch villages
+            fetch(`{% url 'property:ajax_load_villages' %}?mauza_id=${mauzaId}`)
+                .then(response => response.json())
+                .then(data => {
+                    villageSelect.innerHTML = '<option value="">All Villages</option>';
+                    data.villages.forEach(village => {
+                        const option = document.createElement('option');
+                        option.value = village.id;
+                        option.textContent = village.name;
+                        villageSelect.appendChild(option);
+                    });
+                    villageSelect.disabled = false;
+                })
+                .catch(error => console.error('Error loading villages:', error));
+        });
+    }
+    
+    // Helper functions to reset dependent selects
+    function resetTehsilSelect() {
+        const tehsilSelect = document.getElementById('id_filter_tehsil');
+        if (tehsilSelect) {
+            tehsilSelect.innerHTML = '<option value="">All Tehsils</option>';
+            tehsilSelect.disabled = true;
+        }
+    }
+    
+    function resetMauzaSelect() {
+        const mauzaSelect = document.getElementById('id_filter_mauza');
+        if (mauzaSelect) {
+            mauzaSelect.innerHTML = '<option value="">All Mauzas</option>';
+            mauzaSelect.disabled = true;
+        }
+    }
+    
+    function resetVillageSelect() {
+        const villageSelect = document.getElementById('id_filter_village');
+        if (villageSelect) {
+            villageSelect.innerHTML = '<option value="">All Villages</option>';
+            villageSelect.disabled = true;
+        }
+    }
+});
+</script>
+{% endblock %}

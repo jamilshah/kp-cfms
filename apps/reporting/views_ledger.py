@@ -369,24 +369,25 @@ class PendingLiabilitiesView(LoginRequiredMixin, TenantAwareMixin, TemplateView)
         
         # 2. Calculate Tax Liability GL Balances (withheld taxes not yet remitted)
         # Get tax liability heads using system_code
-        from apps.finance.models import SystemCode
+        from apps.finance.models import SystemCode, NAMHead
         
-        tax_liability_heads = GlobalHead.objects.filter(
+        tax_liability_nam_heads = NAMHead.objects.filter(
             system_code__in=[
                 SystemCode.TAX_IT,      # Income Tax Payable
                 SystemCode.TAX_GST,     # GST/Sales Tax Payable
                 SystemCode.CLEARING_IT, # Income Tax Withheld (clearing)
                 SystemCode.CLEARING_GST # GST Withheld (clearing)
-            ]
+            ],
+            is_active=True
         ).values_list('id', flat=True)
         
-        # Get balances for tax liability heads scoped to org & fiscal year
+        # Get balances for tax liability budget heads scoped to org & fiscal year
         # BudgetHead doesn't have fiscal_year or organization directly,
         # so we filter via voucher fiscal_year and organization in the journal entry aggregation
         tax_liabilities = BudgetHead.objects.filter(
-            global_head_id__in=tax_liability_heads,
+            nam_head_id__in=tax_liability_nam_heads,
             is_active=True
-        ).select_related('global_head', 'fund', 'function').annotate(
+        ).select_related('nam_head', 'fund', 'function').annotate(
             total_debit=Coalesce(
                 Sum('journal_entries__debit',
                     filter=Q(journal_entries__voucher__is_posted=True,
@@ -413,6 +414,8 @@ class PendingLiabilitiesView(LoginRequiredMixin, TenantAwareMixin, TemplateView)
                 pending_items.append({
                     'head': head,
                     'balance': balance,
+                    'code': head.nam_head.code if head.nam_head else head.sub_head.code,
+                    'name': head.nam_head.name if head.nam_head else head.sub_head.name,
                 })
                 tax_liability_total += balance
         

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Configure {{ department.name }} - {{ function.code }}{% endblock %}
+{% block title %}Configure {{ department.name }} - {{ function.code }} ({{ function.name }}){% endblock %}
 
 {% block extra_css %}
 <style>
@@ -49,13 +49,16 @@
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h2><i class="bi bi-gear"></i> Configure: {{ department.name }} - {{ function.code }}</h2>
+                    <h2><i class="bi bi-gear"></i> Configure: {{ department.name }} - {{ function.code }} ({{ function.name }})</h2>
                     <p class="text-muted mb-0">
-                        Select which global heads are allowed for this department-function combination.
+                        Select which NAM heads are allowed for this department-function combination.
                         These will be the only heads available during budget preparation.
                     </p>
                 </div>
-                <div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createBudgetHeadsModal">
+                        <i class="bi bi-plus-circle"></i> Create Budget Heads
+                    </button>
                     <a href="{% url 'finance:dept_func_config_matrix' %}" class="btn btn-outline-secondary">
                         <i class="bi bi-arrow-left"></i> Back to Matrix
                     </a>
@@ -183,9 +186,29 @@
                         <h6 class="text-primary mb-1">{{ item.head.code }}</h6>
                         <p class="mb-2 small">{{ item.head.name }}</p>
                         
+                        <!-- Hierarchy Info -->
+                        <div class="mb-2">
+                            <small class="text-muted d-block">
+                                <i class="bi bi-diagram-2"></i> <strong>Major:</strong> {{ item.major_name|truncatewords:3 }}
+                            </small>
+                            <small class="text-muted d-block">
+                                <i class="bi bi-diagram-3"></i> <strong>Minor:</strong> {{ item.minor_name|truncatewords:3 }}
+                            </small>
+                        </div>
+                        
                         <div class="d-flex justify-content-between align-items-center">
-                            <span class="badge bg-secondary">{{ item.head.get_account_type_display }}</span>
-                            <small class="text-muted">{{ item.head.major_code }}</small>
+                            <div>
+                                <span class="badge bg-secondary">{{ item.head.get_account_type_display }}</span>
+                                {% if item.sub_heads_count > 0 %}
+                                <span class="badge bg-info ms-1" 
+                                      onclick="event.stopPropagation(); showSubHeads('{{ item.head.id }}', '{{ item.head.code }}')" 
+                                      style="cursor: pointer;"
+                                      title="Click to view sub-heads">
+                                    <i class="bi bi-list-nested"></i> {{ item.sub_heads_count }} Sub{{ item.sub_heads_count|pluralize }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">{{ item.head.code|slice:":3" }}</small>
                         </div>
                     </div>
                 </div>
@@ -255,6 +278,96 @@
         </div>
     </div>
 </div>
+
+<!-- Sub-Heads Modal -->
+<div class="modal fade" id="subHeadsModal" tabindex="-1" aria-labelledby="subHeadsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="subHeadsModalLabel">
+                    <i class="bi bi-list-nested"></i> Sub-Heads for <span id="modalNamCode"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="subHeadsContent">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Loading sub-heads...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Budget Heads Modal -->
+<div class="modal fade" id="createBudgetHeadsModal" tabindex="-1" aria-labelledby="createBudgetHeadsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="createBudgetHeadsModalLabel">
+                    <i class="bi bi-plus-circle"></i> Create Budget Heads from Configuration
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> This will create BudgetHead records for all configured department-function combinations.
+                </div>
+                
+                <form id="createBudgetHeadsForm" method="post" action="#">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="fundSelect" class="form-label"><strong>Select Fund:</strong></label>
+                        <p class="text-muted small mb-2">Choose which fund to create budget heads for. You can run this multiple times for different funds.</p>
+                        
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="fund" id="fundGEN" value="GEN" checked>
+                            <label class="form-check-label" for="fundGEN">
+                                <strong>GEN - General Fund</strong><br>
+                                <small class="text-muted">Regular operational budget</small>
+                            </label>
+                        </div>
+                        
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="fund" id="fundDEV" value="DEV">
+                            <label class="form-check-label" for="fundDEV">
+                                <strong>DEV - Development Fund</strong><br>
+                                <small class="text-muted">Capital development projects</small>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="overwrite" id="overwriteCheck">
+                            <label class="form-check-label" for="overwriteCheck">
+                                Update existing budget heads (reactivate if disabled)
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> <strong>Note:</strong> Budget heads for configurations with 0 NAM heads will be skipped.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="createBudgetHeads()">
+                    <i class="bi bi-check-circle"></i> Create Budget Heads
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -308,6 +421,120 @@
             }
         });
         {% endif %}
+    }
+    
+    function showSubHeads(namHeadId, namCode) {
+        // Update modal title
+        document.getElementById('modalNamCode').textContent = namCode;
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('subHeadsModal'));
+        modal.show();
+        
+        // Fetch sub-heads via AJAX
+        const contentDiv = document.getElementById('subHeadsContent');
+        contentDiv.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading sub-heads...</p>
+            </div>
+        `;
+        
+        fetch(`/finance/nam-head/${namHeadId}/subheads/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.sub_heads.length > 0) {
+                    let html = '<div class="list-group list-group-flush">';
+                    data.sub_heads.forEach(sub => {
+                        html += `
+                            <div class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1 text-primary">${sub.code}</h6>
+                                        <p class="mb-1">${sub.name}</p>
+                                        ${sub.description ? `<small class="text-muted">${sub.description}</small>` : ''}
+                                    </div>
+                                    <span class="badge ${sub.is_active ? 'bg-success' : 'bg-secondary'}">
+                                        ${sub.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    contentDiv.innerHTML = html;
+                } else {
+                    contentDiv.innerHTML = `
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> No sub-heads found for this NAM head.
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                contentDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> Error loading sub-heads: ${error.message}
+                    </div>
+                `;
+            });
+    }
+    
+    function createBudgetHeads() {
+        const form = document.getElementById('createBudgetHeadsForm');
+        const fundValue = form.querySelector('input[name="fund"]:checked').value;
+        const overwrite = form.querySelector('#overwriteCheck').checked;
+        
+        // Confirm action
+        if (!confirm(`Create budget heads for ${fundValue} fund?\n\nThis will process all configured department-function combinations.`)) {
+            return;
+        }
+        
+        // Show loading state
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+        
+        // Submit via fetch
+        fetch('{% url "finance:create_budget_heads_from_config_ui" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                fund: fundValue,
+                overwrite: overwrite
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            
+            if (data.success) {
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('createBudgetHeadsModal')).hide();
+                
+                // Show success message
+                alert(`Success!\n\nCreated: ${data.created}\nUpdated: ${data.updated}\nSkipped: ${data.skipped}\n\nView at: /budgeting/setup/coa/`);
+                
+                // Optionally reload page to show updated stats
+                if (confirm('Would you like to view the created budget heads?')) {
+                    window.location.href = '/budgeting/setup/coa/';
+                }
+            } else {
+                alert(`Error: ${data.error || 'Unknown error occurred'}`);
+            }
+        })
+        .catch(error => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            alert(`Error: ${error.message || 'Network error occurred'}`);
+        });
     }
     
     // Prevent form submission when clicking inside cards

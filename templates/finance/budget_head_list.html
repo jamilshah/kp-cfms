@@ -67,17 +67,14 @@
     </div>
 </div>
 
-<!-- Warning for Unmapped Budget Heads -->
+<!-- Note: Budget heads created via configuration have departments assigned automatically -->
 {% if unmapped_count > 0 %}
-<div class="alert alert-warning d-flex align-items-center mb-4">
-    <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+<div class="alert alert-info d-flex align-items-center mb-4">
+    <i class="bi bi-info-circle-fill fs-4 me-3"></i>
     <div class="flex-grow-1">
-        <strong>{{ unmapped_count }} budget head{{ unmapped_count|pluralize }}</strong> need department assignment.
-        Budget heads without departments cannot be used in budget estimates.
+        <strong>{{ unmapped_count }} budget head{{ unmapped_count|pluralize }}</strong> without department assignment.
+        New budget heads created via <a href="{% url 'finance:dept_func_config_matrix' %}" class="alert-link">Configuration Matrix</a> have departments assigned automatically.
     </div>
-    <a href="{% url 'finance:budget_head_departments' %}" class="btn btn-sm btn-warning">
-        <i class="bi bi-tools"></i> Assign Departments
-    </a>
 </div>
 {% endif %}
 

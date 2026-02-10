@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ form_action }} Lease - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">{{ form_action }} Property Lease</h1>
+        </div>
+        <div>
+            <a href="{% url 'property:lease_list' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Leases
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.property.id_for_label }}">Property <span class="text-danger">*</span></label>
+                        {{ form.property }}
+                        {% if form.property.errors %}
+                        <div class="invalid-feedback d-block">{{ form.property.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.tenant.id_for_label }}">Tenant <span class="text-danger">*</span></label>
+                        {{ form.tenant }}
+                        {% if form.tenant.errors %}
+                        <div class="invalid-feedback d-block">{{ form.tenant.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.lease_start_date.id_for_label }}">Lease Start Date <span class="text-danger">*</span></label>
+                        {{ form.lease_start_date }}
+                        {% if form.lease_start_date.errors %}
+                        <div class="invalid-feedback d-block">{{ form.lease_start_date.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.lease_end_date.id_for_label }}">Lease End Date</label>
+                        {{ form.lease_end_date }}
+                        {% if form.lease_end_date.errors %}
+                        <div class="invalid-feedback d-block">{{ form.lease_end_date.errors }}</div>
+                        {% endif %}
+                        <small class="text-muted">Leave blank for month-to-month tenancy</small>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.monthly_rent.id_for_label }}">Monthly Rent <span class="text-danger">*</span></label>
+                        {{ form.monthly_rent }}
+                        {% if form.monthly_rent.errors %}
+                        <div class="invalid-feedback d-block">{{ form.monthly_rent.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.security_deposit.id_for_label }}">Security Deposit</label>
+                        {{ form.security_deposit }}
+                        {% if form.security_deposit.errors %}
+                        <div class="invalid-feedback d-block">{{ form.security_deposit.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.annual_increment_percentage.id_for_label }}">Annual Increment (%)</label>
+                        {{ form.annual_increment_percentage }}
+                        {% if form.annual_increment_percentage.errors %}
+                        <div class="invalid-feedback d-block">{{ form.annual_increment_percentage.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.status.id_for_label }}">Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}
+                        <div class="invalid-feedback d-block">{{ form.status.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.agreement_date.id_for_label }}">Agreement Date</label>
+                        {{ form.agreement_date }}
+                        {% if form.agreement_date.errors %}
+                        <div class="invalid-feedback d-block">{{ form.agreement_date.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="{{ form.agreement_document.id_for_label }}">Agreement Document</label>
+                    {{ form.agreement_document }}
+                    {% if form.agreement_document.errors %}
+                    <div class="invalid-feedback d-block">{{ form.agreement_document.errors }}</div>
+                    {% endif %}
+                    <small class="text-muted">Upload PDF/Word document</small>
+                </div>
+
+                <div class="mb-3">
+                    <label for="{{ form.terms_and_conditions.id_for_label  }}">Terms & Conditions</label>
+                    {{ form.terms_and_conditions }}
+                    {% if form.terms_and_conditions.errors %}
+                    <div class="invalid-feedback d-block">{{ form.terms_and_conditions.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="mb-3">
+                    <label for="{{ form.remarks.id_for_label }}">Remarks</label>
+                    {{ form.remarks }}
+                    {% if form.remarks.errors %}
+                    <div class="invalid-feedback d-block">{{ form.remarks.errors }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Lease
+                    </button>
+                    <a href="{% url 'property:lease_list' %}" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

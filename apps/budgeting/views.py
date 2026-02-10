@@ -251,7 +251,7 @@ class BudgetAllocationListView(LoginRequiredMixin, ListView):
         queryset = super().get_queryset().select_related(
             'fiscal_year', 'budget_head', 'budget_head__function', 
             'budget_head__global_head', 'budget_head__global_head__minor__major',
-            'organization'
+            'budget_head__department', 'organization'
         )
         
         # Filter by organization
@@ -259,6 +259,10 @@ class BudgetAllocationListView(LoginRequiredMixin, ListView):
         if user.organization:
             # TMA users only see their own
             queryset = queryset.filter(organization=user.organization)
+            
+            # Apply department-level filtering if enabled
+            if user.should_see_own_department_only():
+                queryset = queryset.filter(budget_head__department=user.department)
         else:
             # LCB/Provincial users see all, but can filter by organization
             org_id = self.request.GET.get('organization')

@@ -1,0 +1,547 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ page_title }} - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <h2>
+                <i class="fas fa-{% if form.instance.pk %}edit{% else %}plus-circle{% endif %} text-primary"></i> 
+                {{ page_title }}
+            </h2>
+        </div>
+        <div class="col-md-6 text-right">
+            {% if form.instance.pk %}
+            <a href="{% url 'property:detail' form.instance.pk %}" class="btn btn-info">
+                <i class="fas fa-eye"></i> View Details
+            </a>
+            {% endif %}
+            <a href="{% url 'property:list' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-list"></i> Back to List
+            </a>
+        </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" id="property-form">
+        {% csrf_token %}
+        
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger" role="alert">
+            {{ form.non_field_errors }}
+        </div>
+        {% endif %}
+
+        <!-- Basic Information -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 bg-primary text-white">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="fas fa-info-circle"></i> Basic Information
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.property_code.id_for_label }}" class="required">Property Code</label>
+                        {{ form.property_code }}
+                        <small class="form-text text-muted">Unique identifier (e.g., PES-M001-P001)</small>
+                        {% if form.property_code.errors %}
+                            <div class="invalid-feedback d-block">{{ form.property_code.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.name.id_for_label }}" class="required">Property Name</label>
+                        {{ form.name }}
+                        <small class="form-text text-muted">e.g., Shop No. 1-A, House 123</small>
+                        {% if form.name.errors %}
+                            <div class="invalid-feedback d-block">{{ form.name.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.property_type.id_for_label }}" class="required">Property Type</label>
+                        {{ form.property_type }}
+                        {% if form.property_type.errors %}
+                            <div class="invalid-feedback d-block">{{ form.property_type.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.property_sub_type.id_for_label }}" class="required">Property Subtype</label>
+                        {{ form.property_sub_type }}
+                        {% if form.property_sub_type.errors %}
+                            <div class="invalid-feedback d-block">{{ form.property_sub_type.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.status.id_for_label }}" class="required">Current Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}
+                            <div class="invalid-feedback d-block">{{ form.status.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Location Information -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 bg-success text-white">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="fas fa-map-marker-alt"></i> Location & Geographic Information
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% if form.district %}
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.district.id_for_label }}" class="required">District</label>
+                        {{ form.district }}
+                        {% if form.district.errors %}
+                            <div class="invalid-feedback d-block">{{ form.district.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.mauza.id_for_label }}" class="required">Mauza (Revenue Estate)</label>
+                        {{ form.mauza }}
+                        {% if form.mauza.errors %}
+                            <div class="invalid-feedback d-block">{{ form.mauza.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.village.id_for_label }}">Village/Mohalla</label>
+                        {{ form.village }}
+                        {% if form.village.errors %}
+                            <div class="invalid-feedback d-block">{{ form.village.errors }}</div>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.mauza.id_for_label }}" class="required">Mauza (Revenue Estate)</label>
+                        {{ form.mauza }}
+                        {% if form.mauza.errors %}
+                            <div class="invalid-feedback d-block">{{ form.mauza.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.village.id_for_label }}">Village/Mohalla</label>
+                        {{ form.village }}
+                        {% if form.village.errors %}
+                            <div class="invalid-feedback d-block">{{ form.village.errors }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.address.id_for_label }}" class="required">Complete Address</label>
+                        {{ form.address }}
+                        {% if form.address.errors %}
+                            <div class="invalid-feedback d-block">{{ form.address.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.latitude.id_for_label }}" class="required">Latitude</label>
+                        {{ form.latitude }}
+                        <small class="form-text text-muted">GPS coordinate (e.g., 34.0082744)</small>
+                        {% if form.latitude.errors %}
+                            <div class="invalid-feedback d-block">{{ form.latitude.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.longitude.id_for_label }}" class="required">Longitude</label>
+                        {{ form.longitude }}
+                        <small class="form-text text-muted">GPS coordinate (e.g., 71.5731692)</small>
+                        {% if form.longitude.errors %}
+                            <div class="invalid-feedback d-block">{{ form.longitude.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Property Specifications -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 bg-info text-white">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="fas fa-building"></i> Property Specifications & Ownership
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.area_marlas.id_for_label }}" class="required">Area (Marlas)</label>
+                        {{ form.area_marlas }}
+                        <small class="form-text text-muted">1 Marla = 225 sq.ft = 20.9 sq.m</small>
+                        {% if form.area_marlas.errors %}
+                            <div class="invalid-feedback d-block">{{ form.area_marlas.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-8 mb-3">
+                        <label for="{{ form.ownership_title.id_for_label }}" class="required">Ownership Title</label>
+                        {{ form.ownership_title }}
+                        <small class="form-text text-muted">As per land revenue record</small>
+                        {% if form.ownership_title.errors %}
+                            <div class="invalid-feedback d-block">{{ form.ownership_title.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.survey_number.id_for_label }}">Survey/Khasra Number</label>
+                        {{ form.survey_number }}
+                        {% if form.survey_number.errors %}
+                            <div class="invalid-feedback d-block">{{ form.survey_number.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.acquisition_date.id_for_label }}">Acquisition Date</label>
+                        {{ form.acquisition_date }}
+                        {% if form.acquisition_date.errors %}
+                            <div class="invalid-feedback d-block">{{ form.acquisition_date.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.acquisition_cost.id_for_label }}">Acquisition Cost (Rs.)</label>
+                        {{ form.acquisition_cost }}
+                        {% if form.acquisition_cost.errors %}
+                            <div class="invalid-feedback d-block">{{ form.acquisition_cost.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Financial & Valuation -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 bg-warning text-dark">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="fas fa-money-bill-wave"></i> Financial Information & Valuation
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.current_market_value.id_for_label }}">Current Market Value (Rs.)</label>
+                        {{ form.current_market_value }}
+                        {% if form.current_market_value.errors %}
+                            <div class="invalid-feedback d-block">{{ form.current_market_value.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.last_valuation_date.id_for_label }}">Last Valuation Date</label>
+                        {{ form.last_valuation_date }}
+                        {% if form.last_valuation_date.errors %}
+                            <div class="invalid-feedback d-block">{{ form.last_valuation_date.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.annual_rent.id_for_label }}">Annual Rent (Rs.)</label>
+                        {{ form.annual_rent }}
+                        {% if form.annual_rent.errors %}
+                            <div class="invalid-feedback d-block">{{ form.annual_rent.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.last_rent_revision.id_for_label }}">Last Rent Revision Date</label>
+                        {{ form.last_rent_revision }}
+                        {% if form.last_rent_revision.errors %}
+                            <div class="invalid-feedback d-block">{{ form.last_rent_revision.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-12">
+                        <div class="alert alert-info mb-0">
+                            <i class="fas fa-info-circle"></i> <strong>Note:</strong> Monthly rent is auto-calculated as (Annual Rent ÷ 12).
+                            {% if form.instance.pk %}
+                            To manage tenant information and lease agreements, use the <a href="{% url 'property:lease_list' %}" class="alert-link">Lease Management</a> section.
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Litigation Information -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 bg-danger text-white">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="fas fa-gavel"></i> Litigation Information
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.court_case_status.id_for_label }}" class="required">Court Case Status</label>
+                        {{ form.court_case_status }}
+                        {% if form.court_case_status.errors %}
+                            <div class="invalid-feedback d-block">{{ form.court_case_status.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div id="litigation-fields" style="display: {% if form.instance.court_case_status != 'NO_CASE' %}block{% else %}none{% endif %};">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.case_number.id_for_label }}">Case Number</label>
+                            {{ form.case_number }}
+                            {% if form.case_number.errors %}
+                                <div class="invalid-feedback d-block">{{ form.case_number.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.court_name.id_for_label }}">Court Name</label>
+                            {{ form.court_name }}
+                            {% if form.court_name.errors %}
+                                <div class="invalid-feedback d-block">{{ form.court_name.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.court_case_title.id_for_label }}">Case Title/Description</label>
+                            {{ form.court_case_title }}
+                            {% if form.court_case_title.errors %}
+                                <div class="invalid-feedback d-block">{{ form.court_case_title.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.next_hearing_date.id_for_label }}">Next Hearing Date</label>
+                            {{ form.next_hearing_date }}
+                            {% if form.next_hearing_date.errors %}
+                                <div class="invalid-feedback d-block">{{ form.next_hearing_date.errors }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Photos & Documents Upload -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 bg-secondary text-white">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="fas fa-file-image"></i> Photos & Documents
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- Photos Section -->
+                    <div class="col-md-6">
+                        <h6 class="text-dark mb-3">
+                            <i class="fas fa-camera"></i> Property Photos
+                        </h6>
+                        {{ photo_formset.management_form }}
+                        {% for photo_form in photo_formset %}
+                        <div class="mb-4 pb-3 {% if not forloop.last %}border-bottom{% endif %}">
+                            <div class="form-group mb-3">
+                                <label class="text-dark">Photo</label>
+                                {{ photo_form.photo }}
+                                <small class="form-text text-muted">Upload a photo of the property (JPG, PNG, max 5MB)</small>
+                                {% if photo_form.photo.errors %}
+                                    <div class="text-danger small mt-1">{{ photo_form.photo.errors }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="form-group mb-3">
+                                <label class="text-dark">Description</label>
+                                {{ photo_form.caption }}
+                                <small class="form-text text-muted">Brief description of the photo</small>
+                                {% if photo_form.caption.errors %}
+                                    <div class="text-danger small mt-1">{{ photo_form.caption.errors }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            {% if photo_form.instance.pk %}
+                            <div class="form-check">
+                                {{ photo_form.DELETE }}
+                                <label class="form-check-label text-danger" for="{{ photo_form.DELETE.id_for_label }}">
+                                    Remove this photo
+                                </label>
+                            </div>
+                            {% endif %}
+                            {{ photo_form.id }}
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Documents Section -->
+                    <div class="col-md-6">
+                        <h6 class="text-dark mb-3">
+                            <i class="fas fa-file-alt"></i> Property Documents
+                        </h6>
+                        {{ document_formset.management_form }}
+                        {% for doc_form in document_formset %}
+                        <div class="mb-4 pb-3 {% if not forloop.last %}border-bottom{% endif %}">
+                            <div class="form-group mb-3">
+                                <label class="text-dark">Document Type</label>
+                                {{ doc_form.document_type }}
+                                {% if doc_form.document_type.errors %}
+                                    <div class="text-danger small mt-1">{{ doc_form.document_type.errors }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="form-group mb-3">
+                                <label class="text-dark">Document File</label>
+                                {{ doc_form.document }}
+                                <small class="form-text text-muted">Upload document (PDF, DOC, DOCX, or images, max 10MB)</small>
+                                {% if doc_form.document.errors %}
+                                    <div class="text-danger small mt-1">{{ doc_form.document.errors }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="form-group mb-3">
+                                <label class="text-dark">Description</label>
+                                {{ doc_form.description }}
+                                <small class="form-text text-muted">Any additional information about the document</small>
+                                {% if doc_form.description.errors %}
+                                    <div class="text-danger small mt-1">{{ doc_form.description.errors }}</div>
+                                {% endif %}
+                            </div>
+                            
+                            {% if doc_form.instance.pk %}
+                            <div class="form-check">
+                                {{ doc_form.DELETE }}
+                                <label class="form-check-label text-danger" for="{{ doc_form.DELETE.id_for_label }}">
+                                    Remove this document
+                                </label>
+                            </div>
+                            {% endif %}
+                            {{ doc_form.id }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Additional Notes -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 bg-dark text-white">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="fas fa-clipboard"></i> Additional Notes & Future Plans
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.future_use.id_for_label }}">Future Use/Plans</label>
+                        {{ form.future_use }}
+                        {% if form.future_use.errors %}
+                            <div class="invalid-feedback d-block">{{ form.future_use.errors }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-12 mb-3">
+                        <label for="{{ form.remarks.id_for_label }}">Remarks/Notes</label>
+                        {{ form.remarks }}
+                        {% if form.remarks.errors %}
+                            <div class="invalid-feedback d-block">{{ form.remarks.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="card shadow mb-4">
+            <div class="card-body">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="fas fa-save"></i> {{ form_action }} Property
+                </button>
+                <a href="{% url 'property:list' %}" class="btn btn-secondary btn-lg">
+                    <i class="fas fa-times"></i> Cancel
+                </a>
+                {% if form.instance.pk %}
+                <a href="{% url 'property:delete' form.instance.pk %}" 
+                   class="btn btn-danger btn-lg float-right"
+                   onclick="return confirm('Are you sure you want to delete this property?');">
+                    <i class="fas fa-trash"></i> Delete Property
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- JavaScript for Cascading Dropdowns and Field Toggle -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Cascading Dropdown: District -> Mauza
+    const districtSelect = document.getElementById('id_district');
+    const mauzaSelect = document.getElementById('id_mauza');
+    
+    if (districtSelect) {
+        districtSelect.addEventListener('change', function() {
+            const districtId = this.value;
+            
+            if (districtId) {
+                fetch(`{% url 'property:ajax_load_mauzas' %}?district_id=${districtId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        mauzaSelect.innerHTML = '<option value="">---------</option>';
+                        data.mauzas.forEach(mauza => {
+                            const option = document.createElement('option');
+                            option.value = mauza.id;
+                            option.textContent = mauza.name;
+                            mauzaSelect.appendChild(option);
+                        });
+                    });
+            } else {
+                mauzaSelect.innerHTML = '<option value="">---------</option>';
+            }
+            
+            // Reset village dropdown
+            const villageSelect = document.getElementById('id_village');
+            if (villageSelect) {
+                villageSelect.innerHTML = '<option value="">---------</option>';
+            }
+        });
+    }
+    
+    // Cascading Dropdown: Mauza -> Village
+    if (mauzaSelect) {
+        mauzaSelect.addEventListener('change', function() {
+            const mauzaId = this.value;
+            const villageSelect = document.getElementById('id_village');
+            
+            if (mauzaId && villageSelect) {
+                fetch(`{% url 'property:ajax_load_villages' %}?mauza_id=${mauzaId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        villageSelect.innerHTML = '<option value="">---------</option>';
+                        data.villages.forEach(village => {
+                            const option = document.createElement('option');
+                            option.value = village.id;
+                            option.textContent = village.name;
+                            villageSelect.appendChild(option);
+                        });
+                    });
+            } else if (villageSelect) {
+                villageSelect.innerHTML = '<option value="">---------</option>';
+            }
+        });
+    }
+    
+    // Toggle tenant fields based on status dropdown
+    const statusSelect = document.getElementById('id_status');
+    const tenantFields = document.getElementById('tenant-fields');
+    
+    if (statusSelect && tenantFields) {
+        statusSelect.addEventListener('change', function() {
+            // Show tenant fields when status is RENTED_OUT
+            tenantFields.style.display = this.value === 'RENTED_OUT' ? 'block' : 'none';
+        });
+    }
+    
+    // Toggle litigation fields based on court_case_status dropdown
+    const courtCaseStatusSelect = document.getElementById('id_court_case_status');
+    const litigationFields = document.getElementById('litigation-fields');
+    
+    if (courtCaseStatusSelect && litigationFields) {
+        courtCaseStatusSelect.addEventListener('change', function() {
+            // Show litigation fields when status is NOT NO_CASE
+            litigationFields.style.display = this.value !== 'NO_CASE' ? 'block' : 'none';
+        });
+    }
+});
+</script>
+
+<style>
+    .required:after {
+        content: " *";
+        color: red;
+    }
+</style>
+{% endblock %}

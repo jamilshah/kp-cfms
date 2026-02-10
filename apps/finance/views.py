@@ -16,6 +16,7 @@ from django.core.cache import cache
 from typing import Dict, Any
 import re
 import csv
+import io
 import logging
 from hashlib import md5
 
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 from apps.users.permissions import AdminRequiredMixin, MakerRequiredMixin, CheckerRequiredMixin, SuperAdminRequiredMixin
 from apps.finance.models import (
     BudgetHead, Fund, ChequeBook, ChequeLeaf, LeafStatus,
-    Voucher, JournalEntry, GlobalHead, FunctionCode, MinorHead
+    Voucher, JournalEntry, NAMHead, SubHead, FunctionCode, MinorHead
 )
 from apps.finance.forms import BudgetHeadForm, ChequeBookForm, ChequeLeafCancelForm, VoucherForm
 from apps.core.models import BankAccount
@@ -45,15 +46,15 @@ class CoAManagementHubView(LoginRequiredMixin, SuperAdminRequiredMixin, Template
         # Step 1: Master Data Statistics
         context['departments_count'] = Department.objects.filter(is_active=True).count()
         context['functions_count'] = FunctionCode.objects.filter(is_active=True).count()
-        context['global_heads_count'] = GlobalHead.objects.count()
-        context['universal_global_heads'] = GlobalHead.objects.filter(scope='UNIVERSAL').count()
-        context['departmental_global_heads'] = GlobalHead.objects.filter(scope='DEPARTMENTAL').count()
+        context['global_heads_count'] = NAMHead.objects.count()  # Updated for new structure
+        context['universal_global_heads'] = NAMHead.objects.filter(scope='UNIVERSAL').count()
+        context['departmental_global_heads'] = NAMHead.objects.filter(scope='RESTRICTED').count()
         
         # Step 2: Budget Head Statistics
         context['budget_heads_total'] = BudgetHead.objects.filter(is_active=True).count()
         context['budget_heads_mapped'] = BudgetHead.objects.filter(is_active=True, department__isnull=False).count()
         context['budget_heads_unmapped'] = BudgetHead.objects.filter(is_active=True, department__isnull=True).count()
-        context['sub_heads_count'] = BudgetHead.objects.filter(is_active=True).exclude(sub_code='00').count()
+        context['sub_heads_count'] = BudgetHead.objects.filter(is_active=True, sub_head__isnull=False).count()  # Updated: count budget heads with sub-head FK
         
         # Step 3: Department Coverage
         dept_stats = []
@@ -155,39 +156,52 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
     """List all Budget Heads (Chart of Accounts) with tree structure and filtering.
     
     OPTIMIZATION STRATEGY:
-    - select_related: fund, function, global_head + global_head__minor (for account_type access)
+    - select_related: fund, function, nam_head, sub_head + sub_head__nam_head (for hierarchical access)
     - Efficient major/minor heads query using database-level distinct
-    - Pagination to avoid loading all 2838 items in memory at once
+    - Pagination to avoid loading all items in memory at once
     - Cached lookups for filter options
+    
+    NOTE: Updated for NAM CoA structure - handles both nam_head and sub_head.
     """
     model = BudgetHead
     template_name = 'finance/budget_head_list.html'
     context_object_name = 'budget_heads'
-    ordering = ['function__code', 'global_head__code']
+    ordering = ['function__code']
     paginate_by = 50  # Paginate to improve performance
 
     def get_queryset(self):
+        from django.db.models import Q
+        
         # CRITICAL: Include select_related for all ForeignKey relationships
         # to avoid N+1 queries in the template
         qs = super().get_queryset().select_related(
             'fund',
             'function',
-            'global_head',
-            'global_head__minor',  # Needed for major_code access
+            'nam_head',
+            'nam_head__minor',
+            'sub_head',
+            'sub_head__nam_head',
+            'sub_head__nam_head__minor',
         )
         
         # Apply filters
         query = self.request.GET.get('q')
         if query:
             qs = qs.filter(
-                models.Q(global_head__name__icontains=query) |
-                models.Q(global_head__code__icontains=query)
+                Q(nam_head__isnull=False, nam_head__name__icontains=query) |
+                Q(nam_head__isnull=False, nam_head__code__icontains=query) |
+                Q(sub_head__isnull=False, sub_head__name__icontains=query) |
+                Q(sub_head__isnull=False, sub_head__sub_code__icontains=query) |
+                Q(sub_head__isnull=False, sub_head__nam_head__code__icontains=query)
             )
         
-        # Account type filter
+        # Account type filter - works via NAMHead or SubHead->NAMHead
         account_type = self.request.GET.get('account_type')
         if account_type:
-            qs = qs.filter(global_head__account_type=account_type)
+            qs = qs.filter(
+                Q(nam_head__isnull=False, nam_head__account_type=account_type) |
+                Q(sub_head__isnull=False, sub_head__nam_head__account_type=account_type)
+            )
         
         # Fund filter
         fund_id = self.request.GET.get('fund')
@@ -199,7 +213,7 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         if function_id:
             qs = qs.filter(function_id=function_id)
 
-        # Department filter - now uses direct BudgetHead.department field
+        # Department filter
         department_id = self.request.GET.get('department')
         if department_id:
             qs = qs.filter(department_id=department_id)
@@ -214,15 +228,21 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         if fund_type:
             qs = qs.filter(fund_type=fund_type)
         
-        # Major head filter (first 3 characters)
+        # Major head filter (first 3 characters) - check both paths
         major_head = self.request.GET.get('major_head')
         if major_head:
-            qs = qs.filter(global_head__code__startswith=major_head)
+            qs = qs.filter(
+                Q(nam_head__isnull=False, nam_head__code__startswith=major_head) |
+                Q(sub_head__isnull=False, sub_head__nam_head__code__startswith=major_head)
+            )
         
-        # Minor head filter (first 4 characters)
+        # Minor head filter (first 4 characters) - check both paths
         minor_head = self.request.GET.get('minor_head')
         if minor_head:
-            qs = qs.filter(global_head__code__startswith=minor_head)
+            qs = qs.filter(
+                Q(nam_head__isnull=False, nam_head__code__startswith=minor_head) |
+                Q(sub_head__isnull=False, sub_head__nam_head__code__startswith=minor_head)
+            )
         
         return qs
 
@@ -256,19 +276,25 @@ class BudgetHeadListView(LoginRequiredMixin, AdminRequiredMixin, ListView):
         context['unmapped_count'] = BudgetHead.objects.filter(department__isnull=True).count()
         
         # OPTIMIZED: Get unique major and minor heads using database-level distinct
-        # No longer iterating through all heads in Python
-        all_heads = BudgetHead.objects.values_list(
-            'global_head__code', flat=True
-        ).distinct().order_by('global_head__code')
+        # Updated for NAM CoA: collect codes from both nam_head and sub_head->nam_head
+        nam_head_codes = BudgetHead.objects.filter(
+            nam_head__isnull=False
+        ).values_list('nam_head__code', flat=True).distinct()
+        
+        sub_head_codes = BudgetHead.objects.filter(
+            sub_head__isnull=False
+        ).values_list('sub_head__nam_head__code', flat=True).distinct()
+        
+        all_codes = list(set(list(nam_head_codes) + list(sub_head_codes)))
         
         major_heads = set()
         minor_heads = set()
         
-        for code in all_heads:
-            if len(code) >= 3:
+        for code in all_codes:
+            if code and len(code) >= 3:
                 major = code[:3]  # First 3 chars (e.g., A01, B02, G05)
                 major_heads.add(major)
-            if len(code) >= 4:
+            if code and len(code) >= 4:
                 minor = code[:4]  # First 4 chars (e.g., A011, B013, G021)
                 minor_heads.add(minor)
         
@@ -380,6 +406,13 @@ class BudgetHeadDeleteView(LoginRequiredMixin, AdminRequiredMixin, DeleteView):
 class SubHeadCSVTemplateView(LoginRequiredMixin, AdminRequiredMixin, View):
     """
     Download CSV template for bulk sub-head creation.
+    
+    CSV Format:
+    - NAM Head Code: Full NAM code (e.g., A12001, L01101)
+    - Sub Code: 2-digit code (01, 02, 03, etc.)
+    - Name: Descriptive name for the sub-head
+    - Description: Optional detailed description
+    - Active: Y or N
     """
     def get(self, request):
         response = HttpResponse(content_type='text/csv')
@@ -388,21 +421,34 @@ class SubHeadCSVTemplateView(LoginRequiredMixin, AdminRequiredMixin, View):
         writer = csv.writer(response)
         # Write header
         writer.writerow([
-            'Department Code', 'Fund Code', 'Function Code', 'Global Head Code',
-            'Sub Code', 'Local Description', 
-            'Budget Control (Y/N)', 'Posting Allowed (Y/N)', 'Project Required (Y/N)', 'Active (Y/N)'
+            'NAM Head Code',
+            'Sub Code',
+            'Name',
+            'Description',
+            'Active (Y/N)'
         ])
         
-        # Write example rows
+        # Write example rows with actual NAM head codes
         writer.writerow([
-            'ADM', 'GEN', '011205', 'C03880',
-            '01', 'Library Subscription Fee',
-            'Y', 'Y', 'N', 'Y'
+            'A12001',
+            '01',
+            'PCC Streets',
+            'Portland Cement Concrete Streets',
+            'Y'
         ])
         writer.writerow([
-            'ADM', 'GEN', '011205', 'C03880',
-            '02', 'Sports Equipment',
-            'Y', 'Y', 'N', 'Y'
+            'A12001',
+            '02',
+            'Shingle Roads',
+            'Shingle road construction and maintenance',
+            'Y'
+        ])
+        writer.writerow([
+            'L01101',
+            '01',
+            'Qualification Pay',
+            'Additional qualification allowances',
+            'Y'
         ])
         
         return response
@@ -411,168 +457,189 @@ class SubHeadCSVTemplateView(LoginRequiredMixin, AdminRequiredMixin, View):
 class SubHeadCSVImportView(LoginRequiredMixin, AdminRequiredMixin, View):
     """
     Import sub-heads from CSV file.
-    """
-    template_name = 'finance/subhead_csv_import.html'
     
+    Expected CSV columns:
+    1. NAM Head Code (e.g., A12001, L01101)
+    2. Sub Code (01, 02, 03, etc.)
+    3. Name
+    4. Description (optional)
+    5. Active (Y/N)
+    """
     def get(self, request):
-        return render(request, self.template_name)
+        return render(request, 'finance/subhead_csv_import.html')
     
     def post(self, request):
         csv_file = request.FILES.get('csv_file')
         
         if not csv_file:
-            messages.error(request, _('Please upload a CSV file.'))
+            messages.error(request, 'Please select a CSV file to upload.')
             return redirect('finance:subhead_csv_import')
         
         if not csv_file.name.endswith('.csv'):
-            messages.error(request, _('Please upload a valid CSV file.'))
+            messages.error(request, 'Please upload a valid CSV file.')
             return redirect('finance:subhead_csv_import')
         
-        # Parse CSV
-        decoded_file = csv_file.read().decode('utf-8').splitlines()
-        reader = csv.DictReader(decoded_file)
-        
-        success_count = 0
-        error_count = 0
-        errors = []
-        
         try:
-            with transaction.atomic():
-                for row_num, row in enumerate(reader, start=2):  # Start at 2 (header is row 1)
+            # Read CSV
+            decoded_file = csv_file.read().decode('utf-8')
+            csv_reader = csv.DictReader(io.StringIO(decoded_file))
+            
+            created_count = 0
+            updated_count = 0
+            error_count = 0
+            errors = []
+            
+            for row_num, row in enumerate(csv_reader, start=2):  # Start at 2 (header is row 1)
+                try:
+                    # Extract and clean data
+                    nam_code = row.get('NAM Head Code', '').strip()
+                    sub_code = row.get('Sub Code', '').strip()
+                    name = row.get('Name', '').strip()
+                    description = row.get('Description', '').strip()
+                    active_str = row.get('Active (Y/N)', 'Y').strip().upper()
+                    
+                    # Validate required fields
+                    if not nam_code:
+                        errors.append(f"Row {row_num}: NAM Head Code is required")
+                        error_count += 1
+                        continue
+                    
+                    if not sub_code:
+                        errors.append(f"Row {row_num}: Sub Code is required")
+                        error_count += 1
+                        continue
+                    
+                    if not name:
+                        errors.append(f"Row {row_num}: Name is required")
+                        error_count += 1
+                        continue
+                    
+                    # Validate sub_code format (2 digits)
+                    if not sub_code.isdigit() or len(sub_code) != 2:
+                        errors.append(f"Row {row_num}: Sub Code must be 2 digits (e.g., 01, 02)")
+                        error_count += 1
+                        continue
+                    
+                    # Find NAM Head
                     try:
-                        # Get or validate references
-                        dept_code = row['Department Code'].strip()
-                        fund_code = row['Fund Code'].strip()
-                        func_code = row['Function Code'].strip()
-                        global_head_code = row['Global Head Code'].strip()
-                        sub_code = row['Sub Code'].strip()
-                        local_desc = row['Local Description'].strip()
-                        
-                        # Lookup objects
-                        try:
-                            department = Department.objects.get(code=dept_code, is_active=True)
-                        except Department.DoesNotExist:
-                            errors.append(f'Row {row_num}: Department "{dept_code}" not found.')
-                            error_count += 1
-                            continue
-                        
-                        try:
-                            fund = Fund.objects.get(code=fund_code, is_active=True)
-                        except Fund.DoesNotExist:
-                            errors.append(f'Row {row_num}: Fund "{fund_code}" not found.')
-                            error_count += 1
-                            continue
-                        
-                        try:
-                            function = FunctionCode.objects.get(code=func_code, is_active=True)
-                        except FunctionCode.DoesNotExist:
-                            errors.append(f'Row {row_num}: Function "{func_code}" not found.')
-                            error_count += 1
-                            continue
-                        
-                        try:
-                            global_head = GlobalHead.objects.get(code=global_head_code)
-                        except GlobalHead.DoesNotExist:
-                            errors.append(f'Row {row_num}: Global Head "{global_head_code}" not found.')
-                            error_count += 1
-                            continue
-                        
-                        # Validate sub-code
-                        if sub_code == '00':
-                            errors.append(f'Row {row_num}: Sub-code cannot be "00". Use 01-99.')
-                            error_count += 1
-                            continue
-                        
-                        if not local_desc:
-                            errors.append(f'Row {row_num}: Local Description is required.')
-                            error_count += 1
-                            continue
-                        
-                        # Check for duplicates
-                        if BudgetHead.objects.filter(
-                            department=department,
-                            fund=fund,
-                            function=function,
-                            global_head=global_head,
-                            sub_code=sub_code
-                        ).exists():
-                            errors.append(f'Row {row_num}: Sub-head already exists for this combination.')
-                            error_count += 1
-                            continue
-                        
-                        # Parse boolean fields
-                        budget_control = row.get('Budget Control (Y/N)', 'Y').strip().upper() == 'Y'
-                        posting_allowed = row.get('Posting Allowed (Y/N)', 'Y').strip().upper() == 'Y'
-                        project_required = row.get('Project Required (Y/N)', 'N').strip().upper() == 'Y'
-                        is_active = row.get('Active (Y/N)', 'Y').strip().upper() == 'Y'
-                        
-                        # Create sub-head
-                        BudgetHead.objects.create(
-                            department=department,
-                            fund=fund,
-                            function=function,
-                            global_head=global_head,
-                            sub_code=sub_code,
-                            head_type='SUB_HEAD',
-                            local_description=local_desc,
-                            budget_control=budget_control,
-                            posting_allowed=posting_allowed,
-                            project_required=project_required,
-                            is_active=is_active
-                        )
-                        success_count += 1
-                        
-                    except KeyError as e:
-                        errors.append(f'Row {row_num}: Missing required column: {e}')
+                        nam_head = NAMHead.objects.get(code=nam_code)
+                    except NAMHead.DoesNotExist:
+                        errors.append(f"Row {row_num}: NAM Head '{nam_code}' not found")
                         error_count += 1
-                    except Exception as e:
-                        errors.append(f'Row {row_num}: {str(e)}')
-                        error_count += 1
+                        continue
+                    
+                    # Parse active flag
+                    is_active = active_str in ['Y', 'YES', '1', 'TRUE']
+                    
+                    # Create or update SubHead
+                    sub_head, created = SubHead.objects.update_or_create(
+                        nam_head=nam_head,
+                        sub_code=sub_code,
+                        defaults={
+                            'name': name,
+                            'description': description,
+                            'is_active': is_active,
+                        }
+                    )
+                    
+                    if created:
+                        created_count += 1
+                    else:
+                        updated_count += 1
                 
-                # If there are errors, rollback
-                if error_count > 0:
-                    raise Exception('Import had errors')
+                except Exception as e:
+                    errors.append(f"Row {row_num}: {str(e)}")
+                    error_count += 1
+            
+            # Display results
+            if created_count > 0:
+                messages.success(request, f'Successfully created {created_count} sub-head(s).')
+            
+            if updated_count > 0:
+                messages.info(request, f'Updated {updated_count} existing sub-head(s).')
+            
+            if error_count > 0:
+                messages.warning(request, f'Failed to process {error_count} row(s). See details below.')
+                for error in errors[:10]:  # Show first 10 errors
+                    messages.error(request, error)
+                if len(errors) > 10:
+                    messages.error(request, f'... and {len(errors) - 10} more errors.')
+            
+            if created_count == 0 and updated_count == 0 and error_count == 0:
+                messages.warning(request, 'No data was processed. Please check your CSV file.')
+            
+            return redirect('finance:subhead_list')
         
         except Exception as e:
-            messages.error(request, f'Import failed. Please fix the errors and try again.')
-            return render(request, self.template_name, {
-                'errors': errors,
-                'success_count': success_count,
-                'error_count': error_count
-            })
-        
-        messages.success(request, f'Successfully imported {success_count} sub-heads.')
-        return redirect('budgeting:setup_coa_list')
+            messages.error(request, f'Error processing CSV file: {str(e)}')
+            return redirect('finance:subhead_csv_import')
 
 
 class GlobalHeadCSVTemplateView(LoginRequiredMixin, SuperAdminRequiredMixin, View):
     """
-    Download CSV template for bulk CoA (Global Heads) import.
+    Download CSV template for bulk 5-level CoA import.
+    
+    Template includes all 5 levels:
+    - Level 1: Classification (A/C/G/K)
+    - Level 2: Major Head
+    - Level 3: Minor Head  
+    - Level 4: NAM Head
+    - Level 5: Sub-Head (optional)
     """
     def get(self, request):
         response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = 'attachment; filename="global_heads_import_template.csv"'
+        response['Content-Disposition'] = 'attachment; filename="coa_5level_import_template.csv"'
         
         writer = csv.writer(response)
-        # Write header
+        # Write header with all 5 levels
         writer.writerow([
-            'Object Code', 'Object Name', 'Minor Head Code', 'Account Type',
-            'Scope', 'System Code (Optional)', 
-            'Applicable Departments (Optional)', 'Applicable Functions (Optional)'
+            # Level 2: Major Head
+            'Major Code', 'Major Name', 'Classification',
+            # Level 3: Minor Head
+            'Minor Code', 'Minor Name',
+            # Level 4: NAM Head
+            'NAM Code', 'NAM Name', 'Account Type', 'Scope',
+            # Level 5: Sub-Head (Optional)
+            'Sub Code', 'Sub Name', 'Sub Description',
+            # Control Fields
+            'Allow Direct Posting'
         ])
         
         # Write example rows
+        # Example 1: Complete hierarchy with sub-head
         writer.writerow([
-            'A01101', 'Basic Pay - Officers', 'A011', 'EXP',
-            'UNIVERSAL', '', '', ''
+            'A01', 'Employee Related Expenses', 'A',
+            'A011', 'Pay of Officers/Officials',
+            'A01101', 'Basic Pay - Officers', 'EXP', 'UNIVERSAL',
+            '01', 'Officers Grade 17+', 'Officers Grade 17 and above',
+            'N'  # No direct posting when sub-heads exist
         ])
+        
+        # Example 2: NAM head without sub-head (can be posted directly)
         writer.writerow([
-            'C03880', 'TMA Other Non-tax Revenues', 'C038', 'REV',
-            'UNIVERSAL', '', '', ''
+            'A01', 'Employee Related Expenses', 'A',
+            'A011', 'Pay of Officers/Officials',
+            'A01102', 'Personal Pay', 'EXP', 'UNIVERSAL',
+            '', '', '',  # No sub-head
+            'Y'  # Allow direct posting
         ])
+        
+        # Example 3: Revenue head
         writer.writerow([
-            'A01999', 'Department Specific Allowance', 'A019', 'EXP',
-            'DEPARTMENTAL', '', 'ADM,FIN', '011205,020101'
+            'C03', 'Services', 'C',
+            'C038', 'Services - Other',
+            'C03880', 'TMA Other Non-tax Revenues', 'REV', 'UNIVERSAL',
+            '', '', '',
+            'Y'
+        ])
+        
+        # Example 4: Another sub-head for first NAM head
+        writer.writerow([
+            'A01', 'Employee Related Expenses', 'A',
+            'A011', 'Pay of Officers/Officials',
+            'A01101', 'Basic Pay - Officers', 'EXP', 'UNIVERSAL',
+            '02', 'Officers Grade 16-', 'Officers Grade 16 and below',
+            'N'
         ])
         
         return response
@@ -580,7 +647,13 @@ class GlobalHeadCSVTemplateView(LoginRequiredMixin, SuperAdminRequiredMixin, Vie
 
 class GlobalHeadCSVImportView(LoginRequiredMixin, SuperAdminRequiredMixin, View):
     """
-    Import Global Heads (CoA) from CSV file.
+    Import 5-level CoA hierarchy from CSV file.
+    
+    Features:
+    - Pre-validates all data before any database changes
+    - Reports errors with row numbers
+    - Atomic transaction - all or nothing
+    - Creates/updates all 5 levels in correct order
     """
     template_name = 'finance/global_head_csv_import.html'
     
@@ -588,6 +661,10 @@ class GlobalHeadCSVImportView(LoginRequiredMixin, SuperAdminRequiredMixin, View)
         return render(request, self.template_name)
     
     def post(self, request):
+        from apps.finance.models import (
+            MajorHead, MinorHead, NAMHead, SubHead, AccountType
+        )
+        
         csv_file = request.FILES.get('csv_file')
         
         if not csv_file:
@@ -599,118 +676,268 @@ class GlobalHeadCSVImportView(LoginRequiredMixin, SuperAdminRequiredMixin, View)
             return redirect('finance:global_head_csv_import')
         
         # Parse CSV
-        decoded_file = csv_file.read().decode('utf-8').splitlines()
+        try:
+            decoded_file = csv_file.read().decode('utf-8-sig').splitlines()  # utf-8-sig removes BOM
+        except UnicodeDecodeError:
+            messages.error(request, _('File encoding error. Please ensure the file is UTF-8 encoded.'))
+            return redirect('finance:global_head_csv_import')
+        
         reader = csv.DictReader(decoded_file)
         
-        success_count = 0
-        error_count = 0
-        errors = []
+        # Validate headers
+        expected_headers = [
+            'Major Code', 'Major Name', 'Classification',
+            'Minor Code', 'Minor Name',
+            'NAM Code', 'NAM Name', 'Account Type', 'Scope',
+            'Sub Code', 'Sub Name', 'Sub Description',
+            'Allow Direct Posting'
+        ]
+        actual_headers = reader.fieldnames if reader.fieldnames else []
         
-        try:
-            with transaction.atomic():
-                for row_num, row in enumerate(reader, start=2):  # Start at 2 (header is row 1)
-                    try:
-                        # Get required fields
-                        code = row['Object Code'].strip()
-                        name = row['Object Name'].strip()
-                        minor_code = row['Minor Head Code'].strip()
-                        account_type = row['Account Type'].strip().upper()
-                        scope = row['Scope'].strip().upper()
-                        system_code = row.get('System Code (Optional)', '').strip() or None
-                        dept_codes = row.get('Applicable Departments (Optional)', '').strip()
-                        func_codes = row.get('Applicable Functions (Optional)', '').strip()
-                        
-                        # Validate required fields
-                        if not code or not name or not minor_code:
-                            errors.append(f'Row {row_num}: Object Code, Name, and Minor Head Code are required.')
-                            error_count += 1
-                            continue
-                        
-                        # Lookup minor head
-                        try:
-                            minor_head = MinorHead.objects.get(code=minor_code)
-                        except MinorHead.DoesNotExist:
-                            errors.append(f'Row {row_num}: Minor Head "{minor_code}" not found.')
-                            error_count += 1
-                            continue
-                        
-                        # Validate account type
-                        from apps.finance.models import AccountType
-                        valid_types = ['EXP', 'REV', 'AST', 'LIA', 'EQT']
-                        if account_type not in valid_types:
-                            errors.append(f'Row {row_num}: Invalid Account Type "{account_type}". Use: {", ".join(valid_types)}')
-                            error_count += 1
-                            continue
-                        
-                        # Validate scope
-                        if scope not in ['UNIVERSAL', 'DEPARTMENTAL']:
-                            errors.append(f'Row {row_num}: Scope must be UNIVERSAL or DEPARTMENTAL.')
-                            error_count += 1
-                            continue
-                        
-                        # Check for duplicate code
-                        if GlobalHead.objects.filter(code=code).exists():
-                            errors.append(f'Row {row_num}: Global Head with code "{code}" already exists.')
-                            error_count += 1
-                            continue
-                        
-                        # Create Global Head
-                        global_head = GlobalHead.objects.create(
-                            code=code,
-                            name=name,
-                            minor=minor_head,
-                            account_type=account_type,
-                            scope=scope,
-                            system_code=system_code if system_code else None
-                        )
-                        
-                        # Add departments if scope is DEPARTMENTAL
-                        if scope == 'DEPARTMENTAL' and dept_codes:
-                            dept_list = [d.strip() for d in dept_codes.split(',') if d.strip()]
-                            for dept_code in dept_list:
-                                try:
-                                    dept = Department.objects.get(code=dept_code, is_active=True)
-                                    global_head.applicable_departments.add(dept)
-                                except Department.DoesNotExist:
-                                    errors.append(f'Row {row_num}: Warning - Department "{dept_code}" not found, skipped.')
-                        
-                        # Add functions if specified
-                        if func_codes:
-                            func_list = [f.strip() for f in func_codes.split(',') if f.strip()]
-                            for func_code in func_list:
-                                try:
-                                    func = FunctionCode.objects.get(code=func_code, is_active=True)
-                                    global_head.applicable_functions.add(func)
-                                except FunctionCode.DoesNotExist:
-                                    errors.append(f'Row {row_num}: Warning - Function "{func_code}" not found, skipped.')
-                        
-                        success_count += 1
-                        
-                    except KeyError as e:
-                        errors.append(f'Row {row_num}: Missing required column: {e}')
-                        error_count += 1
-                    except Exception as e:
-                        errors.append(f'Row {row_num}: {str(e)}')
-                        error_count += 1
-                
-                # If there are critical errors, rollback
-                critical_errors = [e for e in errors if 'Warning' not in e]
-                if len(critical_errors) > 0:
-                    raise Exception('Import had critical errors')
-        
-        except Exception as e:
-            messages.error(request, f'Import failed. Please fix the errors and try again.')
+        # Check for header mismatch
+        missing_headers = [h for h in expected_headers if h not in actual_headers]
+        if missing_headers:
+            messages.error(
+                request,
+                f'CSV header mismatch. Missing columns: {", ".join(missing_headers)}. '
+                f'Please download the template and ensure column headers match exactly.'
+            )
             return render(request, self.template_name, {
-                'errors': errors,
-                'success_count': success_count,
-                'error_count': len([e for e in errors if 'Warning' not in e])
+                'errors': [
+                    f'Expected headers: {", ".join(expected_headers)}',
+                    f'Your headers: {", ".join(actual_headers)}',
+                    'Download the template to get the correct format.'
+                ],
+                'error_count': 1
             })
         
+        # Validation phase - collect all errors before processing
+        errors = []
+        validated_rows = []
+        row_num = 1  # Start at 1 (header row)
+        
+        # Track what we'll create to avoid duplicates within the file
+        major_codes_seen = {}
+        minor_codes_seen = {}
+        nam_codes_seen = {}
+        sub_codes_seen = {}
+        
+        for row in reader:
+            row_num += 1
+            row_errors = []
+            
+            try:
+                # Extract and validate all fields
+                major_code = row.get('Major Code', '').strip()
+                major_name = row.get('Major Name', '').strip()
+                classification = row.get('Classification', '').strip().upper()
+                
+                minor_code = row.get('Minor Code', '').strip()
+                minor_name = row.get('Minor Name', '').strip()
+                
+                nam_code = row.get('NAM Code', '').strip()
+                nam_name = row.get('NAM Name', '').strip()
+                account_type = row.get('Account Type', '').strip().upper()
+                scope = row.get('Scope', '').strip().upper()
+                
+                sub_code = row.get('Sub Code', '').strip()
+                sub_name = row.get('Sub Name', '').strip()
+                sub_description = row.get('Sub Description', '').strip()
+                
+                allow_posting = row.get('Allow Direct Posting', 'Y').strip().upper()
+                
+                # Validate required fields for Level 2 (Major)
+                if not major_code:
+                    row_errors.append('Major Code is required')
+                elif len(major_code) != 3:
+                    row_errors.append(f'Major Code must be exactly 3 characters (got: {major_code})')
+                
+                if not major_name:
+                    row_errors.append('Major Name is required')
+                
+                if classification not in ['A', 'C', 'G', 'K']:
+                    row_errors.append(f'Classification must be A, C, G, or K (got: {classification})')
+                
+                # Validate classification matches major code
+                if major_code and classification and not major_code.upper().startswith(classification.upper()):
+                    row_errors.append(f'Major Code {major_code} must start with Classification {classification}')
+                
+                # Validate Level 3 (Minor)
+                if not minor_code:
+                    row_errors.append('Minor Code is required')
+                elif len(minor_code) != 4:
+                    row_errors.append(f'Minor Code must be exactly 4 characters (got: {minor_code})')
+                elif not minor_code.startswith(major_code[:3]):
+                    row_errors.append(f'Minor Code {minor_code} must start with Major Code {major_code}')
+                
+                if not minor_name:
+                    row_errors.append('Minor Name is required')
+                
+                # Validate Level 4 (NAM)
+                if not nam_code:
+                    row_errors.append('NAM Code is required')
+                elif len(nam_code) < 5:
+                    row_errors.append(f'NAM Code must be at least 5 characters (got: {nam_code})')
+                elif not nam_code.startswith(minor_code[:4]):
+                    row_errors.append(f'NAM Code {nam_code} must start with Minor Code {minor_code}')
+                
+                if not nam_name:
+                    row_errors.append('NAM Name is required')
+                
+                if account_type not in ['EXP', 'REV', 'AST', 'LIA', 'EQT']:
+                    row_errors.append(f'Account Type must be EXP, REV, AST, LIA, or EQT (got: {account_type})')
+                
+                if scope not in ['UNIVERSAL', 'RESTRICTED']:
+                    row_errors.append(f'Scope must be UNIVERSAL or RESTRICTED (got: {scope})')
+                
+                # Validate Level 5 (Sub-Head) - optional but if provided must be valid
+                if sub_code:
+                    if len(sub_code) != 2:
+                        row_errors.append(f'Sub Code must be exactly 2 characters if provided (got: {sub_code})')
+                    if not sub_name:
+                        row_errors.append('Sub Name is required when Sub Code is provided')
+                    if allow_posting == 'Y':
+                        row_errors.append('Allow Direct Posting must be N when Sub-Heads exist')
+                
+                # Check for duplicates within file
+                if major_code:
+                    if major_code in major_codes_seen:
+                        if major_codes_seen[major_code] != (major_name, classification):
+                            row_errors.append(f'Duplicate Major Code {major_code} with different details')
+                    else:
+                        major_codes_seen[major_code] = (major_name, classification)
+                
+                if minor_code:
+                    if minor_code in minor_codes_seen:
+                        if minor_codes_seen[minor_code] != minor_name:
+                            row_errors.append(f'Duplicate Minor Code {minor_code} with different name')
+                    else:
+                        minor_codes_seen[minor_code] = minor_name
+                
+                if nam_code:
+                    if nam_code in nam_codes_seen:
+                        if nam_codes_seen[nam_code] != nam_name:
+                            row_errors.append(f'Duplicate NAM Code {nam_code} with different name')
+                    else:
+                        nam_codes_seen[nam_code] = nam_name
+                
+                if sub_code and nam_code:
+                    sub_key = f'{nam_code}-{sub_code}'
+                    if sub_key in sub_codes_seen:
+                        if sub_codes_seen[sub_key] != sub_name:
+                            row_errors.append(f'Duplicate Sub-Head {sub_key} with different name')
+                    else:
+                        sub_codes_seen[sub_key] = sub_name
+                
+                # If no errors, add to validated rows
+                if not row_errors:
+                    validated_rows.append({
+                        'major_code': major_code,
+                        'major_name': major_name,
+                        'classification': classification,
+                        'minor_code': minor_code,
+                        'minor_name': minor_name,
+                        'nam_code': nam_code,
+                        'nam_name': nam_name,
+                        'account_type': account_type,
+                        'scope': scope,
+                        'sub_code': sub_code,
+                        'sub_name': sub_name,
+                        'sub_description': sub_description,
+                        'allow_posting': allow_posting == 'Y',
+                    })
+                else:
+                    errors.append(f'Row {row_num}: {"; ".join(row_errors)}')
+            
+            except Exception as e:
+                errors.append(f'Row {row_num}: Unexpected error - {str(e)}')
+        
+        # If validation errors exist, show them and don't proceed
         if errors:
-            messages.warning(request, f'Imported {success_count} global heads with {len(errors)} warnings.')
-        else:
-            messages.success(request, f'Successfully imported {success_count} global heads.')
-        return redirect('system_admin:global_head_list')
+            messages.error(request, f'Validation failed with {len(errors)} error(s). No data was imported.')
+            return render(request, self.template_name, {
+                'errors': errors,
+                'error_count': len(errors)
+            })
+        
+        # Import phase - atomic transaction
+        try:
+            with transaction.atomic():
+                success_stats = {
+                    'majors_created': 0,
+                    'minors_created': 0,
+                    'nams_created': 0,
+                    'subs_created': 0,
+                }
+                
+                for row_data in validated_rows:
+                    # Level 2: Create or get Major Head (classification is implicit in code)
+                    major, created = MajorHead.objects.get_or_create(
+                        code=row_data['major_code'],
+                        defaults={
+                            'name': row_data['major_name']
+                        }
+                    )
+                    if created:
+                        success_stats['majors_created'] += 1
+                    
+                    # Level 3: Create or get Minor Head
+                    minor, created = MinorHead.objects.get_or_create(
+                        code=row_data['minor_code'],
+                        defaults={
+                            'name': row_data['minor_name'],
+                            'major': major
+                        }
+                    )
+                    if created:
+                        success_stats['minors_created'] += 1
+                    
+                    # Level 4: Create or get NAM Head
+                    nam, created = NAMHead.objects.get_or_create(
+                        code=row_data['nam_code'],
+                        defaults={
+                            'name': row_data['nam_name'],
+                            'minor': minor,
+                            'account_type': row_data['account_type'],
+                            'scope': row_data['scope'],
+                            'allow_direct_posting': row_data['allow_posting']
+                        }
+                    )
+                    if created:
+                        success_stats['nams_created'] += 1
+                    
+                    # Level 5: Create Sub-Head if provided
+                    if row_data['sub_code']:
+                        sub, created = SubHead.objects.get_or_create(
+                            nam_head=nam,
+                            sub_code=row_data['sub_code'],
+                            defaults={
+                                'name': row_data['sub_name'],
+                                'description': row_data['sub_description']
+                            }
+                        )
+                        if created:
+                            success_stats['subs_created'] += 1
+                            # Disable direct posting on parent NAM head
+                            if nam.allow_direct_posting:
+                                nam.allow_direct_posting = False
+                                nam.save(update_fields=['allow_direct_posting'])
+                
+                # Success message with statistics
+                messages.success(
+                    request,
+                    f"Successfully imported: "
+                    f"{success_stats['majors_created']} Major Heads, "
+                    f"{success_stats['minors_created']} Minor Heads, "
+                    f"{success_stats['nams_created']} NAM Heads, "
+                    f"{success_stats['subs_created']} Sub-Heads"
+                )
+                
+        except Exception as e:
+            messages.error(request, f'Import failed: {str(e)}')
+            return redirect('finance:global_head_csv_import')
+        
+        return redirect('finance:coa_hub')
 
 
 @method_decorator(csrf_protect, name='dispatch')
@@ -1731,24 +1958,26 @@ def load_functions(request):
 
 def load_global_heads(request):
     """
-    HTMX view to load GlobalHead options filtered by selected function.
-    Returns HTML with option elements for the global_head select field.
+    HTMX view to load NAMHead options filtered by selected function.
+    Returns HTML with option elements for the nam_head select field.
     
-    Filters GlobalHeads to show:
+    Filters NAMHeads to show:
     - Universal heads (no applicable_functions specified)
     - Function-specific heads (where applicable_functions includes the selected function)
+    
+    NOTE: This view is deprecated with the new NAM CoA structure.
+    Consider updating forms to use HierarchicalBudgetHeadWidget instead.
     """
-    from apps.finance.models import GlobalHead
     from django.db.models import Q
     
     function_id = request.GET.get('function')
-    global_heads = GlobalHead.objects.none()
+    nam_heads = NAMHead.objects.none()
     
     if function_id:
         try:
             function = FunctionCode.objects.get(id=function_id)
             # Filter: Universal heads OR heads applicable to this function
-            global_heads = GlobalHead.objects.filter(
+            nam_heads = NAMHead.objects.filter(
                 Q(applicable_functions__isnull=True) |  # Universal heads
                 Q(applicable_functions=function)  # Function-specific heads
             ).select_related('minor__major').distinct().order_by('code')
@@ -1756,7 +1985,7 @@ def load_global_heads(request):
             pass
     
     return render(request, 'finance/partials/global_head_options.html', {
-        'global_heads': global_heads
+        'global_heads': nam_heads  # Keep template variable name for compatibility
     })
 
 
@@ -1943,28 +2172,24 @@ def load_budget_heads_options(request):
 
 def load_existing_subheads(request):
     """
-    AJAX view to fetch existing sub-heads for a given combination.
-    Used in BudgetHeadForm to show what sub-codes are already taken.
+    AJAX view to fetch existing sub-heads for a given NAM head.
+    Used in SubHead admin to show what sub-codes are already taken.
     
     Returns HTML snippet showing existing sub-heads and suggesting next available code.
+    
+    NOTE: Updated for NAM CoA structure.
     """
-    department_id = request.GET.get('department')
-    fund_id = request.GET.get('fund')
-    function_id = request.GET.get('function')
-    global_head_id = request.GET.get('global_head')
+    nam_head_id = request.GET.get('nam_head')
     
     existing_subheads = []
     next_available_code = '01'
     
-    if department_id and fund_id and function_id and global_head_id:
+    if nam_head_id:
         try:
-            existing_subheads = BudgetHead.objects.filter(
-                department_id=department_id,
-                fund_id=fund_id,
-                function_id=function_id,
-                global_head_id=global_head_id,
-                head_type='SUB_HEAD'
-            ).select_related('global_head').order_by('sub_code')
+            existing_subheads = SubHead.objects.filter(
+                nam_head_id=nam_head_id,
+                is_active=True
+            ).select_related('nam_head').order_by('sub_code')
             
             # Find next available sub-code
             used_codes = [sh.sub_code for sh in existing_subheads]
@@ -2000,8 +2225,10 @@ def budget_head_search_api(request):
         posting_allowed=True,
         is_active=True
     ).select_related(
-        'global_head',
-        'global_head__minor',
+        'nam_head',
+        'nam_head__minor',
+        'sub_head',
+        'sub_head__nam_head',
         'function'
     )
     
@@ -2011,18 +2238,24 @@ def budget_head_search_api(request):
     
     # Filter by account type if specified
     if account_type:
-        budget_heads = budget_heads.filter(global_head__account_type=account_type)
+        budget_heads = budget_heads.filter(
+            models.Q(nam_head__account_type=account_type) |
+            models.Q(sub_head__nam_head__account_type=account_type)
+        )
     
     # Search by code or name
     if search_term:
         budget_heads = budget_heads.filter(
-            models.Q(global_head__code__icontains=search_term) |
-            models.Q(global_head__name__icontains=search_term) |
+            models.Q(nam_head__code__icontains=search_term) |
+            models.Q(nam_head__name__icontains=search_term) |
+            models.Q(sub_head__nam_head__code__icontains=search_term) |
+            models.Q(sub_head__nam_head__name__icontains=search_term) |
+            models.Q(sub_head__local_description__icontains=search_term) |
             models.Q(function__code__icontains=search_term)
         )
     
     # Order by code for consistent results
-    budget_heads = budget_heads.order_by('global_head__code', 'function__code')
+    budget_heads = budget_heads.order_by('nam_head__code', 'sub_head__sub_code', 'function__code')
     
     # Pagination
     total_count = budget_heads.count()
@@ -2033,16 +2266,28 @@ def budget_head_search_api(request):
     # Format results for Select2
     results = []
     for bh in page_results:
+        # Get code and name from nam_head or sub_head
+        if bh.sub_head:
+            code = bh.sub_head.code
+            name = bh.sub_head.local_description or bh.sub_head.nam_head.name
+            account_type_val = bh.sub_head.nam_head.account_type
+        elif bh.nam_head:
+            code = bh.nam_head.code
+            name = bh.nam_head.name
+            account_type_val = bh.nam_head.account_type
+        else:
+            continue
+        
         # Format display text: "CODE - Name (Function)"
-        display_text = f"{bh.global_head.code} - {bh.global_head.name}"
+        display_text = f"{code} - {name}"
         if bh.function:
             display_text += f" ({bh.function.code})"
         
         results.append({
             'id': bh.id,
             'text': display_text,
-            'code': bh.global_head.code,
-            'account_type': bh.global_head.account_type
+            'code': code,
+            'account_type': account_type_val
         })
     
     # Return Select2 format
@@ -2134,9 +2379,13 @@ def smart_budget_head_search_api(request):
             posting_allowed=True,
             is_active=True
         ).select_related(
-            'global_head',
-            'global_head__minor',
-            'global_head__minor__major',
+            'nam_head',
+            'nam_head__minor',
+            'nam_head__minor__major',
+            'sub_head',
+            'sub_head__nam_head',
+            'sub_head__nam_head__minor',
+            'sub_head__nam_head__minor__major',
             'function',
             'department',
             'fund'
@@ -2149,16 +2398,29 @@ def smart_budget_head_search_api(request):
                     department_id=department_id,
                     function_id=function_id
                 )
-                # Get allowed global head IDs
-                allowed_head_ids = config.allowed_global_heads.values_list('id', flat=True)
-                budget_heads = budget_heads.filter(
-                    department_id=department_id,
-                    function_id=function_id,
-                    global_head_id__in=allowed_head_ids
-                )
+                # Get allowed NAM head IDs
+                allowed_head_ids = list(config.allowed_nam_heads.values_list('id', flat=True))
+                
+                # If configuration exists but has no allowed heads, show all (permissive during transition)
+                if allowed_head_ids:
+                    budget_heads = budget_heads.filter(
+                        department_id=department_id,
+                        function_id=function_id
+                    ).filter(
+                        Q(nam_head_id__in=allowed_head_ids) |
+                        Q(sub_head__nam_head_id__in=allowed_head_ids)
+                    )
+                    logger.debug(f"Using DepartmentFunctionConfiguration with {len(allowed_head_ids)} allowed NAM heads")
+                else:
+                    # Config exists but empty - show all for this dept/func during transition
+                    logger.warning(f"DepartmentFunctionConfiguration exists but has no allowed_nam_heads for dept={department_id}, func={function_id}")
+                    budget_heads = budget_heads.filter(
+                        department_id=department_id,
+                        function_id=function_id
+                    )
             except DepartmentFunctionConfiguration.DoesNotExist:
                 logger.warning(f"No DepartmentFunctionConfiguration found for dept={department_id}, func={function_id}")
-                # Fallback to basic filtering
+                # Fallback to basic filtering - show all budget heads for this dept/func
                 budget_heads = budget_heads.filter(
                     department_id=department_id,
                     function_id=function_id
@@ -2170,24 +2432,31 @@ def smart_budget_head_search_api(request):
         
         # Filter by account type
         if account_type:
-            budget_heads = budget_heads.filter(global_head__account_type=account_type)
+            budget_heads = budget_heads.filter(
+                Q(nam_head__account_type=account_type) |
+                Q(sub_head__nam_head__account_type=account_type)
+            )
         
         # Search filter
         if search_term:
             budget_heads = budget_heads.filter(
-                Q(global_head__code__icontains=search_term) |
-                Q(global_head__name__icontains=search_term) |
-                Q(local_description__icontains=search_term)
+                Q(nam_head__code__icontains=search_term) |
+                Q(nam_head__name__icontains=search_term) |
+                Q(sub_head__nam_head__code__icontains=search_term) |
+                Q(sub_head__nam_head__name__icontains=search_term) |
+                Q(sub_head__local_description__icontains=search_term)
             )
         
-        # Order by code
-        budget_heads = budget_heads.order_by('global_head__code')
+        # Order by code (NAM head code, then sub-head code if applicable)
+        budget_heads = budget_heads.order_by('nam_head__code', 'sub_head__sub_code')
         
         # Pagination
         total_count = budget_heads.count()
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         page_results = budget_heads[start_idx:end_idx]
+        
+        logger.debug(f"Found {total_count} budget heads for dept={department_id}, func={function_id}, search='{search_term}'")
         
         # Build results with enhanced information
         results = []
@@ -2209,8 +2478,20 @@ def smart_budget_head_search_api(request):
                 available_amount = 0.0
                 utilization_percentage = 0.0
             
+            # Get code and name from nam_head or sub_head
+            if bh.sub_head:
+                code = bh.sub_head.code  # Property that returns nam_head.code + sub_code
+                name = bh.sub_head.local_description or bh.sub_head.nam_head.name
+                account_type = bh.sub_head.nam_head.account_type
+            elif bh.nam_head:
+                code = bh.nam_head.code
+                name = bh.nam_head.name
+                account_type = bh.nam_head.account_type
+            else:
+                # Shouldn't happen, but handle gracefully
+                continue
+            
             # Categorize budget head
-            code = bh.global_head.code
             if code.startswith('A01'):
                 category = 'Salary'
             elif code.startswith(('A03', 'A04')):
@@ -2225,10 +2506,10 @@ def smart_budget_head_search_api(request):
             results.append({
                 'id': bh.id,
                 'code': code,
-                'name': bh.local_description or bh.global_head.name,
-                'display_text': f"{code} - {bh.global_head.name}",
+                'name': name,
+                'display_text': f"{code} - {name}",
                 'category': category,
-                'account_type': bh.global_head.account_type,
+                'account_type': account_type,
                 'function_code': bh.function.code if bh.function else '',
                 'department_name': bh.department.name if bh.department else '',
                 'budget': {
@@ -2271,15 +2552,27 @@ def smart_budget_head_search_api(request):
         favorite_heads = BudgetHeadFavorite.objects.filter(
             user=user,
             organization=org
-        ).select_related('budget_head__global_head').order_by('-created_at')[:5]
+        ).select_related(
+            'budget_head__nam_head',
+            'budget_head__sub_head__nam_head'
+        ).order_by('-created_at')[:5]
         
-        favorites = [
-            {
-                'id': fav.budget_head.id,
-                'code': fav.budget_head.global_head.code,
-                'name': fav.budget_head.name,
-            } for fav in favorite_heads
-        ]
+        for fav in favorite_heads:
+            bh = fav.budget_head
+            if bh.sub_head:
+                code = bh.sub_head.code
+                name = bh.sub_head.local_description or bh.sub_head.nam_head.name
+            elif bh.nam_head:
+                code = bh.nam_head.code
+                name = bh.nam_head.name
+            else:
+                continue
+            
+            favorites.append({
+                'id': bh.id,
+                'code': code,
+                'name': name,
+            })
     
     # Get recently used if requested
     recently_used = []
@@ -2287,16 +2580,28 @@ def smart_budget_head_search_api(request):
         recent_usage = BudgetHeadUsageHistory.objects.filter(
             user=user,
             organization=org
-        ).select_related('budget_head__global_head').order_by('-last_used')[:5]
+        ).select_related(
+            'budget_head__nam_head',
+            'budget_head__sub_head__nam_head'
+        ).order_by('-last_used')[:5]
         
-        recently_used = [
-            {
-                'id': usage.budget_head.id,
-                'code': usage.budget_head.global_head.code,
-                'name': usage.budget_head.name,
+        for usage in recent_usage:
+            bh = usage.budget_head
+            if bh.sub_head:
+                code = bh.sub_head.code
+                name = bh.sub_head.local_description or bh.sub_head.nam_head.name
+            elif bh.nam_head:
+                code = bh.nam_head.code
+                name = bh.nam_head.name
+            else:
+                continue
+            
+            recently_used.append({
+                'id': bh.id,
+                'code': code,
+                'name': name,
                 'usage_count': usage.usage_count,
-            } for usage in recent_usage
-        ]
+            })
     
     return JsonResponse({
         'results': results,
@@ -2306,7 +2611,13 @@ def smart_budget_head_search_api(request):
             'more': pagination_info.get('more', False),
             'total': pagination_info.get('total', 0),
             'page': pagination_info.get('page', 1),
-        }
+        },
+        'debug_info': {
+            'department_id': department_id,
+            'function_id': function_id,
+            'search_term': search_term,
+            'total_count': pagination_info.get('total', 0),
+        } if request.GET.get('debug') == '1' else None
     })
 
 

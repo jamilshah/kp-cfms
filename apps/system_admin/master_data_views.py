@@ -19,7 +19,7 @@ from django.urls import reverse_lazy
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 
 from apps.core.models import Division, District, Tehsil, Organization
-from apps.finance.models import Fund, BudgetHead, GlobalHead
+from apps.finance.models import Fund, BudgetHead, NAMHead
 from apps.budgeting.models import Department, DesignationMaster, BPSSalaryScale
 from apps.users.models import Role
 from apps.users.permissions import SuperAdminRequiredMixin
@@ -470,16 +470,19 @@ class TehsilDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
 
 
 class GlobalHeadListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
-    """List all global heads with scope and department information."""
-    model = GlobalHead
+    """List all NAM heads (Level 4 official reporting heads) with scope information."""
+    model = NAMHead
     template_name = 'system_admin/master_data/global_head_list.html'
     context_object_name = 'global_heads'
     paginate_by = 50
     
     def get_queryset(self):
-        queryset = GlobalHead.objects.select_related(
+        queryset = NAMHead.objects.select_related(
             'minor', 'minor__major'
-        ).prefetch_related('applicable_departments').order_by('code')
+        ).prefetch_related(
+            'applicable_departments',
+            'applicable_functions'
+        ).order_by('code')
         
         # Search filter
         search_query = self.request.GET.get('search')
@@ -506,55 +509,55 @@ class GlobalHeadListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
 
 
 class GlobalHeadCreateView(LoginRequiredMixin, SuperAdminRequiredMixin, CreateView):
-    """Create a new global head."""
-    model = GlobalHead
+    """Create a new NAM head (Level 4)."""
+    model = NAMHead
     form_class = GlobalHeadForm
     template_name = 'system_admin/master_data/global_head_form.html'
     success_url = reverse_lazy('system_admin:global_head_list')
     
     def form_valid(self, form):
-        messages.success(self.request, f'Global Head "{form.instance.code} - {form.instance.name}" created successfully.')
+        messages.success(self.request, f'NAM Head "{form.instance.code} - {form.instance.name}" created successfully.')
         return super().form_valid(form)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['title'] = 'Add Global Head'
+        context['title'] = 'Add NAM Head'
         context['is_edit'] = False
         return context
 
 
 class GlobalHeadUpdateView(LoginRequiredMixin, SuperAdminRequiredMixin, UpdateView):
-    """Update a global head."""
-    model = GlobalHead
+    """Update a NAM head (Level 4)."""
+    model = NAMHead
     form_class = GlobalHeadForm
     template_name = 'system_admin/master_data/global_head_form.html'
     success_url = reverse_lazy('system_admin:global_head_list')
     
     def form_valid(self, form):
-        messages.success(self.request, f'Global Head "{form.instance.code}" updated successfully.')
+        messages.success(self.request, f'NAM Head "{form.instance.code}" updated successfully.')
         return super().form_valid(form)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['title'] = 'Edit Global Head'
+        context['title'] = 'Edit NAM Head'
         context['is_edit'] = True
         return context
 
 
 
 class GlobalHeadDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
-    """Delete a global head."""
-    model = GlobalHead
+    """Delete a NAM head (Level 4)."""
+    model = NAMHead
     template_name = 'system_admin/master_data/confirm_delete.html'
     success_url = reverse_lazy('system_admin:global_head_list')
     
     def form_valid(self, form):
-        messages.success(self.request, f'Global Head "{self.object.code}" deleted.')
+        messages.success(self.request, f'NAM Head "{self.object.code}" deleted.')
         return super().form_valid(form)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['item_type'] = 'Global Head'
+        context['item_type'] = 'NAM Head'
         context['item_name'] = f"{self.object.code} - {self.object.name}"
         context['cancel_url'] = reverse_lazy('system_admin:global_head_list')
         return context

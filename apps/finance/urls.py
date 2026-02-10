@@ -58,10 +58,26 @@ from apps.finance.views import (
 )
 
 from apps.finance.views_coa_configuration import (
-    ConfigureDepartmentFunctionHeadView,
-    BudgetHeadDepartmentAssignmentView,
     DepartmentFunctionConfigurationMatrixView,
     DepartmentFunctionConfigurationDetailView,
+)
+
+from apps.finance.views_coa_mapping import (
+    BudgetHeadDepartmentAssignmentView,
+)
+
+from apps.finance.views_create_budget_heads_ui import (
+    CreateBudgetHeadsFromConfigUIView,
+)
+
+from apps.finance.views_subhead_api import (
+    NAMHeadSubHeadsAPIView,
+)
+
+from apps.finance.views_subhead import (
+    SubHeadListView,
+    SubHeadCreateView,
+    SubHeadUpdateView,
 )
 
 app_name = 'finance'
@@ -75,9 +91,18 @@ urlpatterns = [
     path('budget-heads/', BudgetHeadListView.as_view(), name='budget_head_list'),
     
     # CoA Configuration (Super Admin - Provincial Level)
-    path('configure-dept-func-head/', ConfigureDepartmentFunctionHeadView.as_view(), name='configure_dept_func_head'),
+    # PRIMARY ACCESS CONTROL INTERFACE
     path('dept-func-config-matrix/', DepartmentFunctionConfigurationMatrixView.as_view(), name='dept_func_config_matrix'),
     path('dept-func-config/<int:dept_id>/<int:func_id>/', DepartmentFunctionConfigurationDetailView.as_view(), name='dept_func_config_detail'),
+    path('create-budget-heads-from-config-ui/', CreateBudgetHeadsFromConfigUIView.as_view(), name='create_budget_heads_from_config_ui'),
+    
+    # Sub-Head Management (Level 5 Master Data)
+    path('subheads/', SubHeadListView.as_view(), name='subhead_list'),
+    path('subheads/create/', SubHeadCreateView.as_view(), name='subhead_create'),
+    path('subheads/<int:pk>/edit/', SubHeadUpdateView.as_view(), name='subhead_edit'),
+    
+    # NAM Head API endpoints
+    path('nam-head/<int:nam_head_id>/subheads/', NAMHeadSubHeadsAPIView.as_view(), name='nam_head_subheads_api'),
     
     # CSV Import/Export for Sub-Heads
     path('subheads/csv-template/', SubHeadCSVTemplateView.as_view(), name='subhead_csv_template'),
@@ -87,8 +112,8 @@ urlpatterns = [
     path('global-heads/csv-template/', GlobalHeadCSVTemplateView.as_view(), name='global_head_csv_template'),
     path('global-heads/csv-import/', GlobalHeadCSVImportView.as_view(), name='global_head_csv_import'),
     
-    # Legacy Data Cleanup
-    path('budget-head-departments/', BudgetHeadDepartmentAssignmentView.as_view(), name='budget_head_departments'),
+    # DEPRECATED: Department assignment is now automatic via DepartmentFunctionConfiguration
+    # path('budget-head-departments/', BudgetHeadDepartmentAssignmentView.as_view(), name='budget_head_departments'),
     
     # Bank Statement Management
     path('statements/', BankStatementListView.as_view(), name='statement_list'),

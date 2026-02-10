@@ -1,0 +1,1178 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Property Map (GIS) - {{ block.super }}{% endblock %}
+
+{% block extra_css %}
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+
+<!-- Leaflet MarkerCluster CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin=""/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin=""/>
+
+<!-- Leaflet Draw CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" crossorigin=""/>
+
+<style>
+    body {
+        overflow: hidden;
+    }
+    
+    #map-container {
+        position: fixed;
+        top: 56px;
+        left: 250px;
+        right: 0;
+        bottom: 0;
+        z-index: 1;
+    }
+    
+    #map {
+        width: 100%;
+        height: 100%;
+    }
+    
+    /* Sidebar */
+    #filter-sidebar {
+        position: fixed;
+        top: 56px;
+        right: -400px;
+        width: 400px;
+        height: calc(100vh - 56px);
+        background: white;
+        box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+        z-index: 1000;
+        transition: right 0.3s ease;
+        overflow-y: auto;
+    }
+    
+    #filter-sidebar.open {
+        right: 0;
+    }
+    
+    .sidebar-header {
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    
+    .sidebar-content {
+        padding: 20px;
+    }
+    
+    .filter-group {
+        margin-bottom: 20px;
+    }
+    
+    .filter-group label {
+        font-weight: 600;
+        margin-bottom: 8px;
+        display: block;
+        color: #2c3e50;
+    }
+    
+    /* Map controls */
+    .map-controls {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        z-index: 1000;
+        display: flex;
+        gap: 10px;
+    }
+    
+    .map-btn {
+        background: white;
+        border: 2px solid rgba(0,0,0,0.2);
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        transition: all 0.3s ease;
+    }
+    
+    .map-btn:hover {
+        background: #f8f9fa;
+        border-color: #667eea;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+    
+    .map-btn.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: #667eea;
+    }
+    
+    .map-btn i {
+        margin-right: 5px;
+    }
+    
+    /* Stats widget */
+    #stats-widget {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        background: white;
+        padding: 15px 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        z-index: 1000;
+        display: flex;
+        gap: 20px;
+    }
+    
+    .stat-item {
+        text-align: center;
+    }
+    
+    .stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #2c3e50;
+    }
+    
+    .stat-label {
+        font-size: 11px;
+        color: #7f8c8d;
+        text-transform: uppercase;
+        margin-top: 5px;
+    }
+    
+    /* Custom marker styles */
+    .custom-marker {
+        background: transparent;
+        border: none;
+    }
+    
+    .marker-pin {
+        width: 30px;
+        height: 30px;
+        border-radius: 50% 50% 50% 0;
+        position: absolute;
+        transform: rotate(-45deg);
+        left: 50%;
+        top: 50%;
+        margin: -15px 0 0 -15px;
+    }
+    
+    .marker-pin::after {
+        content: '';
+        width: 20px;
+        height: 20px;
+        margin: 5px 0 0 5px;
+        background: white;
+        position: absolute;
+        border-radius: 50%;
+    }
+    
+    /* Popup styling */
+    .leaflet-popup-content-wrapper {
+        border-radius: 10px;
+        padding: 0;
+        overflow: hidden;
+    }
+    
+    .popup-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px;
+        margin: 0;
+    }
+    
+    .popup-body {
+        padding: 15px;
+    }
+    
+    .popup-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #ecf0f1;
+    }
+    
+    .popup-row:last-child {
+        border-bottom: none;
+    }
+    
+    .popup-label {
+        font-weight: 600;
+        color: #7f8c8d;
+    }
+    
+    .popup-value {
+        color: #2c3e50;
+    }
+    
+    .popup-actions {
+        padding: 15px;
+        background: #f8f9fa;
+        display: flex;
+        gap: 10px;
+    }
+    
+    /* Legend */
+    .legend {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        z-index: 1000;
+    }
+    
+    .legend-title {
+        font-weight: 700;
+        margin-bottom: 10px;
+        color: #2c3e50;
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        margin-right: 10px;
+        border: 2px solid rgba(0,0,0,0.2);
+    }
+    
+    /* Loading overlay */
+    #loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.9);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        flex-direction: column;
+    }
+    
+    .spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    @keyframes pulse {
+        0% {
+            transform: scale(1);
+            opacity: 0.3;
+        }
+        50% {
+            transform: scale(1.5);
+            opacity: 0.1;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 0.3;
+        }
+    }
+    
+    /* Ghost asset marker */
+    .ghost-asset-marker {
+        background: transparent;
+        border: none;
+    }
+    
+    /* Marker tooltips - lightweight styling */
+    .marker-tooltip {
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 12px;
+        font-weight: 500;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .marker-tooltip::before {
+        border-top-color: rgba(0, 0, 0, 0.8);
+    }
+    
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+        #map-container {
+            left: 0;
+        }
+        
+        #filter-sidebar {
+            width: 100%;
+        }
+        
+        .map-controls {
+            flex-direction: column;
+        }
+        
+        #stats-widget {
+            flex-direction: column;
+            gap: 10px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="map-container">
+    <!-- Loading overlay -->
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <p class="mt-3">Loading properties...</p>
+    </div>
+    
+    <!-- Map controls -->
+    <div class="map-controls">
+        <button class="map-btn" id="toggle-filters">
+            <i class="bi bi-funnel"></i> Filters
+        </button>
+        <button class="map-btn" id="toggle-revenue-shadow">
+            <i class="bi bi-circle"></i> Revenue Shadow
+        </button>
+        <button class="map-btn" id="toggle-ghost-assets">
+            <i class="bi bi-exclamation-triangle"></i> Ghost Assets
+        </button>
+        <button class="map-btn" id="toggle-draw-help">
+            <i class="bi bi-question-circle"></i> Help
+        </button>
+        <button class="map-btn" id="locate-me">
+            <i class="bi bi-geo-alt"></i> My Location
+        </button>
+        <button class="map-btn" id="fullscreen" onclick="window.location.href='/property/map/fullscreen/'">
+            <i class="bi bi-arrows-fullscreen"></i> Fullscreen Mode
+        </button>
+    </div>
+    
+    <!-- Stats widget -->
+    <div id="stats-widget">
+        <div class="stat-item">
+            <div class="stat-value" id="stat-total">{{ total_properties }}</div>
+            <div class="stat-label">Total</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value text-success" id="stat-rented">0</div>
+            <div class="stat-label">Rented</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value text-danger" id="stat-vacant">0</div>
+            <div class="stat-label">Vacant</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value text-warning" id="stat-litigation">0</div>
+            <div class="stat-label">Litigation</div>
+        </div>
+    </div>
+    
+    <!-- Legend -->
+    <div class="legend">
+        <div class="legend-title">Property Status</div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #28a745;"></div>
+            <span>Rented Out</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #dc3545;"></div>
+            <span>Vacant</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffc107;"></div>
+            <span>Under Litigation</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #007bff;"></div>
+            <span>Self Use</span>
+        </div>
+        
+        <div class="legend-title" style="margin-top: 15px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">Analytical Layers</div>
+        <div class="legend-item" style="flex-direction: column; align-items: flex-start; gap: 3px;">
+            <span style="font-weight: 500;"><i class="bi bi-circle"></i> Revenue Shadow</span>
+            <span style="font-size: 10px; opacity: 0.7; line-height: 1.3;">Circles sized by annual rent (larger = higher revenue)</span>
+        </div>
+        <div class="legend-item" style="flex-direction: column; align-items: flex-start; gap: 3px;">
+            <span style="font-weight: 500;"><i class="bi bi-exclamation-triangle"></i> Ghost Assets</span>
+            <span style="font-size: 10px; opacity: 0.7; line-height: 1.3;">Vacant properties or zero-revenue assets needing investigation</span>
+        </div>
+    </div>
+    
+    <!-- Map -->
+    <div id="map"></div>
+</div>
+
+<!-- Filter Sidebar -->
+<div id="filter-sidebar">
+    <div class="sidebar-header">
+        <h5 class="mb-0">
+            <i class="bi bi-funnel"></i> Filter Properties
+        </h5>
+    </div>
+    <div class="sidebar-content">
+        <form id="filter-form">
+            <!-- Search -->
+            <div class="filter-group">
+                <label for="search">
+                    <i class="bi bi-search"></i> Search
+                </label>
+                <input type="text" class="form-control" id="search" 
+                       placeholder="Property name, address, mauza...">
+            </div>
+            
+            <!-- Property Type -->
+            <div class="filter-group">
+                <label for="property-type">
+                    <i class="bi bi-building"></i> Property Type
+                </label>
+                <select class="form-select" id="property-type">
+                    <option value="">All Types</option>
+                    {% for type_code, type_label in property_types %}
+                    <option value="{{ type_code }}">{{ type_label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Status -->
+            <div class="filter-group">
+                <label for="status">
+                    <i class="bi bi-tag"></i> Status
+                </label>
+                <select class="form-select" id="status">
+                    <option value="">All Status</option>
+                    {% for status_code, status_label in property_statuses %}
+                    <option value="{{ status_code }}">{{ status_label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- District -->
+            <div class="filter-group">
+                <label for="district">
+                    <i class="bi bi-map"></i> District
+                </label>
+                <select class="form-select" id="district">
+                    <option value="">All Districts</option>
+                    {% for district in districts %}
+                    <option value="{{ district.id }}">{{ district.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <!-- Area Range -->
+            <div class="filter-group">
+                <label>
+                    <i class="bi bi-rulers"></i> Area (Marlas)
+                </label>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <input type="number" class="form-control" id="area-min" 
+                               placeholder="Min" step="0.01">
+                    </div>
+                    <div class="col-6">
+                        <input type="number" class="form-control" id="area-max" 
+                               placeholder="Max" step="0.01">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Rent Range -->
+            <div class="filter-group">
+                <label>
+                    <i class="bi bi-cash"></i> Annual Rent (₨)
+                </label>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <input type="number" class="form-control" id="rent-min" 
+                               placeholder="Min">
+                    </div>
+                    <div class="col-6">
+                        <input type="number" class="form-control" id="rent-max" 
+                               placeholder="Max">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Actions -->
+            <div class="d-grid gap-2">
+                <button type="button" class="btn btn-primary" id="apply-filters">
+                    <i class="bi bi-check2"></i> Apply Filters
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="reset-filters">
+                    <i class="bi bi-arrow-counterclockwise"></i> Reset
+                </button>
+            </div>
+        </form>
+        
+        <!-- Quick stats in sidebar -->
+        <hr class="my-4">
+        <div>
+            <h6 class="mb-3">Statistics</h6>
+            <div class="d-flex justify-content-between mb-2">
+                <span>Total Properties:</span>
+                <strong id="sidebar-total">{{ total_properties }}</strong>
+            </div>
+            <div class="d-flex justify-content-between mb-2">
+                <span>On Map:</span>
+                <strong id="sidebar-on-map">0</strong>
+            </div>
+            <div class="d-flex justify-content-between mb-2">
+                <span>Filtered:</span>
+                <strong id="sidebar-filtered">0</strong>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+<!-- Leaflet MarkerCluster JS -->
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<!-- Leaflet Draw JS -->
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+<!-- Leaflet Heat JS -->
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+<script>
+    // Configuration
+    const API_ENDPOINT = "{% url 'property:api_geojson' %}";
+    const STATS_ENDPOINT = "{% url 'property:api_stats' %}";
+    const PESHAWAR_CENTER = [34.0151, 71.5249];  // Peshawar coordinates
+    
+    // Initialize map and layers
+    let map, markers, heatLayer;
+    let revenueShadowLayer, ghostAssetLayer;
+    let allProperties = [];
+    let layersActive = {
+        revenueShadow: false,
+        ghostAssets: false
+    };
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeMap();
+        loadProperties();
+        setupEventListeners();
+    });
+    
+    function initializeMap() {
+        // Create map centered on Peshawar
+        map = L.map('map', {
+            center: PESHAWAR_CENTER,
+            zoom: 13,
+            zoomControl: false
+        });
+        
+        // Add zoom control to top right
+        L.control.zoom({
+            position: 'topright'
+        }).addTo(map);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+        
+        // Add scale control
+        L.control.scale({
+            position: 'bottomleft'
+        }).addTo(map);
+        
+        // Initialize marker cluster group
+        markers = L.markerClusterGroup({
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true,
+            maxClusterRadius: 50
+        });
+        
+        map.addLayer(markers);
+        
+        // Add drawing tools
+        const drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+        
+        const drawControl = new L.Control.Draw({
+            position: 'topright',
+            draw: {
+                polyline: {
+                    shapeOptions: {
+                        color: '#667eea',
+                        weight: 3
+                    },
+                    metric: true
+                },
+                polygon: {
+                    shapeOptions: {
+                        color: '#667eea'
+                    }
+                },
+                circle: true,
+                rectangle: true,
+                marker: false,
+                circlemarker: false
+            },
+            edit: {
+                featureGroup: drawnItems,
+                remove: true
+            }
+        });
+        
+        map.addControl(drawControl);
+        
+        // Add drawing instructions
+        const instructionsDiv = L.DomUtil.create('div', 'drawing-instructions');
+        instructionsDiv.innerHTML = `
+            <div style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); display: none; max-width: 350px;" id="draw-help">
+                <h6 style="margin: 0 0 10px 0; color: #667eea;">
+                    <i class="bi bi-tools"></i> Drawing Tools Guide
+                </h6>
+                <ul style="margin: 5px 0; padding-left: 20px; font-size: 13px; line-height: 1.6;">
+                    <li><strong>📐 Rectangle:</strong> Click once to start corner, move mouse to desired opposite corner, click again to finish</li>
+                    <li><strong>🔷 Polygon:</strong> Click for each corner, double-click on last point OR click on first point to close the shape</li>
+                    <li><strong>⭕ Circle:</strong> Click center point, move mouse to set radius, click again to finish</li>
+                    <li><strong>📏 Line (Distance):</strong> Click for each point along the line, double-click on last point to finish</li>
+                </ul>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; font-size: 11px; color: #666;">
+                    <strong>Tip:</strong> Use the toolbar on the right side of the map to select a drawing tool. Click the trash icon to delete shapes.
+                </div>
+            </div>
+        `;
+        document.body.appendChild(instructionsDiv);
+        
+        // Show/hide instructions when drawing starts/stops
+        map.on('draw:drawstart', function() {
+            document.getElementById('draw-help').style.display = 'block';
+            document.getElementById('draw-help').style.position = 'fixed';
+            document.getElementById('draw-help').style.top = '120px';
+            document.getElementById('draw-help').style.right = '20px';
+            document.getElementById('draw-help').style.zIndex = '1001';
+        });
+        
+        map.on('draw:drawstop', function() {
+            document.getElementById('draw-help').style.display = 'none';
+        });
+        
+        // Handle drawn shapes
+        map.on(L.Draw.Event.CREATED, function(e) {
+            const layer = e.layer;
+            drawnItems.addLayer(layer);
+            
+            // Calculate area/distance
+            if (e.layerType === 'polygon' || e.layerType === 'rectangle') {
+                // Calculate area using Leaflet's built-in method
+                let area = 0;
+                const latlngs = layer.getLatLngs()[0];
+                
+                // Simple spherical area calculation
+                if (latlngs && latlngs.length > 2) {
+                    // Use turf or simple calculation
+                    const bounds = layer.getBounds();
+                    const ne = bounds.getNorthEast();
+                    const sw = bounds.getSouthWest();
+                    
+                    // Approximate area in square meters (rough calculation)
+                    const latDiff = (ne.lat - sw.lat) * 111320; // 1 degree lat ≈ 111.32 km
+                    const lngDiff = (ne.lng - sw.lng) * 111320 * Math.cos(sw.lat * Math.PI / 180);
+                    area = Math.abs(latDiff * lngDiff);
+                }
+                
+                const areaMarlas = (area / 20.9).toFixed(2);
+                const areaSqft = (area * 10.764).toFixed(2);
+                layer.bindPopup(`
+                    <strong>Measurement Complete!</strong><br>
+                    Area: ${areaMarlas} marlas<br>
+                    ${area.toFixed(2)} sq.m<br>
+                    ${areaSqft} sq.ft
+                `).openPopup();
+            } else if (e.layerType === 'polyline') {
+                let distance = 0;
+                const latlngs = layer.getLatLngs();
+                for (let i = 0; i < latlngs.length - 1; i++) {
+                    distance += latlngs[i].distanceTo(latlngs[i + 1]);
+                }
+                layer.bindPopup(`Distance: ${(distance / 1000).toFixed(2)} km`).openPopup();
+            }
+        });
+    }
+    
+    function loadProperties(filters = {}) {
+        // Show loading
+        document.getElementById('loading-overlay').style.display = 'flex';
+        
+        // Build query string
+        const params = new URLSearchParams(filters);
+        const url = `${API_ENDPOINT}?${params.toString()}`;
+        
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.message || data.error);
+                }
+                if (!data.features || !Array.isArray(data.features)) {
+                    throw new Error('Invalid response format');
+                }
+                allProperties = data.features;
+                renderMarkers(data.features);
+                updateStats(data.features);
+                hideLoading();
+            })
+            .catch(error => {
+                console.error('Error loading properties:', error);
+                hideLoading();
+                alert('Error loading properties: ' + error.message + '\n\nPlease check the browser console for details.');
+            });
+    }
+    
+    function renderMarkers(features) {
+        // Clear existing markers
+        markers.clearLayers();
+        
+        // Add markers for each property - OPTIMIZED: Use CircleMarkers instead of divIcon
+        features.forEach(feature => {
+            const [lng, lat] = feature.geometry.coordinates;
+            const props = feature.properties;
+            
+            // Create lightweight CircleMarker (much faster than divIcon)
+            const marker = L.circleMarker([lat, lng], {
+                radius: 8,
+                fillColor: props.color,
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            });
+            
+            // Lazy popup creation - only build when user clicks
+            marker.on('click', function() {
+                // Fetch full property details on-demand
+                fetch(`/property/api/property/${props.id}/`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const popupContent = `
+                            <div class="popup-header">
+                                <h6 class="mb-0">${data.name || 'N/A'}</h6>
+                            </div>
+                            <div class="popup-body">
+                                <div class="popup-row">
+                                    <span class="popup-label">Type:</span>
+                                    <span class="popup-value">${data.type || 'N/A'}</span>
+                                </div>
+                                <div class="popup-row">
+                                    <span class="popup-label">Status:</span>
+                                    <span class="popup-value badge" style="background: ${props.color};">${data.status || 'N/A'}</span>
+                                </div>
+                                <div class="popup-row">
+                                    <span class="popup-label">Area:</span>
+                                    <span class="popup-value">${data.area_marlas || '0'} marlas</span>
+                                </div>
+                                <div class="popup-row">
+                                    <span class="popup-label">Annual Rent:</span>
+                                    <span class="popup-value">₨ ${data.annual_rent || 'N/A'}</span>
+                                </div>
+                                <div class="popup-row">
+                                    <span class="popup-label">District:</span>
+                                    <span class="popup-value">${data.district || 'N/A'}</span>
+                                </div>
+                                <div class="popup-row">
+                                    <span class="popup-label">Mauza:</span>
+                                    <span class="popup-value">${data.mauza || 'N/A'}</span>
+                                </div>
+                            </div>
+                            <div class="popup-actions">
+                                <a href="/property/properties/${props.id}/" class="btn btn-sm btn-primary flex-fill">
+                                    <i class="bi bi-eye"></i> View
+                                </a>
+                                <a href="/property/properties/${props.id}/edit/" class="btn btn-sm btn-outline-primary flex-fill">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </a>
+                            </div>
+                        `;
+                        marker.bindPopup(popupContent, {
+                            maxWidth: 300,
+                            className: 'custom-popup'
+                        }).openPopup();
+                    })
+                    .catch(error => {
+                        console.error('Error loading property details:', error);
+                        marker.bindPopup(`<p>Error loading details</p>`).openPopup();
+                    });
+            });
+            
+            // Add simple tooltip for quick info (no API call needed)
+            marker.bindTooltip(props.name, {
+                permanent: false,
+                direction: 'top',
+                className: 'marker-tooltip'
+            });
+            
+            markers.addLayer(marker);
+        });
+        
+        // Fit map to markers if we have any
+        if (features.length > 0 && markers.getBounds().isValid()) {
+            map.fitBounds(markers.getBounds(), { padding: [50, 50] });
+        }
+        
+        // Update sidebar stats
+        document.getElementById('sidebar-on-map').textContent = features.length;
+        document.getElementById('sidebar-filtered').textContent = features.length;
+    }
+    
+    function updateStats(features) {
+        let rented = 0, vacant = 0, litigation = 0;
+        
+        features.forEach(feature => {
+            const status = feature.properties.status_code;
+            if (status === 'RENTED_OUT') rented++;
+            else if (status === 'VACANT') vacant++;
+            else if (status === 'UNDER_LITIGATION') litigation++;
+        });
+        
+        document.getElementById('stat-total').textContent = features.length;
+        document.getElementById('stat-rented').textContent = rented;
+        document.getElementById('stat-vacant').textContent = vacant;
+        document.getElementById('stat-litigation').textContent = litigation;
+    }
+    
+    function hideLoading() {
+        document.getElementById('loading-overlay').style.display = 'none';
+    }
+    
+    function toggleRevenueShadow() {
+        const button = document.getElementById('toggle-revenue-shadow');
+        
+        if (layersActive.revenueShadow) {
+            // Remove layer
+            if (revenueShadowLayer) {
+                map.removeLayer(revenueShadowLayer);
+            }
+            layersActive.revenueShadow = false;
+            button.classList.remove('active');
+        } else {
+            // Add layer
+            renderRevenueShadow();
+            layersActive.revenueShadow = true;
+            button.classList.add('active');
+        }
+    }
+    
+    function renderRevenueShadow() {
+        // Remove existing layer
+        if (revenueShadowLayer) {
+            map.removeLayer(revenueShadowLayer);
+        }
+        
+        revenueShadowLayer = L.layerGroup();
+        
+        // Find max rent for scaling
+        let maxRent = 0;
+        allProperties.forEach(feature => {
+            const rent = parseFloat(feature.properties.annual_rent) || 0;
+            if (rent > maxRent) maxRent = rent;
+        });
+        
+        // Draw circles for each property
+        allProperties.forEach(feature => {
+            const rent = parseFloat(feature.properties.annual_rent) || 0;
+            if (rent > 0) {
+                const [lng, lat] = feature.geometry.coordinates;
+                
+                // Scale radius based on rent (logarithmic for better visual)
+                const baseRadius = 50; // meters
+                const maxRadius = 500; // meters
+                const radius = baseRadius + (Math.log(rent + 1) / Math.log(maxRent + 1)) * (maxRadius - baseRadius);
+                
+                // Color and opacity based on status
+                let color, opacity;
+                if (feature.properties.status_code === 'RENTED_OUT') {
+                    color = '#28a745';
+                    opacity = 0.4;
+                } else if (feature.properties.status_code === 'VACANT') {
+                    color = '#ffc107';
+                    opacity = 0.3;
+                } else {
+                    color = '#007bff';
+                    opacity = 0.35;
+                }
+                
+                const circle = L.circle([lat, lng], {
+                    radius: radius,
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: opacity,
+                    weight: 1
+                });
+                
+                circle.bindPopup(`
+                    <strong>${feature.properties.name}</strong><br>
+                    Annual Rent: ₨ ${rent.toLocaleString()}<br>
+                    Status: ${feature.properties.status}<br>
+                    <small>Circle size = Revenue potential</small>
+                `);
+                
+                revenueShadowLayer.addLayer(circle);
+            }
+        });
+        
+        map.addLayer(revenueShadowLayer);
+    }
+    
+    function toggleGhostAssets() {
+        const button = document.getElementById('toggle-ghost-assets');
+        
+        if (layersActive.ghostAssets) {
+            // Remove layer
+            if (ghostAssetLayer) {
+                map.removeLayer(ghostAssetLayer);
+            }
+            layersActive.ghostAssets = false;
+            button.classList.remove('active');
+        } else {
+            // Add layer
+            renderGhostAssets();
+            layersActive.ghostAssets = true;
+            button.classList.add('active');
+        }
+    }
+    
+    function renderGhostAssets() {
+        // Remove existing layer
+        if (ghostAssetLayer) {
+            map.removeLayer(ghostAssetLayer);
+        }
+        
+        ghostAssetLayer = L.layerGroup();
+        
+        // Identify ghost assets: Vacant + No rent OR Never generated revenue
+        allProperties.forEach(feature => {
+            const rent = parseFloat(feature.properties.annual_rent) || 0;
+            const status = feature.properties.status_code;
+            
+            // Ghost asset criteria: Vacant with zero rent
+            const isGhost = (status === 'VACANT' || rent === 0);
+            
+            if (isGhost) {
+                const [lng, lat] = feature.geometry.coordinates;
+                
+                // Determine severity
+                let borderColor, iconHtml, severity;
+                if (status === 'VACANT' && rent === 0) {
+                    borderColor = '#dc3545'; // Red - Never generated revenue
+                    iconHtml = '⚠️';
+                    severity = 'Critical';
+                } else if (rent === 0) {
+                    borderColor = '#ff6b6b'; // Light red - No revenue
+                    iconHtml = '⚠️';
+                    severity = 'High';
+                } else {
+                    borderColor = '#ffc107'; // Yellow - Vacant but has rent
+                    iconHtml = '⚠️';
+                    severity = 'Medium';
+                }
+                
+                // Create pulsing marker
+                const ghostIcon = L.divIcon({
+                    className: 'ghost-asset-marker',
+                    html: `
+                        <div style="
+                            position: relative;
+                            width: 40px;
+                            height: 40px;
+                        ">
+                            <div style="
+                                position: absolute;
+                                width: 40px;
+                                height: 40px;
+                                background: ${borderColor};
+                                border-radius: 50%;
+                                opacity: 0.3;
+                                animation: pulse 2s infinite;
+                            "></div>
+                            <div style="
+                                position: absolute;
+                                width: 40px;
+                                height: 40px;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                font-size: 24px;
+                            ">${iconHtml}</div>
+                        </div>
+                    `,
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 20]
+                });
+                
+                const marker = L.marker([lat, lng], { icon: ghostIcon });
+                
+                marker.bindPopup(`
+                    <div style="min-width: 200px;">
+                        <h6 style="color: ${borderColor}; margin: 0 0 10px 0;">
+                            ${iconHtml} Ghost Asset Detected
+                        </h6>
+                        <strong>${feature.properties.name}</strong><br>
+                        <span style="color: ${borderColor};">Severity: ${severity}</span><br>
+                        <hr style="margin: 8px 0;">
+                        Status: <strong>${feature.properties.status}</strong><br>
+                        Annual Rent: <strong>₨ ${rent.toLocaleString()}</strong><br>
+                        Type: ${feature.properties.type}<br>
+                        District: ${feature.properties.district}<br>
+                        <hr style="margin: 8px 0;">
+                        <small style="color: #666;">
+                            ${rent === 0 ? '⚠️ No revenue generated' : ''}
+                            ${status === 'VACANT' ? '⚠️ Property vacant' : ''}
+                        </small>
+                        <div style="margin-top: 10px;">
+                            <a href="/property/properties/${feature.properties.id}/" class="btn btn-sm btn-outline-danger" style="text-decoration: none;">
+                                Investigate →
+                            </a>
+                        </div>
+                    </div>
+                `);
+                
+                ghostAssetLayer.addLayer(marker);
+            }
+        });
+        
+        map.addLayer(ghostAssetLayer);
+        
+        // Show count
+        const count = ghostAssetLayer.getLayers().length;
+        alert(`Found ${count} Ghost Assets (Vacant/No Revenue properties)`);
+    }
+    
+    function setupEventListeners() {
+        // Toggle filters sidebar
+        document.getElementById('toggle-filters').addEventListener('click', function() {
+            document.getElementById('filter-sidebar').classList.toggle('open');
+        });
+        
+        // Toggle drawing help
+        document.getElementById('toggle-draw-help').addEventListener('click', function() {
+            const helpDiv = document.getElementById('draw-help');
+            if (helpDiv.style.display === 'none' || helpDiv.style.display === '') {
+                helpDiv.style.display = 'block';
+                helpDiv.style.position = 'fixed';
+                helpDiv.style.top = '120px';
+                helpDiv.style.right = '20px';
+                helpDiv.style.zIndex = '1001';
+            } else {
+                helpDiv.style.display = 'none';
+            }
+        });
+        
+        // Toggle Revenue Shadow layer
+        document.getElementById('toggle-revenue-shadow').addEventListener('click', toggleRevenueShadow);
+        
+        // Toggle Ghost Assets layer
+        document.getElementById('toggle-ghost-assets').addEventListener('click', toggleGhostAssets);
+        
+        // Close sidebar when clicking outside
+        document.addEventListener('click', function(e) {
+            const sidebar = document.getElementById('filter-sidebar');
+            const toggleBtn = document.getElementById('toggle-filters');
+            const helpDiv = document.getElementById('draw-help');
+            const helpBtn = document.getElementById('toggle-draw-help');
+            
+            if (!sidebar.contains(e.target) && !toggleBtn.contains(e.target)) {
+                sidebar.classList.remove('open');
+            }
+            
+            // Close help if clicking outside
+            if (helpDiv && !helpDiv.contains(e.target) && !helpBtn.contains(e.target)) {
+                helpDiv.style.display = 'none';
+            }
+        });
+        
+        // Apply filters
+        document.getElementById('apply-filters').addEventListener('click', function() {
+            const filters = {
+                search: document.getElementById('search').value,
+                type: document.getElementById('property-type').value,
+                status: document.getElementById('status').value,
+                district: document.getElementById('district').value,
+            };
+            
+            // Remove empty values
+            Object.keys(filters).forEach(key => {
+                if (!filters[key]) delete filters[key];
+            });
+            
+            loadProperties(filters);
+        });
+        
+        // Reset filters
+        document.getElementById('reset-filters').addEventListener('click', function() {
+            document.getElementById('filter-form').reset();
+            loadProperties();
+        });
+        
+        // Locate me
+        document.getElementById('locate-me').addEventListener('click', function() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    map.setView([lat, lng], 15);
+                    L.marker([lat, lng]).addTo(map)
+                        .bindPopup('You are here')
+                        .openPopup();
+                }, function() {
+                    alert('Unable to retrieve your location');
+                });
+            } else {
+                alert('Geolocation is not supported by your browser');
+            }
+        });
+        
+        // Fullscreen
+        document.getElementById('fullscreen').addEventListener('click', function() {
+            if (!document.fullscreenElement) {
+                document.getElementById('map-container').requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        });
+        
+        // Search on Enter key
+        document.getElementById('search').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('apply-filters').click();
+            }
+        });
+    }
+</script>
+{% endblock %}

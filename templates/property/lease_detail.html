@@ -1,0 +1,245 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Lease {{ lease.lease_number }} - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">Lease Details</h1>
+            <p class="text-muted mb-0">{{ lease.lease_number }}</p>
+        </div>
+        <div>
+            {% if lease.status == 'ACTIVE' or lease.status == 'DRAFT' %}
+            <a href="{% url 'property:lease_update' lease.pk %}" class="btn btn-warning">
+                <i class="fas fa-edit"></i> Edit
+            </a>
+            {% endif %}
+            {% if lease.status == 'ACTIVE' %}
+            <a href="{% url 'property:lease_terminate' lease.pk %}" class="btn btn-danger">
+                <i class="fas fa-ban"></i> Terminate
+            </a>
+            {% endif %}
+            <a href="{% url 'property:lease_list' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Status Badge -->
+    <div class="mb-4">
+        {% if lease.status == 'ACTIVE' %}
+            <span class="badge badge-success badge-lg">Active Lease</span>
+        {% elif lease.status == 'EXPIRED' %}
+            <span class="badge badge-warning badge-lg">Expired</span>
+        {% elif lease.status == 'TERMINATED' %}
+            <span class="badge badge-danger badge-lg">Terminated</span>
+        {% elif lease.status == 'RENEWED' %}
+            <span class="badge badge-info badge-lg">Renewed</span>
+        {% else %}
+            <span class="badge badge-secondary badge-lg">{{ lease.get_status_display }}</span>
+        {% endif %}
+    </div>
+
+    <div class="row">
+        <!-- Property & Tenant Info -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-building"></i> Property Information
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p><strong>Property:</strong> 
+                        <a href="{% url 'property:detail' lease.property.pk %}">
+                            {{ lease.property.property_code }}
+                        </a>
+                    </p>
+                    <p><strong>Name:</strong> {{ lease.property.name }}</p>
+                    <p><strong>Address:</strong> {{ lease.property.address }}</p>
+                    <p><strong>Type:</strong> {{ lease.property.get_property_type_display }}</p>
+                    <p><strong>Area:</strong> {{ lease.property.area_marlas }} Marlas</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-user"></i> Tenant Information
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p><strong>Name:</strong> {{ lease.tenant.name }}</p>
+                    {% if lease.tenant.cnic_ntn %}
+                    <p><strong>CNIC/NTN:</strong> {{ lease.tenant.cnic_ntn }}</p>
+                    {% endif %}
+                    {% if lease.tenant.contact_no %}
+                    <p><strong>Contact:</strong> {{ lease.tenant.contact_no }}</p>
+                    {% endif %}
+                    {% if lease.tenant.address %}
+                    <p><strong>Address:</strong> {{ lease.tenant.address }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lease Terms -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-file-contract"></i> Lease Terms
+            </h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <strong>Lease Start:</strong>
+                    <p>{{ lease.lease_start_date|date:"M d, Y" }}</p>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <strong>Lease End:</strong>
+                    <p>
+                        {% if lease.lease_end_date %}
+                            {{ lease.lease_end_date|date:"M d, Y" }}
+                        {% else %}
+                            <span class="text-muted">Month-to-month</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <strong>Duration:</strong>
+                    <p>
+                        {% if lease.lease_duration_months %}
+                            {{ lease.lease_duration_months }} months
+                        {% else %}
+                            Ongoing
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <strong>Monthly Rent:</strong>
+                    <p class="text-success font-weight-bold">Rs. {{ lease.monthly_rent|floatformat:2|intcomma }}</p>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <strong>Security Deposit:</strong>
+                    <p>Rs. {{ lease.security_deposit|floatformat:2|intcomma }}</p>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <strong>Annual Increment:</strong>
+                    <p>{{ lease.annual_increment_percentage }}%</p>
+                </div>
+            </div>
+            {% if lease.remaining_days and lease.status == 'ACTIVE' %}
+            <div class="alert alert-info">
+                <i class="fas fa-clock"></i>
+                <strong>{{ lease.remaining_days }} days</strong> remaining until lease expires
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Agreement Details -->
+    {% if lease.agreement_date or lease.agreement_document or lease.terms_and_conditions %}
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-file-alt"></i> Agreement Details
+            </h6>
+        </div>
+        <div class="card-body">
+            {% if lease.agreement_date %}
+            <p><strong>Agreement Date:</strong> {{ lease.agreement_date|date:"M d, Y" }}</p>
+            {% endif %}
+            {% if lease.agreement_document %}
+            <p><strong>Document:</strong> 
+                <a href="{{ lease.agreement_document.url }}" target="_blank">
+                    <i class="fas fa-download"></i> Download Agreement
+                </a>
+            </p>
+            {% endif %}
+            {% if lease.terms_and_conditions %}
+            <div class="mt-3">
+                <strong>Terms & Conditions:</strong>
+                <p class="mt-2">{{ lease.terms_and_conditions|linebreaks }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Termination Info -->
+    {% if lease.status == 'TERMINATED' %}
+    <div class="card shadow mb-4 border-danger">
+        <div class="card-header py-3 bg-danger text-white">
+            <h6 class="m-0 font-weight-bold">
+                <i class="fas fa-ban"></i> Termination Details
+            </h6>
+        </div>
+        <div class="card-body">
+            <p><strong>Termination Date:</strong> {{ lease.termination_date|date:"M d, Y" }}</p>
+            {% if lease.termination_reason %}
+            <p><strong>Reason:</strong></p>
+            <p>{{ lease.termination_reason|linebreaks }}</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Remarks -->
+    {% if lease.remarks %}
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-comment"></i> Remarks
+            </h6>
+        </div>
+        <div class="card-body">
+            {{ lease.remarks|linebreaks }}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Metadata -->
+    <div class="card shadow">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-info-circle"></i> System Information
+            </h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <small class="text-muted">Created:</small>
+                    <p>{{ lease.created_at|date:"M d, Y H:i" }}</p>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted">Created By:</small>
+                    <p>{{ lease.created_by.get_full_name|default:lease.created_by.cnic }}</p>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted">Last Updated:</small>
+                    <p>{{ lease.updated_at|date:"M d, Y H:i" }}</p>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted">Updated By:</small>
+                    <p>{{ lease.updated_by.get_full_name|default:lease.updated_by.cnic|default:"-" }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .badge-lg {
+        font-size: 1.1rem;
+        padding: 0.5rem 1rem;
+    }
+</style>
+{% endblock %}

@@ -32,7 +32,7 @@
                 return;
             }
             
-            const url = `{% url 'finance:load_functions' %}?department=${departmentId}`;
+            const url = `{% url 'expenditure:load_functions' %}?department=${departmentId}`;
             
             fetch(url)
                 .then(response => response.text())
@@ -241,6 +241,12 @@
         const totalFormsInput = document.querySelector('#id_lines-TOTAL_FORMS');
         let currentBudgetHeadOptions = '<option value="">---------</option>';
         
+        console.log('FormSet elements:', {
+            linesContainer: linesContainer,
+            addLineBtn: addLineBtn,
+            totalFormsInput: totalFormsInput
+        });
+        
         // --- Tax Calculation Helper ---
         function updateNetPayableDisplay() {
             const gross = parseFloat(grossAmountInput.value) || 0;
@@ -306,7 +312,9 @@
              
              const deleteBtn = row.querySelector('.delete-row');
              if (deleteBtn) {
-                 deleteBtn.addEventListener('click', function() {
+                 deleteBtn.addEventListener('click', function(e) {
+                     e.preventDefault();
+                     e.stopPropagation();
                      const deleteInput = row.querySelector('input[name$="-DELETE"]');
                      if (deleteInput) {
                          deleteInput.checked = true;
@@ -321,31 +329,38 @@
              // Initialize Select2 in new row
              const select = row.querySelector('select.smart-budget-head-select');
              if (select && typeof $ !== 'undefined') {
+                 console.log('Initializing select for row:', select.id);
                  initSmartBudgetHeadSelect(select);
              }
         }
         
         // Add Line Handler
-        addLineBtn.addEventListener('click', function() {
-            const currentFormCount = parseInt(totalFormsInput.value);
-            const template = document.getElementById('emptyRowTemplate').innerHTML;
-            const newHtml = template.replace(/__prefix__/g, currentFormCount);
-            
-            linesContainer.insertAdjacentHTML('beforeend', newHtml);
-            totalFormsInput.value = currentFormCount + 1;
-            
-            const newRow = linesContainer.lastElementChild;
-            const newSelect = newRow.querySelector('select.smart-budget-head-select');
-            if (newSelect && departmentSelect && departmentSelect.value && functionSelect && functionSelect.value) {
-                // Initialize smart select for new row
-                initSmartBudgetHeadSelect(newSelect);
-            }
-            attachRowListeners(newRow);
-        });
+        if (addLineBtn) {
+            addLineBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('Add Item clicked');
+                const currentFormCount = parseInt(totalFormsInput.value);
+                const template = document.getElementById('emptyRowTemplate').innerHTML;
+                const newHtml = template.replace(/__prefix__/g, currentFormCount);
+                
+                linesContainer.insertAdjacentHTML('beforeend', newHtml);
+                totalFormsInput.value = currentFormCount + 1;
+                
+                const newRow = linesContainer.lastElementChild;
+                console.log('New row added, initializing...');
+                // Select2 initialization is handled by attachRowListeners()
+                attachRowListeners(newRow);
+            });
+        } else {
+            console.error('addLineBtn not found!');
+        }
         
-        // Initial setup for existing rows
+        // Initial setup for existing rows (skip template)
         document.querySelectorAll('.line-row').forEach(row => {
-            attachRowListeners(row);
+            // Don't attach to rows inside hidden template
+            if (!row.closest('#emptyRowTemplate')) {
+                attachRowListeners(row);
+            }
         });
         
         // Initial Calculation
@@ -416,10 +431,23 @@
                 return;
             }
             
+            // Skip template elements
+            if (selectElement.id && selectElement.id.includes('__prefix__')) {
+                console.log('Skipping template element in initSmartBudgetHeadSelect:', selectElement.id);
+                return;
+            }
+            
+            const $select = $(selectElement);
+            
+            // Destroy existing Select2 if present to reinitialize cleanly
+            if ($select.data('select2')) {  
+                console.log('Destroying existing Select2 for:', selectElement.id);
+                $select.select2('destroy');
+            }
+            
             const apiUrl = '{% url 'finance:smart_budget_head_search_api' %}';
             
             // Get current department and function values
-            // IMPORTANT: functionSelect is a Select2, so use jQuery .val() not .value
             const getDepartmentId = () => departmentSelect ? departmentSelect.value : null;
             const getFunctionId = () => {
                 if (!functionSelect) return null;
@@ -431,13 +459,9 @@
                 return functionSelect.value;
             };
             
-            // Destroy existing Select2 if present
-            if ($(selectElement).data('select2')) {
-                $(selectElement).select2('destroy');
-            }
-            
             // Initialize Select2 with comprehensive configuration
-            $(selectElement).select2({
+            console.log('Initializing Select2 for:', selectElement.id);
+            $select.select2({
                 theme: 'bootstrap-5',
                 width: '100%',
                 placeholder: "🔍 Type to search budget heads...",
@@ -627,13 +651,13 @@
                 templateSelection: function(item) {
                     return item.code ? `${item.code} - ${item.name}` : item.text;
                 }
-            }).on('select2:open', function(e) {
+            });
+            
+            // Attach event handlers separately
+            $select.on('select2:open', function(e) {
                 console.log('Select2 dropdown opened for:', this.id);
                 
-                const $select = $(this);
-                
                 // Attach event handlers for favorite stars using event delegation
-                // We need to prevent Select2's selecting event when clicking stars
                 setTimeout(function() {
                     const $dropdown = $('.select2-dropdown');
                     
@@ -685,7 +709,9 @@
                         return false;
                     }
                 });
-            }).on('select2:close', function(e) {
+            });
+            
+            $select.on('select2:close', function(e) {
                 console.log('Select2 dropdown closed for:', this.id);
                 // Clean up event handlers
                 $(this).off('select2:selecting.favstar');
@@ -700,31 +726,15 @@
             
             console.log('Initializing smart selects with dept:', deptId, 'func:', funcId);
             
-            // Only initialize if both dept and func are selected
-            if (!deptId || !funcId) {
-                console.warn('Cannot initialize smart selects: Department or Function not selected');
-                // Clear smart selects if dept/func not selected
-                document.querySelectorAll('.smart-budget-head-select').forEach(function(select) {
-                    if (typeof $ !== 'undefined' && $(select).data('select2')) {
-                        $(select).val(null).trigger('change');
-                    }
-                });
-                return;
-            }
-            
             document.querySelectorAll('.smart-budget-head-select').forEach(function(select) {
-                console.log('Initializing smart select:', select.id);
-                
-                // Check if already initialized
-                if ($(select).data('select2')) {
-                    console.log('Select2 already initialized, just clearing selection');
-                    // Already initialized, just clear and trigger refresh
-                    $(select).val(null).trigger('change');
-                } else {
-                    // Not initialized yet, initialize it
-                    console.log('Initializing Select2 for first time');
-                    initSmartBudgetHeadSelect(select);
+                // Skip template rows (those with __prefix__ in id)
+                if (select.id.includes('__prefix__')) {
+                    console.log('Skipping template select:', select.id);
+                    return;
                 }
+                console.log('Processing smart select:', select.id);
+                // Always initialize - the function handles destroy/recreate
+                initSmartBudgetHeadSelect(select);
             });
         }
         
@@ -760,22 +770,17 @@
         const smartSelects = document.querySelectorAll('.smart-budget-head-select');
         console.log('Found', smartSelects.length, 'smart budget head selects');
         
-        // Initialize immediately if dept and func exist
+        // Initialize all smart selects after a brief delay
         setTimeout(function() {
-            if (departmentSelect && departmentSelect.value && functionSelect && functionSelect.value) {
-                console.log('Initial load with dept:', departmentSelect.value, 'func:', functionSelect.value);
-                initAllSmartSelects();
-            } else {
-                console.log('Initial load: Dept/func not selected yet');
-                console.log('Dept value:', departmentSelect ? departmentSelect.value : 'null');
-                console.log('Func value:', functionSelect ? functionSelect.value : 'null');
-                
-                // Initialize anyway to show the AJAX-powered dropdown
-                smartSelects.forEach(function(select) {
-                    console.log('Force-initializing select:', select.id);
-                    initSmartBudgetHeadSelect(select);
-                });
-            }
+            smartSelects.forEach(function(select) {
+                // Skip template rows
+                if (select.id.includes('__prefix__')) {
+                    console.log('Page load: Skipping template select:', select.id);
+                    return;
+                }
+                console.log('Page load: Initializing select:', select.id);
+                initSmartBudgetHeadSelect(select);
+            });
         }, 500);
     });
 </script>

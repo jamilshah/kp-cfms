@@ -374,7 +374,10 @@ Description: Base template with Bootstrap 5 and navigation.
                             {% if user.is_authenticated %}
                                 <li><span class="dropdown-item-text text-muted">{{ user.get_role_display }}</span></li>
                                 <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{% url 'password_change' %}"><i class="bi bi-key"></i> Change Password</a></li>
+                                {% if user.is_superuser or user.is_staff %}
                                 <li><a class="dropdown-item" href="{% url 'admin:index' %}"><i class="bi bi-gear"></i> Admin</a></li>
+                                {% endif %}
                                 <li>
                                     <form method="post" action="{% url 'logout' %}" class="d-inline">
                                         {% csrf_token %}
@@ -384,7 +387,7 @@ Description: Base template with Bootstrap 5 and navigation.
                                     </form>
                                 </li>
                             {% else %}
-                                <li><a class="dropdown-item" href="{% url 'admin:login' %}"><i class="bi bi-box-arrow-in-right"></i> Login</a></li>
+                                <li><a class="dropdown-item" href="{% url 'login' %}"><i class="bi bi-box-arrow-in-right"></i> Login</a></li>
                             {% endif %}
                         </ul>
                     </li>
@@ -580,6 +583,29 @@ Description: Base template with Bootstrap 5 and navigation.
                 </div>
             </div>
 
+            <!-- Property Management -->
+            <div class="accordion-item bg-transparent border-0 mb-1">
+                <h2 class="accordion-header" id="headingProperty">
+                    <button class="accordion-button collapsed" type="button" 
+                            data-bs-toggle="collapse" data-bs-target="#collapseProperty">
+                        <i class="bi bi-building me-2"></i> Property (GIS)
+                    </button>
+                </h2>
+                <div id="collapseProperty" 
+                     class="accordion-collapse collapse {% if request.resolver_match.app_name == 'property' %}show{% endif %}"
+                     data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body p-2">
+                        <ul class="nav flex-column">
+                            <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'property' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'property:dashboard' %}"><i class="bi bi-speedometer2 me-2"></i> Property Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'properties' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'property:list' %}"><i class="bi bi-building me-2"></i> Properties</a></li>
+                            <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'map' %}active{% endif %}" href="{% url 'property:map' %}"><i class="bi bi-map me-2"></i> GIS Map View</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'lease' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'property:lease_list' %}"><i class="bi bi-file-earmark-text me-2"></i> Lease Agreements</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'csv_import' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'property:csv_import' %}"><i class="bi bi-file-earmark-arrow-up me-2"></i> Import Properties</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
             <!-- Finance / Bank Reconciliation -->
             <div class="accordion-item bg-transparent border-0 mb-1">
                 <h2 class="accordion-header" id="headingFinance">
@@ -619,6 +645,7 @@ Description: Base template with Bootstrap 5 and navigation.
                             <li class="nav-item"><a class="nav-link {% if 'general_ledger' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:general_ledger' %}"><i class="bi bi-book me-2"></i> General Ledger</a></li>
                             <li class="nav-item"><a class="nav-link {% if 'trial_balance' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:trial_balance' %}"><i class="bi bi-calculator me-2"></i> Trial Balance</a></li>
                             <li class="nav-item"><a class="nav-link {% if 'account_statement' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:account_statement' %}"><i class="bi bi-file-earmark-text me-2"></i> Account Statement</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'pending_liabilities' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:pending_liabilities' %}"><i class="bi bi-cash-coin me-2"></i> Pending Liabilities</a></li>
                             <li class="nav-item"><a class="nav-link {% if 'sae' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:sae_list' %}"><i class="bi bi-file-earmark-spreadsheet me-2"></i> SAE Records</a></li>
                         </ul>
 
@@ -652,6 +679,7 @@ Description: Base template with Bootstrap 5 and navigation.
                             <ul class="nav flex-column">
                                 {% if user.organization %}
                                 <li class="nav-item"><a class="nav-link {% if 'tenant_user' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'system_admin:tenant_user_list' org_pk=user.organization.id %}"><i class="bi bi-people me-2"></i> Manage Users</a></li>
+                                <li class="nav-item"><a class="nav-link {% if 'organization_settings' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'system_admin:organization_settings' %}"><i class="bi bi-sliders me-2"></i> Organization Settings</a></li>
                                 {% endif %}
                                 {% if user.is_superuser %}
                                 <li class="nav-item"><a class="nav-link {% if 'coa_hub' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'finance:coa_hub' %}"><i class="bi bi-diagram-3 me-2"></i> CoA Hub</a></li>
@@ -729,10 +757,11 @@ Description: Base template with Bootstrap 5 and navigation.
             });
         });
         
-        // Auto-dismiss alerts after 5 seconds
+        // Auto-dismiss only dismissible alerts after 5 seconds (e.g., Django messages)
+        // Static informational alerts without alert-dismissible class will remain visible
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(function() {
-                var alerts = document.querySelectorAll('.alert');
+                var alerts = document.querySelectorAll('.alert.alert-dismissible');
                 alerts.forEach(function(alert) {
                     var bsAlert = new bootstrap.Alert(alert);
                     bsAlert.close();

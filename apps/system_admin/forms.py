@@ -399,15 +399,15 @@ class RoleForm(forms.ModelForm):
         }
 
 
-from apps.finance.models import GlobalHead
+from apps.finance.models import NAMHead
 
 class GlobalHeadForm(forms.ModelForm):
-    """Form for creating/editing Global Heads."""
+    """Form for creating/editing NAM Heads (Level 4 official reporting heads)."""
     
     class Meta:
-        model = GlobalHead
-        fields = ['code', 'name', 'minor', 'account_type', 'system_code', 
-                  'scope', 'applicable_departments', 'applicable_functions']
+        model = NAMHead
+        fields = ['code', 'name', 'minor', 'account_type', 'scope',
+                  'applicable_departments', 'applicable_functions', 'allow_direct_posting']
         widgets = {
             'code': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -423,9 +423,6 @@ class GlobalHeadForm(forms.ModelForm):
             'account_type': forms.Select(attrs={
                 'class': 'form-select'
             }),
-            'system_code': forms.Select(attrs={
-                'class': 'form-select'
-            }),
             'scope': forms.Select(attrs={
                 'class': 'form-select'
             }),
@@ -436,6 +433,9 @@ class GlobalHeadForm(forms.ModelForm):
             'applicable_functions': forms.SelectMultiple(attrs={
                 'class': 'form-select searchable-select',
                 'size': '5'
+            }),
+            'allow_direct_posting': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
             }),
         }
 

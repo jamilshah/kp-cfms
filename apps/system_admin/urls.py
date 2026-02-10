@@ -23,6 +23,8 @@ urlpatterns = [
     # Organization Management
     path('organizations/', views.OrganizationListView.as_view(), name='organization_list'),
     path('organizations/create/', views.ProvisionOrganizationView.as_view(), name='provision_organization'),
+    path('organizations/settings/', views.OrganizationSettingsView.as_view(), name='organization_settings'),
+    path('organizations/<int:pk>/settings/', views.OrganizationSettingsView.as_view(), name='organization_settings_pk'),
     path('organizations/<int:org_pk>/admin/', views.CreateTenantAdminView.as_view(), name='create_tenant_admin'),
     path('organizations/<int:org_pk>/users/', views.TenantUserListView.as_view(), name='tenant_user_list'),
     path('organizations/<int:org_pk>/users/create/', views.TenantUserCreateView.as_view(), name='tenant_user_create'),

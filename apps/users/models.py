@@ -301,11 +301,14 @@ class CustomUser(AbstractUser):
         verbose_name=_('Designation'),
         help_text=_('Official job title (e.g., Junior Clerk, Superintendent).')
     )
-    department = models.CharField(
-        max_length=100,
+    department = models.ForeignKey(
+        'budgeting.Department',
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
+        related_name='users',
         verbose_name=_('Department'),
-        help_text=_('Associated department or wing.')
+        help_text=_('Department/wing this user belongs to for access control.')
     )
     phone = models.CharField(
         max_length=20,
@@ -505,3 +508,58 @@ class CustomUser(AbstractUser):
         TMO can recommend PUGF posts but LCB must approve.
         """
         return self.is_approver() or self.is_superuser
+    
+    def should_see_own_department_only(self) -> bool:
+        """
+        Check if user should see only their own department's data.
+        
+        Returns True if ALL of the following conditions are met:
+        1. Organization has enforce_department_isolation enabled
+        2. User is NOT a superuser
+        3. User is NOT TMO, Finance Officer, or TMA Admin (they see all departments)
+        4. User has a department assigned
+        
+        Returns:
+            True if user should see only their department's data, False otherwise.
+        """
+        # Superusers always see everything
+        if self.is_superuser:
+            return False
+        
+        # No organization = oversight user, see everything
+        if not self.organization:
+            return False
+        
+        # Check if organization has department isolation enabled
+        if not getattr(self.organization, 'enforce_department_isolation', False):
+            return False
+        
+        # These roles always see all departments regardless of setting
+        if self.is_approver() or self.is_finance_officer() or self.is_tma_admin():
+            return False
+        
+        # User must have a department assigned to filter by it
+        if not self.department:
+            return False
+        
+        return True
+    
+    def get_accessible_departments(self):
+        """
+        Get QuerySet of departments this user can access.
+        
+        Returns:
+            - All departments if user shouldn't be filtered
+            - Only user's department if filtering is enabled
+        """
+        from apps.budgeting.models import Department
+        
+        if not self.should_see_own_department_only():
+            # User can see all departments
+            return Department.objects.filter(is_active=True)
+        
+        # User can only see their own department
+        if self.department:
+            return Department.objects.filter(id=self.department.id)
+        
+        return Department.objects.none()

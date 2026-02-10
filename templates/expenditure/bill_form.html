@@ -422,6 +422,10 @@ Description: Bill Create/Edit Form Template
 <div id="emptyRowTemplate" style="display: none;">
     <div class="card mb-3 line-row">
         <div class="card-body">
+            <!-- Hidden fields -->
+            <input type="hidden" name="lines-__prefix__-id" id="id_lines-__prefix__-id">
+            <input type="hidden" name="lines-__prefix__-DELETE" id="id_lines-__prefix__-DELETE">
+            
             <div class="row mb-3">
                 <div class="col-12">
                     <label class="form-label fw-bold">
@@ -441,11 +445,11 @@ Description: Bill Create/Edit Form Template
             <div class="row">
                 <div class="col-md-8">
                     <label class="form-label">Description</label>
-                    {{ lines.empty_form.description }}
+                    <input type="text" name="lines-__prefix__-description" id="id_lines-__prefix__-description" class="form-control" placeholder="Line description">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Amount (Rs.) <span class="text-danger">*</span></label>
-                    {{ lines.empty_form.amount }}
+                    <input type="number" name="lines-__prefix__-amount" id="id_lines-__prefix__-amount" class="form-control" step="0.01" min="0" required>
                 </div>
                 <div class="col-md-1 d-flex align-items-end">
                     <button type="button" class="btn btn-sm btn-danger delete-row w-100" title="Remove">

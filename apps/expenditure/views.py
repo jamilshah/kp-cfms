@@ -150,8 +150,12 @@ class BillListView(LoginRequiredMixin, ListView):
         queryset = Bill.objects.filter(
             organization=org
         ).select_related(
-            'payee', 'fiscal_year'
+            'payee', 'fiscal_year', 'department'
         ).order_by('-bill_date', '-created_at')
+        
+        # Apply department-level filtering if enabled
+        if user.should_see_own_department_only():
+            queryset = queryset.filter(department=user.department)
         
         # Filter by status if provided
         status = self.request.GET.get('status')
@@ -695,11 +699,17 @@ class PaymentListView(LoginRequiredMixin, ListView):
         if not org:
             return Payment.objects.none()
         
-        return Payment.objects.filter(
+        queryset = Payment.objects.filter(
             organization=org
         ).select_related(
-            'bill', 'bill__payee', 'bank_account'
+            'bill', 'bill__payee', 'bill__department', 'bank_account'
         ).order_by('-cheque_date', '-created_at')
+        
+        # Apply department-level filtering if enabled
+        if user.should_see_own_department_only():
+            queryset = queryset.filter(bill__department=user.department)
+        
+        return queryset
 
 
 class BillAmountAPIView(LoginRequiredMixin, View):

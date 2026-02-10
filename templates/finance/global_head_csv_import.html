@@ -2,7 +2,7 @@
 {% load static %}
 {% load i18n %}
 
-{% block title %}Import Master CoA (Global Heads) - Bulk CSV Upload{% endblock %}
+{% block title %}Import 5-Level CoA - Bulk CSV Upload{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -12,7 +12,8 @@
         padding: 10px;
         margin: 10px 0;
         font-family: monospace;
-        font-size: 0.9em;
+        font-size: 0.85em;
+        overflow-x: auto;
     }
     .instruction-step {
         margin-bottom: 1rem;
@@ -21,7 +22,35 @@
     .error-list {
         max-height: 400px;
         overflow-y: auto;
+        background: #fff;
+        border: 1px solid #dc3545;
+        border-radius: 4px;
+        padding: 10px;
     }
+    .error-list ul {
+        list-style-type: none;
+        padding-left: 0;
+    }
+    .error-list li {
+        padding: 5px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .error-list li:last-child {
+        border-bottom: none;
+    }
+    .level-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-size: 0.8em;
+        font-weight: bold;
+        margin-right: 5px;
+    }
+    .level-1 { background: #e3f2fd; color: #1976d2; }
+    .level-2 { background: #f3e5f5; color: #7b1fa2; }
+    .level-3 { background: #fff3e0; color: #f57c00; }
+    .level-4 { background: #e8f5e9; color: #388e3c; }
+    .level-5 { background: #fce4ec; color: #c2185b; }
 </style>
 {% endblock %}
 
@@ -32,24 +61,22 @@
             <div class="card shadow-sm">
                 <div class="card-header bg-primary text-white">
                     <h4 class="mb-0">
-                        <i class="fas fa-file-csv"></i> Bulk Import Master CoA (Global Heads)
+                        <i class="bi bi-file-earmark-spreadsheet"></i> Bulk Import 5-Level Chart of Accounts
                     </h4>
+                    <p class="mb-0 mt-2"><small>Import Major → Minor → NAM Head → Sub-Head in one go</small></p>
                 </div>
                 <div class="card-body">
                     {% if errors %}
                     <div class="alert alert-danger">
-                        <h5><i class="fas fa-exclamation-triangle"></i> Import Errors ({{ error_count }})</h5>
-                        <p>Please fix the following errors and try again:</p>
+                        <h5><i class="bi bi-exclamation-triangle-fill"></i> Validation Failed: {{ error_count }} Error(s)</h5>
+                        <p class="mb-2"><strong>No data was imported.</strong> Please fix the errors below and re-upload:</p>
                         <div class="error-list">
                             <ul>
                                 {% for error in errors %}
-                                <li>{{ error }}</li>
+                                <li><i class="bi bi-x-circle text-danger"></i> {{ error }}</li>
                                 {% endfor %}
                             </ul>
                         </div>
-                        {% if success_count > 0 %}
-                        <p class="mt-3"><strong>Note:</strong> {{ success_count }} records were validated but not imported due to errors. All records must be valid for import to succeed.</p>
-                        {% endif %}
                     </div>
                     {% endif %}
                     
@@ -57,66 +84,72 @@
                         <!-- Instructions Column -->
                         <div class="col-md-6">
                             <div class="alert alert-info">
-                                <h5><i class="fas fa-info-circle"></i> CSV Format Instructions</h5>
+                                <h5><i class="bi bi-info-circle"></i> 5-Level CoA Structure</h5>
+                                <p>This import creates the complete hierarchy:</p>
+                                <div class="mb-2">
+                                    <span class="level-badge level-1">Level 1</span> Classification: A, C, G, K
+                                </div>
+                                <div class="mb-2">
+                                    <span class="level-badge level-2">Level 2</span> Major Head: A01, C03 (3 chars)
+                                </div>
+                                <div class="mb-2">
+                                    <span class="level-badge level-3">Level 3</span> Minor Head: A011, C038 (4 chars)
+                                </div>
+                                <div class="mb-2">
+                                    <span class="level-badge level-4">Level 4</span> NAM Head: A01101, C03880 (5+ chars)
+                                </div>
+                                <div class="mb-2">
+                                    <span class="level-badge level-5">Level 5</span> Sub-Head: A01101-01 (optional)
+                                </div>
+                            </div>
+                            
+                            <div class="alert alert-success">
+                                <h6><i class="bi bi-check-circle"></i> How It Works</h6>
                                 <div class="instruction-step">
-                                    <strong>1. Download Template</strong>
-                                    <p>Click the button below to download a CSV template with example data.</p>
+                                    <strong>1. Pre-Validation</strong>
+                                    <p>All data is validated <em>before</em> any database changes. Errors are reported with row numbers.</p>
                                 </div>
                                 <div class="instruction-step">
-                                    <strong>2. Fill in Your Data</strong>
-                                    <p>Edit the CSV file with your Global Head (CoA) data. Required columns:</p>
-                                    <ul>
-                                        <li><strong>Object Code:</strong> Unique code (e.g., A01101, C03880)</li>
-                                        <li><strong>Object Name:</strong> Description of the account head</li>
-                                        <li><strong>Minor Head Code:</strong> Parent minor head code (e.g., A011)</li>
-                                        <li><strong>Account Type:</strong> EXP, REV, AST, LIA, or EQT</li>
-                                        <li><strong>Scope:</strong> UNIVERSAL or DEPARTMENTAL</li>
-                                    </ul>
-                                    <p>Optional columns:</p>
-                                    <ul>
-                                        <li><strong>System Code:</strong> Internal system reference code</li>
-                                        <li><strong>Applicable Departments:</strong> Comma-separated department codes (for DEPARTMENTAL scope only)</li>
-                                        <li><strong>Applicable Functions:</strong> Comma-separated function codes</li>
-                                    </ul>
+                                    <strong>2. Atomic Import</strong>
+                                    <p>If validation passes, all levels are created in one transaction. If anything fails, nothing is imported.</p>
                                 </div>
                                 <div class="instruction-step">
-                                    <strong>3. Upload CSV File</strong>
-                                    <p>Select your completed CSV file and click Import.</p>
+                                    <strong>3. Automatic Hierarchy</strong>
+                                    <p>Parent records (Major → Minor → NAM) are automatically created or linked based on codes.</p>
                                 </div>
                             </div>
                             
                             <div class="alert alert-warning">
-                                <h6><i class="fas fa-lightbulb"></i> Tips</h6>
+                                <h6><i class="bi bi-lightbulb"></i> CSV Rules</h6>
                                 <ul class="mb-0">
-                                    <li>Make sure Minor Head codes exist in the system before importing</li>
-                                    <li>Department codes: ADM, FIN, WNS, SWM, etc.</li>
-                                    <li>Function codes: 011205, 020101, etc.</li>
-                                    <li>DEPARTMENTAL scope requires applicable_departments</li>
-                                    <li>UNIVERSAL scope is accessible across all departments</li>
-                                    <li>All imports use transactions - if any row fails, nothing is imported</li>
-                                    <li>Duplicate Object Codes will be rejected</li>
+                                    <li><strong>Code Hierarchy:</strong> Minor must start with Major, NAM must start with Minor</li>
+                                    <li><strong>Sub-Heads:</strong> Optional. If provided, parent NAM head cannot be posted directly</li>
+                                    <li><strong>Account Type:</strong> EXP, REV, AST, LIA, or EQT</li>
+                                    <li><strong>Scope:</strong> UNIVERSAL (all depts) or RESTRICTED (specific depts)</li>
+                                    <li><strong>Duplicates:</strong> Same code with different details will be rejected</li>
+                                    <li><strong>Allow Direct Posting:</strong> Must be N when Sub-Heads exist</li>
                                 </ul>
                             </div>
                         </div>
                         
                         <!-- Action Column -->
                         <div class="col-md-6">
-                            <div class="card">
+                            <div class="card border-primary">
                                 <div class="card-header bg-light">
-                                    <h5 class="mb-0">Step 1: Download Template</h5>
+                                    <h5 class="mb-0"><i class="bi bi-1-circle"></i> Download Template</h5>
                                 </div>
                                 <div class="card-body text-center">
+                                    <p class="text-muted">Template includes all 5 levels with example data</p>
                                     <a href="{% url 'finance:global_head_csv_template' %}" 
-                                       class="btn btn-outline-primary btn-lg">
-                                        <i class="fas fa-download"></i> Download CSV Template
+                                       class="btn btn-primary btn-lg">
+                                        <i class="bi bi-download"></i> Download CSV Template
                                     </a>
-                                    <p class="text-muted mt-3">Template includes example data to guide you</p>
                                 </div>
                             </div>
                             
-                            <div class="card mt-4">
+                            <div class="card border-success mt-4">
                                 <div class="card-header bg-light">
-                                    <h5 class="mb-0">Step 2: Upload Completed CSV</h5>
+                                    <h5 class="mb-0"><i class="bi bi-2-circle"></i> Upload Completed CSV</h5>
                                 </div>
                                 <div class="card-body">
                                     <form method="post" enctype="multipart/form-data">
@@ -124,31 +157,42 @@
                                         <div class="mb-3">
                                             <label for="csv_file" class="form-label">Select CSV File:</label>
                                             <input type="file" 
-                                                   class="form-control" 
+                                                   class="form-control form-control-lg" 
                                                    id="csv_file" 
                                                    name="csv_file" 
                                                    accept=".csv"
                                                    required>
+                                            <div class="form-text">
+                                                File must be UTF-8 encoded CSV format
+                                            </div>
                                         </div>
                                         <div class="d-grid gap-2">
                                             <button type="submit" class="btn btn-success btn-lg">
-                                                <i class="fas fa-upload"></i> Import Global Heads
+                                                <i class="bi bi-upload"></i> Validate & Import
                                             </button>
                                             <a href="{% url 'finance:coa_hub' %}" class="btn btn-outline-secondary">
-                                                <i class="fas fa-arrow-left"></i> Back to CoA Hub
+                                                <i class="bi bi-arrow-left"></i> Back to CoA Hub
                                             </a>
                                         </div>
                                     </form>
                                 </div>
                             </div>
                             
-                            <div class="alert alert-light mt-4">
-                                <h6><i class="fas fa-code"></i> Example CSV Data:</h6>
-                                <div class="code-example">
-Object Code,Object Name,Minor Head Code,Account Type,Scope,System Code,Applicable Departments,Applicable Functions<br>
-A01101,Basic Pay - Officers,A011,EXP,UNIVERSAL,,,<br>
-C03880,TMA Other Non-tax Revenues,C038,REV,UNIVERSAL,,,<br>
-A01999,Department Specific Allowance,A019,EXP,DEPARTMENTAL,,ADM,FIN,011205
+                            <div class="card mt-4 bg-light">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="bi bi-code-square"></i> Example CSV Structure</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="code-example" style="font-size: 0.7em;">
+Major Code,Major Name,Classification,Minor Code,Minor Name,NAM Code,NAM Name,Account Type,Scope,Sub Code,Sub Name,Sub Description,Allow Direct Posting<br>
+A01,Employee Related Expenses,A,A011,Pay,A01101,Basic Pay - Officers,EXP,UNIVERSAL,01,Grade 17+,Officers Grade 17 and above,N<br>
+A01,Employee Related Expenses,A,A011,Pay,A01102,Personal Pay,EXP,UNIVERSAL,,,,,Y<br>
+C03,Gate Receipts,C,C038,Other Revenue,C03880,TMA Other Non-tax Revenues,REV,UNIVERSAL,,,,,Y
+                                </div>
+                                    <p class="mt-3 text-muted mb-0"><small>
+                                        <i class="bi bi-info-circle"></i> Leave cells blank for optional columns (Sub Code, Sub Name, Sub Description).
+                                        Download the template to see complete examples.
+                                    </small></p>
                                 </div>
                             </div>
                         </div>
