@@ -26,6 +26,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from apps.users.permissions import PropertyManagerRequiredMixin
 from .models import (
     Mauza, Village, Property, PropertyLease, PropertyHistory,
     PropertyStatus, CourtCaseStatus, LeaseStatus, PropertyType
@@ -37,7 +38,7 @@ from .forms import (
 )
 
 
-class PropertyDashboardView(LoginRequiredMixin, TemplateView):
+class PropertyDashboardView(LoginRequiredMixin, PropertyManagerRequiredMixin, TemplateView):
     """Main dashboard for Property Management (GIS) module."""
     
     template_name = 'property/dashboard.html'
@@ -80,7 +81,7 @@ class PropertyDashboardView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class PropertyListView(LoginRequiredMixin, ListView):
+class PropertyListView(LoginRequiredMixin, PropertyManagerRequiredMixin, ListView):
     """List view for properties with hierarchical search and filters."""
     
     model = Property
@@ -169,7 +170,7 @@ class PropertyListView(LoginRequiredMixin, ListView):
         return context
 
 
-class PropertyDetailView(LoginRequiredMixin, DetailView):
+class PropertyDetailView(LoginRequiredMixin, PropertyManagerRequiredMixin, DetailView):
     """Detail view for a single property with photos and documents."""
     
     model = Property
@@ -201,7 +202,7 @@ class PropertyDetailView(LoginRequiredMixin, DetailView):
         return context
 
 
-class PropertyCreateView(LoginRequiredMixin, CreateView):
+class PropertyCreateView(LoginRequiredMixin, PropertyManagerRequiredMixin, CreateView):
     """Create view for adding new property."""
     
     model = Property
@@ -259,7 +260,7 @@ class PropertyCreateView(LoginRequiredMixin, CreateView):
             return self.form_invalid(form)
 
 
-class PropertyUpdateView(LoginRequiredMixin, UpdateView):
+class PropertyUpdateView(LoginRequiredMixin, PropertyManagerRequiredMixin, UpdateView):
     """Update view for editing existing property."""
     
     model = Property
@@ -337,7 +338,7 @@ class PropertyUpdateView(LoginRequiredMixin, UpdateView):
         return context
 
 
-class PropertyDeleteView(LoginRequiredMixin, DeleteView):
+class PropertyDeleteView(LoginRequiredMixin, PropertyManagerRequiredMixin, DeleteView):
     """Delete view for removing property."""
     
     model = Property
@@ -404,7 +405,7 @@ def load_tehsils(request):
 
 # Master Data Views (Optional - can also use admin interface)
 
-class DistrictListView(LoginRequiredMixin, ListView):
+class DistrictListView(LoginRequiredMixin, PropertyManagerRequiredMixin, ListView):
     """List view for districts."""
     model = District
     template_name = 'property/district_list.html'
@@ -412,7 +413,7 @@ class DistrictListView(LoginRequiredMixin, ListView):
     paginate_by = 20
 
 
-class MauzaListView(LoginRequiredMixin, ListView):
+class MauzaListView(LoginRequiredMixin, PropertyManagerRequiredMixin, ListView):
     """List view for mauzas."""
     model = Mauza
     template_name = 'property/mauza_list.html'
@@ -423,7 +424,7 @@ class MauzaListView(LoginRequiredMixin, ListView):
         return Mauza.objects.select_related('district').order_by('district__name', 'name')
 
 
-class VillageListView(LoginRequiredMixin, ListView):
+class VillageListView(LoginRequiredMixin, PropertyManagerRequiredMixin, ListView):
     """List view for villages."""
     model = Village
     template_name = 'property/village_list.html'
@@ -437,7 +438,7 @@ class VillageListView(LoginRequiredMixin, ListView):
 # PROPERTY LEASE VIEWS
 # ============================================================================
 
-class PropertyLeaseListView(LoginRequiredMixin, ListView):
+class PropertyLeaseListView(LoginRequiredMixin, PropertyManagerRequiredMixin, ListView):
     """List view for property leases."""
     model = PropertyLease
     template_name = 'property/lease_list.html'
@@ -450,7 +451,7 @@ class PropertyLeaseListView(LoginRequiredMixin, ListView):
         ).select_related('property', 'tenant').order_by('-created_at')
 
 
-class PropertyLeaseDetailView(LoginRequiredMixin, DetailView):
+class PropertyLeaseDetailView(LoginRequiredMixin, PropertyManagerRequiredMixin, DetailView):
     """Detail view for a property lease."""
     model = PropertyLease
     template_name = 'property/lease_detail.html'
@@ -462,7 +463,7 @@ class PropertyLeaseDetailView(LoginRequiredMixin, DetailView):
         ).select_related('property', 'tenant')
 
 
-class PropertyLeaseCreateView(LoginRequiredMixin, CreateView):
+class PropertyLeaseCreateView(LoginRequiredMixin, PropertyManagerRequiredMixin, CreateView):
     """Create view for new property lease."""
     model = PropertyLease
     form_class = PropertyLeaseForm
@@ -511,7 +512,7 @@ class PropertyLeaseCreateView(LoginRequiredMixin, CreateView):
         return context
 
 
-class PropertyLeaseUpdateView(LoginRequiredMixin, UpdateView):
+class PropertyLeaseUpdateView(LoginRequiredMixin, PropertyManagerRequiredMixin, UpdateView):
     """Update view for existing lease."""
     model = PropertyLease
     form_class = PropertyLeaseForm
@@ -538,7 +539,7 @@ class PropertyLeaseUpdateView(LoginRequiredMixin, UpdateView):
         return context
 
 
-class PropertyLeaseTerminateView(LoginRequiredMixin, TemplateView):
+class PropertyLeaseTerminateView(LoginRequiredMixin, PropertyManagerRequiredMixin, TemplateView):
     """View to terminate a lease."""
     template_name = 'property/lease_terminate.html'
     
@@ -587,7 +588,7 @@ class PropertyLeaseTerminateView(LoginRequiredMixin, TemplateView):
         return redirect('property:lease_list')
 
 
-class PropertyCSVImportView(LoginRequiredMixin, TemplateView):
+class PropertyCSVImportView(LoginRequiredMixin, PropertyManagerRequiredMixin, TemplateView):
     """
     Bulk import properties from CSV file with comprehensive validation.
     
@@ -968,7 +969,7 @@ class PropertyCSVImportView(LoginRequiredMixin, TemplateView):
             return redirect('property:csv_import')
 
 
-class PropertyCSVTemplateView(LoginRequiredMixin, TemplateView):
+class PropertyCSVTemplateView(LoginRequiredMixin, PropertyManagerRequiredMixin, TemplateView):
     """Download CSV template for property import."""
     
     def get(self, request):
@@ -1025,7 +1026,7 @@ class PropertyCSVTemplateView(LoginRequiredMixin, TemplateView):
         return response
 
 
-class PropertyMapView(LoginRequiredMixin, TemplateView):
+class PropertyMapView(LoginRequiredMixin, PropertyManagerRequiredMixin, TemplateView):
     """GIS Map view for visualizing properties on an interactive map."""
     
     template_name = 'property/property_map.html'
@@ -1055,7 +1056,7 @@ class PropertyMapView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class PropertyMapFullscreenView(LoginRequiredMixin, TemplateView):
+class PropertyMapFullscreenView(LoginRequiredMixin, PropertyManagerRequiredMixin, TemplateView):
     """Fullscreen GIS Map view without sidebar/navbar - optimized for analysis."""
     
     template_name = 'property/property_map_fullscreen.html'
@@ -1084,7 +1085,7 @@ class PropertyMapFullscreenView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class PropertyGeoJSONAPIView(LoginRequiredMixin, View):
+class PropertyGeoJSONAPIView(LoginRequiredMixin, PropertyManagerRequiredMixin, View):
     """API endpoint to return properties as GeoJSON for map rendering."""
     
     def get(self, request, *args, **kwargs):
@@ -1198,7 +1199,7 @@ class PropertyGeoJSONAPIView(LoginRequiredMixin, View):
             }, status=500)
 
 
-class PropertyDetailAPIView(LoginRequiredMixin, View):
+class PropertyDetailAPIView(LoginRequiredMixin, PropertyManagerRequiredMixin, View):
     """API endpoint to return detailed property information."""
     
     def get(self, request, pk, *args, **kwargs):
@@ -1249,7 +1250,7 @@ class PropertyDetailAPIView(LoginRequiredMixin, View):
             return JsonResponse({'error': 'Failed to load property details', 'details': str(e)}, status=500)
 
 
-class PropertyStatsAPIView(LoginRequiredMixin, View):
+class PropertyStatsAPIView(LoginRequiredMixin, PropertyManagerRequiredMixin, View):
     """API endpoint to return property statistics for dashboard widgets."""
     
     def get(self, request, *args, **kwargs):

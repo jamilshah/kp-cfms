@@ -17,6 +17,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.template.loader import render_to_string
+from django.db.models import Q
 
 from apps.users.permissions import AdminRequiredMixin
 from apps.core.models import BankAccount, Notification, NotificationCategory
@@ -183,8 +184,9 @@ class BankAccountCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
         # Filter GL Codes to Assets only (Bank accounts are assets)
         if 'gl_code' in form.fields:
             form.fields['gl_code'].queryset = BudgetHead.objects.filter(
-                global_head__account_type=AccountType.ASSET
-            ).select_related('global_head', 'function', 'fund')
+                Q(nam_head__account_type=AccountType.ASSET) |
+                Q(sub_head__nam_head__account_type=AccountType.ASSET)
+            ).select_related('nam_head', 'sub_head__nam_head', 'function', 'fund')
         
         # Restrict Organization for TMA users
         if self.request.user.organization:
@@ -222,8 +224,9 @@ class BankAccountUpdateView(LoginRequiredMixin, AdminRequiredMixin, UpdateView):
         # Filter GL Codes to Assets only (Bank accounts are assets)
         if 'gl_code' in form.fields:
             form.fields['gl_code'].queryset = BudgetHead.objects.filter(
-                global_head__account_type=AccountType.ASSET
-            ).select_related('global_head', 'function', 'fund')
+                Q(nam_head__account_type=AccountType.ASSET) |
+                Q(sub_head__nam_head__account_type=AccountType.ASSET)
+            ).select_related('nam_head', 'sub_head__nam_head', 'function', 'fund')
         
         # Restrict Organization for TMA users
         if self.request.user.organization:

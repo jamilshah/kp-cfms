@@ -755,8 +755,8 @@ class GlobalHeadCSVImportView(LoginRequiredMixin, SuperAdminRequiredMixin, View)
                 if not major_name:
                     row_errors.append('Major Name is required')
                 
-                if classification not in ['A', 'C', 'G', 'K']:
-                    row_errors.append(f'Classification must be A, C, G, or K (got: {classification})')
+                if classification not in ['A', 'B', 'C', 'F', 'G', 'H', 'K']:
+                    row_errors.append(f'Classification must be A, B, C, F, G, H, or K (got: {classification})')
                 
                 # Validate classification matches major code
                 if major_code and classification and not major_code.upper().startswith(classification.upper()):

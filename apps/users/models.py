@@ -32,6 +32,7 @@ class RoleCode(models.TextChoices):
     CASHIER = 'CASHIER', _('Cashier')
     BUDGET_OFFICER = 'BUDGET_OFFICER', _('Budget Officer')
     DEALING_ASSISTANT = 'DEALING_ASSISTANT', _('Dealing Assistant (Maker)')
+    PROPERTY_MANAGER = 'PROPERTY_MANAGER', _('Property Manager')
 
 
 class Role(models.Model):
@@ -424,6 +425,10 @@ class CustomUser(AbstractUser):
     def is_budget_officer(self) -> bool:
         """Check if user has Budget Officer role."""
         return self.has_any_role(['BUDGET_OFFICER'])
+    
+    def is_property_manager(self) -> bool:
+        """Check if user has Property Manager role."""
+        return self.has_any_role(['PROPERTY_MANAGER'])
     
     def is_tma_admin(self) -> bool:
         """Check if user has TMA Administrator role."""

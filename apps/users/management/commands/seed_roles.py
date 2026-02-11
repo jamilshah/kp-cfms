@@ -77,6 +77,12 @@ STANDARD_ROLES = [
         'description': 'General Maker. MAKER for Bills, Vouchers, and general data entry duties.',
         'is_system_role': True,
     },
+    {
+        'code': 'PROPERTY_MANAGER',
+        'name': 'Property Manager',
+        'description': 'Property Management. Full access to Property (GIS) module for managing immoveable property assets.',
+        'is_system_role': True,
+    },
 ]
 
 

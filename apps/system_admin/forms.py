@@ -399,7 +399,7 @@ class RoleForm(forms.ModelForm):
         }
 
 
-from apps.finance.models import NAMHead
+from apps.finance.models import NAMHead, FunctionCode
 
 class GlobalHeadForm(forms.ModelForm):
     """Form for creating/editing NAM Heads (Level 4 official reporting heads)."""
@@ -435,6 +435,40 @@ class GlobalHeadForm(forms.ModelForm):
                 'size': '5'
             }),
             'allow_direct_posting': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+        }
+
+
+class FunctionCodeForm(forms.ModelForm):
+    """Form for creating/editing Function Codes."""
+
+    class Meta:
+        model = FunctionCode
+        fields = ['code', 'name', 'description', 'usage_notes', 'is_default', 'is_active']
+        widgets = {
+            'code': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g. AD'
+            }),
+            'name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g. Administration'
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Optional short description'
+            }),
+            'usage_notes': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 4,
+                'placeholder': 'Optional accounting guidance for this function code'
+            }),
+            'is_default': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+            'is_active': forms.CheckboxInput(attrs={
                 'class': 'form-check-input'
             }),
         }

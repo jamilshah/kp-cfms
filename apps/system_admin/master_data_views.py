@@ -19,12 +19,12 @@ from django.urls import reverse_lazy
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 
 from apps.core.models import Division, District, Tehsil, Organization
-from apps.finance.models import Fund, BudgetHead, NAMHead
+from apps.finance.models import Fund, BudgetHead, NAMHead, FunctionCode
 from apps.budgeting.models import Department, DesignationMaster, BPSSalaryScale
 from apps.users.models import Role
 from apps.users.permissions import SuperAdminRequiredMixin
 from apps.expenditure.models_tax_config import TaxRateConfiguration
-from .forms import GlobalHeadForm, TaxRateConfigurationForm
+from .forms import GlobalHeadForm, FunctionCodeForm, TaxRateConfigurationForm
 
 
 # =============================================================================
@@ -560,5 +560,90 @@ class GlobalHeadDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteVi
         context['item_type'] = 'NAM Head'
         context['item_name'] = f"{self.object.code} - {self.object.name}"
         context['cancel_url'] = reverse_lazy('system_admin:global_head_list')
+        return context
+
+
+# =============================================================================
+# Function Code CRUD Views
+# =============================================================================
+
+
+class FunctionCodeListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
+    """List all Function Codes."""
+    model = FunctionCode
+    template_name = 'system_admin/master_data/function_code_list.html'
+    context_object_name = 'function_codes'
+    paginate_by = 50
+
+    def get_queryset(self):
+        queryset = FunctionCode.objects.order_by('code')
+
+        search_query = self.request.GET.get('search')
+        if search_query:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(code__icontains=search_query) |
+                Q(name__icontains=search_query) |
+                Q(description__icontains=search_query)
+            )
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['search_query'] = self.request.GET.get('search', '')
+        return context
+
+
+class FunctionCodeCreateView(LoginRequiredMixin, SuperAdminRequiredMixin, CreateView):
+    """Create a new Function Code."""
+    model = FunctionCode
+    form_class = FunctionCodeForm
+    template_name = 'system_admin/master_data/function_code_form.html'
+    success_url = reverse_lazy('system_admin:function_code_list')
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Function Code "{form.instance.code} - {form.instance.name}" created successfully.')
+        return super().form_valid(form)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = 'Add Function Code'
+        context['is_edit'] = False
+        return context
+
+
+class FunctionCodeUpdateView(LoginRequiredMixin, SuperAdminRequiredMixin, UpdateView):
+    """Update a Function Code."""
+    model = FunctionCode
+    form_class = FunctionCodeForm
+    template_name = 'system_admin/master_data/function_code_form.html'
+    success_url = reverse_lazy('system_admin:function_code_list')
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Function Code "{form.instance.code}" updated successfully.')
+        return super().form_valid(form)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = 'Edit Function Code'
+        context['is_edit'] = True
+        return context
+
+
+class FunctionCodeDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
+    """Delete a Function Code."""
+    model = FunctionCode
+    template_name = 'system_admin/master_data/confirm_delete.html'
+    success_url = reverse_lazy('system_admin:function_code_list')
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Function Code "{self.object.code}" deleted.')
+        return super().form_valid(form)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['item_type'] = 'Function Code'
+        context['item_name'] = f"{self.object.code} - {self.object.name}"
+        context['cancel_url'] = reverse_lazy('system_admin:function_code_list')
         return context
 
