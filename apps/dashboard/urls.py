@@ -16,17 +16,11 @@ from apps.dashboard.views import (
     AuditWorkspaceView,
     RevenueWorkspaceView,
     PAOWorkspaceView,
-    EBaldiaDashboardView,
-    ComingSoonView,
 )
 
 app_name = 'dashboard'
 
 urlpatterns = [
-    # e-Baldia Landing Page
-    path('ebaldia/', EBaldiaDashboardView.as_view(), name='ebaldia'),
-    path('coming-soon/', ComingSoonView.as_view(), name='coming_soon'),
-    
     # Main Dashboards
     path('', ExecutiveDashboardView.as_view(), name='index'),
     path('provincial/', ProvincialDashboardView.as_view(), name='provincial'),

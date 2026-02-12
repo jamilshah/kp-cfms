@@ -19,12 +19,12 @@ from django.urls import reverse_lazy
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 
 from apps.core.models import Division, District, Tehsil, Organization
-from apps.finance.models import Fund, BudgetHead, NAMHead, FunctionCode
+from apps.finance.models import Fund, BudgetHead, GlobalHead
 from apps.budgeting.models import Department, DesignationMaster, BPSSalaryScale
 from apps.users.models import Role
 from apps.users.permissions import SuperAdminRequiredMixin
 from apps.expenditure.models_tax_config import TaxRateConfiguration
-from .forms import GlobalHeadForm, FunctionCodeForm, TaxRateConfigurationForm
+from .forms import GlobalHeadForm, TaxRateConfigurationForm
 
 
 # =============================================================================
@@ -470,18 +470,15 @@ class TehsilDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
 
 
 class GlobalHeadListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
-    """List all NAM heads (Level 4 official reporting heads) with scope information."""
-    model = NAMHead
+    """List all global heads."""
+    model = GlobalHead
     template_name = 'system_admin/master_data/global_head_list.html'
     context_object_name = 'global_heads'
     paginate_by = 50
     
     def get_queryset(self):
-        queryset = NAMHead.objects.select_related(
+        queryset = GlobalHead.objects.select_related(
             'minor', 'minor__major'
-        ).prefetch_related(
-            'applicable_departments',
-            'applicable_functions'
         ).order_by('code')
         
         # Search filter
@@ -493,157 +490,66 @@ class GlobalHeadListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
                 Q(name__icontains=search_query) |
                 Q(minor__code__icontains=search_query) 
             )
-        
-        # Scope filter
-        scope = self.request.GET.get('scope')
-        if scope in ['UNIVERSAL', 'DEPARTMENTAL']:
-            queryset = queryset.filter(scope=scope)
             
         return queryset
         
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['search_query'] = self.request.GET.get('search', '')
-        context['selected_scope'] = self.request.GET.get('scope', '')
         return context
 
 
 class GlobalHeadCreateView(LoginRequiredMixin, SuperAdminRequiredMixin, CreateView):
-    """Create a new NAM head (Level 4)."""
-    model = NAMHead
+    """Create a new global head."""
+    model = GlobalHead
     form_class = GlobalHeadForm
     template_name = 'system_admin/master_data/global_head_form.html'
     success_url = reverse_lazy('system_admin:global_head_list')
     
     def form_valid(self, form):
-        messages.success(self.request, f'NAM Head "{form.instance.code} - {form.instance.name}" created successfully.')
+        messages.success(self.request, f'Global Head "{form.instance.code} - {form.instance.name}" created successfully.')
         return super().form_valid(form)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['title'] = 'Add NAM Head'
+        context['title'] = 'Add Global Head'
         context['is_edit'] = False
         return context
 
 
 class GlobalHeadUpdateView(LoginRequiredMixin, SuperAdminRequiredMixin, UpdateView):
-    """Update a NAM head (Level 4)."""
-    model = NAMHead
+    """Update a global head."""
+    model = GlobalHead
     form_class = GlobalHeadForm
     template_name = 'system_admin/master_data/global_head_form.html'
     success_url = reverse_lazy('system_admin:global_head_list')
     
     def form_valid(self, form):
-        messages.success(self.request, f'NAM Head "{form.instance.code}" updated successfully.')
+        messages.success(self.request, f'Global Head "{form.instance.code}" updated successfully.')
         return super().form_valid(form)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['title'] = 'Edit NAM Head'
+        context['title'] = 'Edit Global Head'
         context['is_edit'] = True
         return context
 
 
 
 class GlobalHeadDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
-    """Delete a NAM head (Level 4)."""
-    model = NAMHead
+    """Delete a global head."""
+    model = GlobalHead
     template_name = 'system_admin/master_data/confirm_delete.html'
     success_url = reverse_lazy('system_admin:global_head_list')
     
     def form_valid(self, form):
-        messages.success(self.request, f'NAM Head "{self.object.code}" deleted.')
+        messages.success(self.request, f'Global Head "{self.object.code}" deleted.')
         return super().form_valid(form)
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['item_type'] = 'NAM Head'
+        context['item_type'] = 'Global Head'
         context['item_name'] = f"{self.object.code} - {self.object.name}"
         context['cancel_url'] = reverse_lazy('system_admin:global_head_list')
-        return context
-
-
-# =============================================================================
-# Function Code CRUD Views
-# =============================================================================
-
-
-class FunctionCodeListView(LoginRequiredMixin, SuperAdminRequiredMixin, ListView):
-    """List all Function Codes."""
-    model = FunctionCode
-    template_name = 'system_admin/master_data/function_code_list.html'
-    context_object_name = 'function_codes'
-    paginate_by = 50
-
-    def get_queryset(self):
-        queryset = FunctionCode.objects.order_by('code')
-
-        search_query = self.request.GET.get('search')
-        if search_query:
-            from django.db.models import Q
-            queryset = queryset.filter(
-                Q(code__icontains=search_query) |
-                Q(name__icontains=search_query) |
-                Q(description__icontains=search_query)
-            )
-        return queryset
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['search_query'] = self.request.GET.get('search', '')
-        return context
-
-
-class FunctionCodeCreateView(LoginRequiredMixin, SuperAdminRequiredMixin, CreateView):
-    """Create a new Function Code."""
-    model = FunctionCode
-    form_class = FunctionCodeForm
-    template_name = 'system_admin/master_data/function_code_form.html'
-    success_url = reverse_lazy('system_admin:function_code_list')
-
-    def form_valid(self, form):
-        messages.success(self.request, f'Function Code "{form.instance.code} - {form.instance.name}" created successfully.')
-        return super().form_valid(form)
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['title'] = 'Add Function Code'
-        context['is_edit'] = False
-        return context
-
-
-class FunctionCodeUpdateView(LoginRequiredMixin, SuperAdminRequiredMixin, UpdateView):
-    """Update a Function Code."""
-    model = FunctionCode
-    form_class = FunctionCodeForm
-    template_name = 'system_admin/master_data/function_code_form.html'
-    success_url = reverse_lazy('system_admin:function_code_list')
-
-    def form_valid(self, form):
-        messages.success(self.request, f'Function Code "{form.instance.code}" updated successfully.')
-        return super().form_valid(form)
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['title'] = 'Edit Function Code'
-        context['is_edit'] = True
-        return context
-
-
-class FunctionCodeDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
-    """Delete a Function Code."""
-    model = FunctionCode
-    template_name = 'system_admin/master_data/confirm_delete.html'
-    success_url = reverse_lazy('system_admin:function_code_list')
-
-    def form_valid(self, form):
-        messages.success(self.request, f'Function Code "{self.object.code}" deleted.')
-        return super().form_valid(form)
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['item_type'] = 'Function Code'
-        context['item_name'] = f"{self.object.code} - {self.object.name}"
-        context['cancel_url'] = reverse_lazy('system_admin:function_code_list')
         return context
 

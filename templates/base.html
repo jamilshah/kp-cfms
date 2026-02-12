@@ -241,36 +241,6 @@ Description: Base template with Bootstrap 5 and navigation.
             font-weight: 500;
         }
         
-        /* Navbar Dropdown Styling */
-        .navbar .dropdown-menu {
-            max-height: 80vh;
-            overflow-y: auto;
-            border: none;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            min-width: 280px;
-        }
-        
-        .navbar .dropdown-menu .dropdown-header {
-            color: var(--cfms-primary);
-            font-weight: 600;
-            font-size: 0.85rem;
-            padding: 0.5rem 1rem;
-        }
-        
-        .navbar .dropdown-menu .dropdown-item {
-            padding: 0.5rem 1rem;
-            font-size: 0.9rem;
-        }
-        
-        .navbar .dropdown-menu .dropdown-item:hover {
-            background-color: rgba(26, 82, 118, 0.1);
-        }
-        
-        .navbar .dropdown-menu .dropdown-item i {
-            width: 20px;
-            text-align: center;
-        }
-        
         /* Responsive Sidebar */
         @media (min-width: 992px) {
             .sidebar {
@@ -352,47 +322,6 @@ Description: Base template with Bootstrap 5 and navigation.
                         </a>
                     </li>
 
-                    <!-- Reports Dropdown -->
-                    <li class="nav-item dropdown me-2">
-                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
-                            <i class="bi bi-bar-chart"></i> Reports
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><h6 class="dropdown-header">General Reports</h6></li>
-                            <li><a class="dropdown-item" href="{% url 'reporting:dashboard' %}"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a></li>
-                            <li><a class="dropdown-item" href="{% url 'reporting:monthly_summary' %}"><i class="bi bi-calendar-check me-2"></i> Monthly Summary</a></li>
-                            <li><a class="dropdown-item" href="{% url 'reporting:general_ledger' %}"><i class="bi bi-book me-2"></i> General Ledger</a></li>
-                            <li><a class="dropdown-item" href="{% url 'reporting:trial_balance' %}"><i class="bi bi-calculator me-2"></i> Trial Balance</a></li>
-                            <li><a class="dropdown-item" href="{% url 'reporting:account_statement' %}"><i class="bi bi-file-earmark-text me-2"></i> Account Statement</a></li>
-                            <li><a class="dropdown-item" href="{% url 'reporting:pending_liabilities' %}"><i class="bi bi-cash-coin me-2"></i> Pending Liabilities</a></li>
-                            <li><a class="dropdown-item" href="{% url 'budgeting:sae_list' %}"><i class="bi bi-file-earmark-spreadsheet me-2"></i> SAE Records</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><h6 class="dropdown-header">Revenue Reports</h6></li>
-                            <li><a class="dropdown-item" href="{% url 'revenue:report_outstanding_receivables' %}"><i class="bi bi-hourglass-split me-2"></i> Outstanding</a></li>
-                            <li><a class="dropdown-item" href="{% url 'revenue:report_revenue_by_head' %}"><i class="bi bi-pie-chart me-2"></i> By Head</a></li>
-                            <li><a class="dropdown-item" href="{% url 'revenue:report_payer_wise' %}"><i class="bi bi-people me-2"></i> By Payer</a></li>
-                            <li><a class="dropdown-item" href="{% url 'revenue:report_collection_efficiency' %}"><i class="bi bi-graph-up-arrow me-2"></i> Efficiency</a></li>
-                            <li><a class="dropdown-item" href="{% url 'revenue:report_overdue_demands' %}"><i class="bi bi-exclamation-triangle me-2"></i> Overdue</a></li>
-                            <li><a class="dropdown-item" href="{% url 'revenue:report_demand_vs_collection' %}"><i class="bi bi-arrow-left-right me-2"></i> Demand vs Collection</a></li>
-                        </ul>
-                    </li>
-
-                    <!-- Property Management Dropdown (Only for Property Managers) -->
-                    {% if user.is_property_manager or user.is_superuser %}
-                    <li class="nav-item dropdown me-2">
-                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
-                            <i class="bi bi-building"></i> Property
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="{% url 'property:dashboard' %}"><i class="bi bi-speedometer2 me-2"></i> Property Dashboard</a></li>
-                            <li><a class="dropdown-item" href="{% url 'property:list' %}"><i class="bi bi-building me-2"></i> Properties</a></li>
-                            <li><a class="dropdown-item" href="{% url 'property:map' %}"><i class="bi bi-map me-2"></i> GIS Map View</a></li>
-                            <li><a class="dropdown-item" href="{% url 'property:lease_list' %}"><i class="bi bi-file-earmark-text me-2"></i> Lease Agreements</a></li>
-                            <li><a class="dropdown-item" href="{% url 'property:csv_import' %}"><i class="bi bi-file-earmark-arrow-up me-2"></i> Import Properties</a></li>
-                        </ul>
-                    </li>
-                    {% endif %}
-
                     <!-- Notification Bell -->
                     <li class="nav-item dropdown me-3">
                         <a class="nav-link position-relative" 
@@ -445,27 +374,7 @@ Description: Base template with Bootstrap 5 and navigation.
                             {% if user.is_authenticated %}
                                 <li><span class="dropdown-item-text text-muted">{{ user.get_role_display }}</span></li>
                                 <li><hr class="dropdown-divider"></li>
-                                
-                                <!-- Administration Menu (TMA Admin Only) -->
-                                {% if user.is_tma_admin or user.is_superuser %}
-                                    {% if user.organization or user.is_superuser %}
-                                    <li><h6 class="dropdown-header"><i class="bi bi-gear me-2"></i>Administration</h6></li>
-                                    {% if user.organization %}
-                                    <li><a class="dropdown-item" href="{% url 'system_admin:tenant_user_list' org_pk=user.organization.id %}"><i class="bi bi-people me-2"></i> Manage Users</a></li>
-                                    <li><a class="dropdown-item" href="{% url 'system_admin:organization_settings' %}"><i class="bi bi-sliders me-2"></i> Organization Settings</a></li>
-                                    {% endif %}
-                                    {% if user.is_superuser %}
-                                    <li><a class="dropdown-item" href="{% url 'finance:coa_hub' %}"><i class="bi bi-diagram-3 me-2"></i> CoA Hub</a></li>
-                                    {% endif %}
-                                    <li><a class="dropdown-item" href="{% url 'budgeting:setup_dashboard' %}"><i class="bi bi-gear me-2"></i> Setup Workspace</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    {% endif %}
-                                {% endif %}
-                                
-                                <li><a class="dropdown-item" href="{% url 'password_change' %}"><i class="bi bi-key"></i> Change Password</a></li>
-                                {% if user.is_superuser or user.is_staff %}
                                 <li><a class="dropdown-item" href="{% url 'admin:index' %}"><i class="bi bi-gear"></i> Admin</a></li>
-                                {% endif %}
                                 <li>
                                     <form method="post" action="{% url 'logout' %}" class="d-inline">
                                         {% csrf_token %}
@@ -475,7 +384,7 @@ Description: Base template with Bootstrap 5 and navigation.
                                     </form>
                                 </li>
                             {% else %}
-                                <li><a class="dropdown-item" href="{% url 'login' %}"><i class="bi bi-box-arrow-in-right"></i> Login</a></li>
+                                <li><a class="dropdown-item" href="{% url 'admin:login' %}"><i class="bi bi-box-arrow-in-right"></i> Login</a></li>
                             {% endif %}
                         </ul>
                     </li>
@@ -691,6 +600,67 @@ Description: Base template with Bootstrap 5 and navigation.
                 </div>
             </div>
 
+            <!-- Reports & Analytics -->
+            <div class="accordion-item bg-transparent border-0 mb-1">
+                <h2 class="accordion-header" id="headingReports">
+                    <button class="accordion-button collapsed" type="button" 
+                            data-bs-toggle="collapse" data-bs-target="#collapseReports">
+                        <i class="bi bi-bar-chart me-2"></i> Reports & Analytics
+                    </button>
+                </h2>
+                <div id="collapseReports" 
+                     class="accordion-collapse collapse {% if request.resolver_match.app_name == 'reporting' or 'report' in request.resolver_match.url_name %}show{% endif %}"
+                     data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body p-2">
+                        <div class="sidebar-heading mt-0 mb-1 ps-2 text-white-50" style="font-size: 0.7rem;">General Reports</div>
+                        <ul class="nav flex-column mb-3">
+                            <li class="nav-item"><a class="nav-link {% if request.resolver_match.app_name == 'reporting' and request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'reporting:dashboard' %}"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'monthly_summary' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:monthly_summary' %}"><i class="bi bi-calendar-check me-2"></i> Monthly Summary</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'general_ledger' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:general_ledger' %}"><i class="bi bi-book me-2"></i> General Ledger</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'trial_balance' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:trial_balance' %}"><i class="bi bi-calculator me-2"></i> Trial Balance</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'account_statement' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'reporting:account_statement' %}"><i class="bi bi-file-earmark-text me-2"></i> Account Statement</a></li>
+                            <li class="nav-item"><a class="nav-link {% if 'sae' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:sae_list' %}"><i class="bi bi-file-earmark-spreadsheet me-2"></i> SAE Records</a></li>
+                        </ul>
+
+                        <div class="sidebar-heading mt-0 mb-1 ps-2 text-white-50" style="font-size: 0.7rem;">Revenue Reports</div>
+                        <ul class="nav flex-column">
+                             <li class="nav-item"><a class="nav-link {% if 'report_outstanding_receivables' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:report_outstanding_receivables' %}"><i class="bi bi-hourglass-split me-2"></i> Outstanding</a></li>
+                             <li class="nav-item"><a class="nav-link {% if 'report_revenue_by_head' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:report_revenue_by_head' %}"><i class="bi bi-pie-chart me-2"></i> By Head</a></li>
+                             <li class="nav-item"><a class="nav-link {% if 'report_payer_wise' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:report_payer_wise' %}"><i class="bi bi-people me-2"></i> By Payer</a></li>
+                             <li class="nav-item"><a class="nav-link {% if 'report_collection_efficiency' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:report_collection_efficiency' %}"><i class="bi bi-graph-up-arrow me-2"></i> Efficiency</a></li>
+                             <li class="nav-item"><a class="nav-link {% if 'report_overdue_demands' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:report_overdue_demands' %}"><i class="bi bi-exclamation-triangle me-2"></i> Overdue</a></li>
+                             <li class="nav-item"><a class="nav-link {% if 'report_demand_vs_collection' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'revenue:report_demand_vs_collection' %}"><i class="bi bi-arrow-left-right me-2"></i> Demand vs Coll.</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Administration -->
+            {% if user.is_authenticated %}
+                {% if user.is_superuser or user.organization %}
+                <div class="accordion-item bg-transparent border-0 mb-1">
+                    <h2 class="accordion-header" id="headingAdmin">
+                        <button class="accordion-button collapsed" type="button" 
+                                data-bs-toggle="collapse" data-bs-target="#collapseAdmin">
+                            <i class="bi bi-gear me-2"></i> Administration
+                        </button>
+                    </h2>
+                    <div id="collapseAdmin" 
+                         class="accordion-collapse collapse {% if 'setup' in request.resolver_match.url_name or 'tenant_user' in request.resolver_match.url_name %}show{% endif %}"
+                         data-bs-parent="#sidebarAccordion">
+                        <div class="accordion-body p-2">
+                            <ul class="nav flex-column">
+                                {% if user.organization %}
+                                <li class="nav-item"><a class="nav-link {% if 'tenant_user' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'system_admin:tenant_user_list' org_pk=user.organization.id %}"><i class="bi bi-people me-2"></i> Manage Users</a></li>
+                                {% endif %}
+                                <li class="nav-item"><a class="nav-link {% if 'setup' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'budgeting:setup_dashboard' %}"><i class="bi bi-gear me-2"></i> Setup Workspace</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            {% endif %}
+
             <!-- System Admin -->
             {% if user.is_authenticated and user.is_superuser %}
             <div class="accordion-item bg-transparent border-0 mb-1">
@@ -706,7 +676,6 @@ Description: Base template with Bootstrap 5 and navigation.
                     <div class="accordion-body p-2">
                         <ul class="nav flex-column">
                             <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'dashboard' and request.resolver_match.app_name == 'system_admin' %}active{% endif %}" href="{% url 'system_admin:dashboard' %}"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a></li>
-                            <li class="nav-item"><a class="nav-link {% if 'coa_hub' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'finance:coa_hub' %}"><i class="bi bi-diagram-3 me-2"></i> CoA Management Hub</a></li>
                             <li class="nav-item"><a class="nav-link {% if 'organization' in request.resolver_match.url_name or 'provision' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'system_admin:organization_list' %}"><i class="bi bi-buildings me-2"></i> Organizations</a></li>
                             <li class="nav-item"><a class="nav-link {% if 'system_user' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'system_admin:system_user_list' %}"><i class="bi bi-people me-2"></i> All Users</a></li>
                             <li class="nav-item"><a class="nav-link {% if 'role' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'system_admin:role_list' %}"><i class="bi bi-person-badge me-2"></i> Roles</a></li>
@@ -756,11 +725,10 @@ Description: Base template with Bootstrap 5 and navigation.
             });
         });
         
-        // Auto-dismiss only dismissible alerts after 5 seconds (e.g., Django messages)
-        // Static informational alerts without alert-dismissible class will remain visible
+        // Auto-dismiss alerts after 5 seconds
         document.addEventListener('DOMContentLoaded', function() {
             setTimeout(function() {
-                var alerts = document.querySelectorAll('.alert.alert-dismissible');
+                var alerts = document.querySelectorAll('.alert');
                 alerts.forEach(function(alert) {
                     var bsAlert = new bootstrap.Alert(alert);
                     bsAlert.close();

@@ -695,7 +695,7 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         # Get system accounts
         try:
             ap_head = BudgetHead.objects.get(
-                nam_head__system_code='AP',
+                global_head__system_code='AP',
                 is_active=True
             )
         except BudgetHead.DoesNotExist:
@@ -706,7 +706,7 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         except BudgetHead.MultipleObjectsReturned:
             # If multiple AP heads exist, get first active one
             ap_head = BudgetHead.objects.filter(
-                nam_head__system_code='AP',
+                global_head__system_code='AP',
                 is_active=True
             ).first()
         
@@ -719,7 +719,7 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         if self.income_tax_amount > Decimal('0.00'):
             try:
                 income_tax_head = BudgetHead.objects.get(
-                    nam_head__system_code='TAX_IT',
+                    global_head__system_code='TAX_IT',
                     is_active=True
                 )
             except BudgetHead.DoesNotExist:
@@ -729,14 +729,14 @@ class Bill(AuditLogMixin, TenantAwareMixin):
                 )
             except BudgetHead.MultipleObjectsReturned:
                 income_tax_head = BudgetHead.objects.filter(
-                    nam_head__system_code='TAX_IT',
+                    global_head__system_code='TAX_IT',
                     is_active=True
                 ).first()
         
         if self.sales_tax_amount > Decimal('0.00'):
             try:
                 sales_tax_head = BudgetHead.objects.get(
-                    nam_head__system_code='TAX_GST',
+                    global_head__system_code='TAX_GST',
                     is_active=True
                 )
             except BudgetHead.DoesNotExist:
@@ -746,14 +746,14 @@ class Bill(AuditLogMixin, TenantAwareMixin):
                 )
             except BudgetHead.MultipleObjectsReturned:
                 sales_tax_head = BudgetHead.objects.filter(
-                    nam_head__system_code='TAX_GST',
+                    global_head__system_code='TAX_GST',
                     is_active=True
                 ).first()
         
         if self.stamp_duty_amount > Decimal('0.00'):
             try:
                 stamp_duty_head = BudgetHead.objects.get(
-                    nam_head__system_code='TAX_STAMP',
+                    global_head__system_code='TAX_STAMP',
                     is_active=True
                 )
             except BudgetHead.DoesNotExist:
@@ -763,7 +763,7 @@ class Bill(AuditLogMixin, TenantAwareMixin):
                 )
             except BudgetHead.MultipleObjectsReturned:
                 stamp_duty_head = BudgetHead.objects.filter(
-                    nam_head__system_code='TAX_STAMP',
+                    global_head__system_code='TAX_STAMP',
                     is_active=True
                 ).first()
         
@@ -890,7 +890,7 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         # Get system accounts
         try:
             ap_head = BudgetHead.objects.get(
-                nam_head__system_code='AP',
+                global_head__system_code='AP',
                 is_active=True
             )
         except BudgetHead.DoesNotExist:
@@ -899,7 +899,7 @@ class Bill(AuditLogMixin, TenantAwareMixin):
             )
         except BudgetHead.MultipleObjectsReturned:
             ap_head = BudgetHead.objects.filter(
-                nam_head__system_code='AP',
+                global_head__system_code='AP',
                 is_active=True
             ).first()
         
@@ -972,14 +972,14 @@ class Bill(AuditLogMixin, TenantAwareMixin):
         if self.tax_amount > Decimal('0.00'):
             try:
                 tax_head = BudgetHead.objects.get(
-                    nam_head__system_code='TAX_IT',
+                    global_head__system_code='TAX_IT',
                     is_active=True
                 )
             except BudgetHead.DoesNotExist:
                 raise ValidationError("Income Tax account (TAX_IT) not configured.")
             except BudgetHead.MultipleObjectsReturned:
                 tax_head = BudgetHead.objects.filter(
-                    nam_head__system_code='TAX_IT',
+                    global_head__system_code='TAX_IT',
                     is_active=True
                 ).first()
             
@@ -1161,7 +1161,7 @@ class Payment(AuditLogMixin, TenantAwareMixin):
         # Get system accounts
         try:
             ap_head = BudgetHead.objects.get(
-                nam_head__system_code='AP',
+                global_head__system_code='AP',
                 is_active=True
             )
         except BudgetHead.DoesNotExist:
@@ -1171,7 +1171,7 @@ class Payment(AuditLogMixin, TenantAwareMixin):
             )
         except BudgetHead.MultipleObjectsReturned:
             ap_head = BudgetHead.objects.filter(
-                nam_head__system_code='AP',
+                global_head__system_code='AP',
                 is_active=True
             ).first()
         

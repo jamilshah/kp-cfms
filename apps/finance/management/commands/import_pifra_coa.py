@@ -93,18 +93,16 @@ class Command(BaseCommand):
                 if '-' in code or not code[0].isalnum():
                     continue
 
-                # Determine Account Type based on first letter (PIFRA classification)
+                # Determine Account Type based on first letter
                 first_char = code[0].upper()
-                if first_char in ['A', 'B']:  # Current & Charged/Development Expenditure
+                if first_char == 'A':
                     ac_type = AccountType.EXPENDITURE
-                elif first_char == 'C':  # Revenue
+                elif first_char == 'C':
                     ac_type = AccountType.REVENUE
-                elif first_char == 'F':  # Assets
+                elif first_char == 'F':
                     ac_type = AccountType.ASSET
-                elif first_char == 'G':  # Liabilities
+                elif first_char == 'G':
                     ac_type = AccountType.LIABILITY
-                elif first_char in ['H', 'K', '3']:  # Equity
-                    ac_type = AccountType.EQUITY
                 else:
                     ac_type = AccountType.EXPENDITURE  # Default fallback
 

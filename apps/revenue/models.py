@@ -613,7 +613,7 @@ class RevenueDemand(AuditLogMixin, TenantAwareMixin):
         
         # Get the Accounts Receivable system head
         ar_head = BudgetHead.objects.filter(
-            nam_head__system_code='AR'
+            global_head__system_code='AR'
         ).first()
         
         if not ar_head:
@@ -940,7 +940,7 @@ class RevenueCollection(AuditLogMixin, TenantAwareMixin):
         
         # Get the Accounts Receivable system head
         ar_head = BudgetHead.objects.filter(
-            nam_head__system_code='AR'
+            global_head__system_code='AR'
         ).first()
         
         if not ar_head:

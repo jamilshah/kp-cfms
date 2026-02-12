@@ -38,10 +38,8 @@ Description: Bill Detail Template with Workflow Actions
                     <span class="badge bg-secondary badge-status">Draft</span>
                     {% elif bill.status == 'SUBMITTED' %}
                     <span class="badge bg-warning text-dark badge-status">Submitted</span>
-                    {% elif bill.status == 'MARKED_FOR_AUDIT' %}
-                    <span class="badge bg-warning text-dark badge-status">Marked for Audit</span>
                     {% elif bill.status == 'AUDITED' %}
-                    <span class="badge bg-success badge-status">Audited</span>
+                    <span class="badge bg-info badge-status">Audited</span>
                     {% elif bill.status == 'VERIFIED' %}
                     <span class="badge bg-info text-white badge-status">Verified</span>
                     {% elif bill.status == 'APPROVED' %}
@@ -50,10 +48,6 @@ Description: Bill Detail Template with Workflow Actions
                     <span class="badge bg-primary badge-status">Paid</span>
                     {% elif bill.status == 'REJECTED' %}
                     <span class="badge bg-danger badge-status">Rejected</span>
-                    {% elif bill.status == 'RETURNED' %}
-                    <span class="badge bg-warning text-dark badge-status">Returned</span>
-                    {% else %}
-                    <span class="badge bg-secondary badge-status">{{ bill.get_status_display }}</span>
                     {% endif %}
                 </div>
             </div>

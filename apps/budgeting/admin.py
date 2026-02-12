@@ -126,19 +126,17 @@ class BudgetAllocationAdmin(admin.ModelAdmin):
         'released_display', 'spent_display', 'available_display'
     ]
     list_filter = [
-        'fiscal_year', 'budget_head__fund'
-        # TODO: Add account_type filter after implementing custom filter for nam_head/sub_head
+        'fiscal_year', 'budget_head__global_head__account_type', 'budget_head__fund'
     ]
     search_fields = [
-        # TODO: Add code/name search after implementing custom search for nam_head/sub_head
+        'budget_head__global_head__code', 'budget_head__global_head__name'
     ]
     readonly_fields = [
         'spent_amount', 'created_at', 'updated_at', 
         'created_by', 'updated_by'
     ]
     autocomplete_fields = ['budget_head']
-    ordering = ['fiscal_year']
-    # TODO: Add ordering by code after implementing custom ordering for nam_head/sub_head
+    ordering = ['fiscal_year', 'budget_head__global_head__code']
     
     fieldsets = (
         (None, {
@@ -529,8 +527,7 @@ class SupplementaryGrantAdmin(admin.ModelAdmin):
         'amount_display', 'date', 'status_badge'
     ]
     list_filter = ['fiscal_year', 'status', 'date']
-    search_fields = ['reference_no']
-    # TODO: Add code/name search after implementing custom search for nam_head/sub_head
+    search_fields = ['reference_no', 'budget_head__global_head__code', 'budget_head__global_head__name']
     autocomplete_fields = ['budget_head']
     readonly_fields = [
         'approved_by', 'approved_at',
@@ -622,7 +619,8 @@ class ReappropriationAdmin(admin.ModelAdmin):
     list_filter = ['fiscal_year', 'status', 'date']
     search_fields = [
         'reference_no', 
-        # TODO: Add code/name search after implementing custom search for nam_head/sub_head
+        'from_head__global_head__code', 'from_head__global_head__name',
+        'to_head__global_head__code', 'to_head__global_head__name'
     ]
     autocomplete_fields = ['from_head', 'to_head']
     readonly_fields = [

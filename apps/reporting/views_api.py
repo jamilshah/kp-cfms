@@ -28,13 +28,13 @@ class BudgetHeadAutocompleteView(LoginRequiredMixin, TenantAwareMixin, View):
             is_active=True
         ).filter(
             Q(id__icontains=query) |
-            Q(nam_head__code__icontains=query) |
-            Q(nam_head__name__icontains=query) |
+            Q(global_head__code__icontains=query) |
+            Q(global_head__name__icontains=query) |
             Q(function__code__icontains=query) |
             Q(function__name__icontains=query) |
             Q(sub_code__icontains=query)
         ).select_related(
-            'fund', 'function', 'nam_head'
+            'fund', 'function', 'global_head'
         ).distinct()[:50]  # Limit to 50 results
         
         results = []
@@ -42,7 +42,7 @@ class BudgetHeadAutocompleteView(LoginRequiredMixin, TenantAwareMixin, View):
             # Show full code with function name and sub-code to differentiate similar budget heads
             # e.g., "FGEN-AD-H01105-01 - Retained Earnings [Admin] (Sub: 01)"
             function_name = head.function.name if head.function else ""
-            display_text = f"{head.code} - {head.nam_head.name}"
+            display_text = f"{head.code} - {head.global_head.name}"
             if function_name:
                 display_text += f" [{function_name}]"
             if head.sub_code:

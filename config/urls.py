@@ -18,10 +18,8 @@ from django.contrib import admin
 from django.urls import path, include, reverse_lazy
 from django.views.generic import RedirectView
 from django.contrib.auth import views as auth_views
-from django.conf import settings
-from django.conf.urls.static import static
 from apps.users.forms import CNICAuthenticationForm
-from apps.dashboard.views import EBaldiaDashboardView
+from apps.dashboard.views import ExecutiveDashboardView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -37,11 +35,6 @@ urlpatterns = [
     path('revenue/', include('apps.revenue.urls')),
     path('finance/', include('apps.finance.urls')),
     path('reports/', include('apps.reporting.urls')),
-    path('property/', include('apps.property.urls')),
     path('system-admin/', include('apps.system_admin.urls')),
-    path('', EBaldiaDashboardView.as_view(), name='home'),
+    path('', ExecutiveDashboardView.as_view(), name='home'),
 ]
-
-# Serve media files during development
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

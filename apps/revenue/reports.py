@@ -69,7 +69,7 @@ class RevenueReports:
         ).select_related(
             'payer',
             'budget_head',
-            'budget_head__nam_head',
+            'budget_head__global_head',
             'fiscal_year'
         )
         
@@ -106,7 +106,7 @@ class RevenueReports:
                     'demand': demand,
                     'challan_no': demand.challan_no,
                     'payer_name': demand.payer.name,
-                    'budget_head': demand.budget_head.nam_head.name,
+                    'budget_head': demand.budget_head.global_head.name,
                     'issue_date': demand.issue_date,
                     'due_date': demand.due_date,
                     'amount': demand.amount,
@@ -165,8 +165,8 @@ class RevenueReports:
             demand_filter
         ).values(
             'budget_head',
-            'budget_head__nam_head__code',
-            'budget_head__nam_head__name',
+            'budget_head__global_head__code',
+            'budget_head__global_head__name',
             'budget_head__sub_code'
         ).annotate(
             total_demanded=Coalesce(Sum('amount'), Decimal('0')),
@@ -208,8 +208,8 @@ class RevenueReports:
             )
             
             result.append({
-                'head_code': item['budget_head__nam_head__code'],
-                'head_name': item['budget_head__nam_head__name'],
+                'head_code': item['budget_head__global_head__code'],
+                'head_name': item['budget_head__global_head__name'],
                 'sub_code': item['budget_head__sub_code'],
                 'total_demanded': item['total_demanded'],
                 'demand_count': item['demand_count'],
@@ -437,7 +437,7 @@ class RevenueReports:
         ).select_related(
             'payer',
             'budget_head',
-            'budget_head__nam_head',
+            'budget_head__global_head',
             'fiscal_year'
         ).order_by('due_date')
         
@@ -454,7 +454,7 @@ class RevenueReports:
                     'challan_no': demand.challan_no,
                     'payer_name': demand.payer.name,
                     'payer_contact': demand.payer.contact_no,
-                    'budget_head': demand.budget_head.nam_head.name,
+                    'budget_head': demand.budget_head.global_head.name,
                     'issue_date': demand.issue_date,
                     'due_date': demand.due_date,
                     'days_overdue': days_overdue,

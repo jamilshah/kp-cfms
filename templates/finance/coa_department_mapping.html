@@ -1,0 +1,332 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}CoA Department Mapping - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="bi bi-diagram-3"></i> Chart of Accounts - Department Mapping</h2>
+            <p class="text-muted">Configure which departments can access each CoA head</p>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Total CoA Heads</h6>
+                    <h3 class="mb-0">{{ total_heads|intcomma }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm border-success">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Universal</h6>
+                    <h3 class="mb-0 text-success">{{ universal_count|intcomma }}</h3>
+                    <small class="text-muted">All departments</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm border-info">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Departmental</h6>
+                    <h3 class="mb-0 text-info">{{ departmental_count|intcomma }}</h3>
+                    <small class="text-muted">Specific departments</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm border-warning">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Unmapped</h6>
+                    <h3 class="mb-0 text-warning">{{ unmapped_count|intcomma }}</h3>
+                    <small class="text-muted">Needs department assignment</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Account Type</label>
+                    <select name="account_type" class="form-select">
+                        <option value="">All Types</option>
+                        {% for code, label in account_types %}
+                        <option value="{{ code }}" {% if selected_account_type == code %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Scope</label>
+                    <select name="scope" class="form-select">
+                        <option value="">All Scopes</option>
+                        <option value="UNIVERSAL" {% if selected_scope == 'UNIVERSAL' %}selected{% endif %}>Universal</option>
+                        <option value="DEPARTMENTAL" {% if selected_scope == 'DEPARTMENTAL' %}selected{% endif %}>Departmental</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Department</label>
+                    <select name="department" class="form-select">
+                        <option value="">All Departments</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}" {% if selected_department == dept.id|stringformat:"s" %}selected{% endif %}>
+                            {{ dept.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Search</label>
+                    <input type="text" name="search" class="form-control" 
+                           placeholder="Code or name" value="{{ search_query }}">
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bulk Actions -->
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body">
+            <form method="post" id="bulkActionForm" onsubmit="return validateBulkAction();">
+                {% csrf_token %}
+                <input type="hidden" name="action" id="bulkAction">
+                <div class="btn-group" role="group">
+                    <button type="submit" class="btn btn-outline-success" 
+                            onclick="document.getElementById('bulkAction').value='bulk_mark_universal';">
+                        <i class="bi bi-globe"></i> Mark Selected as Universal
+                    </button>
+                    <button type="submit" class="btn btn-outline-info" 
+                            onclick="document.getElementById('bulkAction').value='bulk_mark_departmental';">
+                        <i class="bi bi-building"></i> Mark Selected as Departmental
+                    </button>
+                </div>
+                <span class="ms-3 text-muted">
+                    <input type="checkbox" id="selectAll" 
+                           onclick="document.querySelectorAll('.head-checkbox').forEach(cb => cb.checked = this.checked);"> Select All
+                </span>
+            </form>
+        </div>
+    </div>
+
+    <!-- CoA Heads Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 50px">
+                                <input type="checkbox" onclick="toggleSelectAll(this)">
+                            </th>
+                            <th style="width: 120px">Code</th>
+                            <th>Name</th>
+                            <th style="width: 100px">Type</th>
+                            <th style="width: 150px">Scope</th>
+                            <th>Applicable Departments</th>
+                            <th style="width: 100px">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for head in global_heads %}
+                        <tr>
+                            <td>
+                                <input type="checkbox" name="selected_heads" value="{{ head.id }}" 
+                                       form="bulkActionForm" class="head-checkbox">
+                            </td>
+                            <td><code>{{ head.code }}</code></td>
+                            <td>{{ head.name }}</td>
+                            <td>
+                                <span class="badge bg-secondary">{{ head.get_account_type_display }}</span>
+                            </td>
+                            <td>
+                                {% if head.scope == 'UNIVERSAL' %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-globe"></i> Universal
+                                </span>
+                                {% else %}
+                                <span class="badge bg-info">
+                                    <i class="bi bi-building"></i> Departmental
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if head.scope == 'UNIVERSAL' %}
+                                <span class="text-muted">All Departments</span>
+                                {% elif head.dept_count == 0 %}
+                                <span class="text-warning"><i class="bi bi-exclamation-triangle"></i> None assigned</span>
+                                {% else %}
+                                <small>
+                                    {% for dept in head.applicable_departments.all|slice:":3" %}
+                                    <span class="badge bg-light text-dark">{{ dept.code }}</span>
+                                    {% endfor %}
+                                    {% if head.dept_count > 3 %}
+                                    <span class="text-muted">+{{ head.dept_count|add:"-3" }} more</span>
+                                    {% endif %}
+                                </small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-primary" 
+                                        data-bs-toggle="modal" data-bs-target="#editModal{{ head.id }}">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </button>
+                            </td>
+                        </tr>
+                        
+                        <!-- Edit Modal -->
+                        <div class="modal fade" id="editModal{{ head.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="head_id" value="{{ head.id }}">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Edit: {{ head.code }} - {{ head.name }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="mb-3">
+                                                <label class="form-label">Scope</label>
+                                                <select name="scope" class="form-select" id="scope{{ head.id }}" 
+                                                        onchange="toggleDeptSelect({{ head.id }})">
+                                                    <option value="UNIVERSAL" {% if head.scope == 'UNIVERSAL' %}selected{% endif %}>
+                                                        Universal - All Departments
+                                                    </option>
+                                                    <option value="DEPARTMENTAL" {% if head.scope == 'DEPARTMENTAL' %}selected{% endif %}>
+                                                        Departmental - Specific Departments
+                                                    </option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3" id="deptSelectDiv{{ head.id }}" 
+                                                 style="{% if head.scope == 'UNIVERSAL' %}display:none{% endif %}">
+                                                <label class="form-label">Applicable Departments</label>
+                                                <select name="departments" class="form-select" multiple size="8">
+                                                    {% for dept in departments %}
+                                                    <option value="{{ dept.id }}" 
+                                                            {% if dept in head.applicable_departments.all %}selected{% endif %}>
+                                                        {{ dept.name }}
+                                                    </option>
+                                                    {% endfor %}
+                                                </select>
+                                                <small class="text-muted">Hold Ctrl (Windows) or Cmd (Mac) to select multiple</small>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" name="action" value="update_scope" class="btn btn-primary"
+                                                    onclick="return confirmScopeChange({{ head.id }})">
+                                                Save Changes
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                No CoA heads found matching the filters.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Pagination -->
+        {% if is_paginated %}
+        <div class="card-footer">
+            <nav>
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1{{ query_string }}">First</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{{ query_string }}">Previous</a>
+                    </li>
+                    {% endif %}
+                    
+                    <li class="page-item active">
+                        <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    </li>
+                    
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{{ query_string }}">Next</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{{ query_string }}">Last</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function validateBulkAction() {
+    const selected = document.querySelectorAll('.head-checkbox:checked');
+    const action = document.getElementById('bulkAction').value;
+    
+    if (selected.length === 0) {
+        alert('Please select at least one head');
+        return false;
+    }
+    
+    if (action === 'bulk_mark_universal') {
+        return confirm(`Mark ${selected.length} heads as Universal? This will clear department assignments.`);
+    } else if (action === 'bulk_mark_departmental') {
+        return confirm(`Mark ${selected.length} heads as Departmental?`);
+    }
+    
+    return true;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.toggleDeptSelect = function(headId) {
+        const scope = document.getElementById('scope' + headId).value;
+        const deptDiv = document.getElementById('deptSelectDiv' + headId);
+        if (scope === 'UNIVERSAL') {
+            deptDiv.style.display = 'none';
+        } else {
+            deptDiv.style.display = 'block';
+        }
+    };
+
+    window.confirmScopeChange = function(headId) {
+        const scope = document.getElementById('scope' + headId).value;
+        const deptSelect = document.querySelector('#editModal' + headId + ' select[name="departments"]');
+        
+        if (scope === 'DEPARTMENTAL') {
+            const selectedDepts = Array.from(deptSelect.selectedOptions);
+            if (selectedDepts.length === 0) {
+                alert('Please select at least one department for departmental scope');
+                return false;
+            }
+            const form = document.querySelector('#editModal' + headId + ' form');
+            form.querySelector('button[name="action"]').value = 'update_departments';
+        }
+        return true;
+    };
+});
+</script>
+{% endblock %}

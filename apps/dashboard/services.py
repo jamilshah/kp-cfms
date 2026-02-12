@@ -11,8 +11,7 @@ Description: Dashboard service layer for aggregating financial metrics.
 from decimal import Decimal
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
-from django.db.models import Sum, Q, Count, F, Case, When, CharField, Value
-from django.db.models.functions import Concat
+from django.db.models import Sum, Q, Count, F
 from django.utils import timezone
 
 from apps.budgeting.models import BudgetAllocation, FiscalYear
@@ -66,8 +65,7 @@ class DashboardService:
         
         # Salary heads (A01*)
         salary_allocations = allocations.filter(
-            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A01') |
-            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A01')
+            budget_head__global_head__code__startswith='A01'
         ).aggregate(
             salary_budget=Sum('revised_allocation'),
             salary_spent=Sum('spent_amount')
@@ -75,8 +73,7 @@ class DashboardService:
         
         # Non-salary heads (everything else)
         nonsalary_allocations = allocations.exclude(
-            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A01') |
-            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A01')
+            budget_head__global_head__code__startswith='A01'
         ).aggregate(
             nonsalary_budget=Sum('revised_allocation'),
             nonsalary_spent=Sum('spent_amount')
@@ -257,53 +254,25 @@ class DashboardService:
         entries = JournalEntry.objects.filter(
             voucher__fiscal_year=fiscal_year,
             voucher__is_posted=True,
+            budget_head__global_head__account_type=AccountType.EXPENDITURE,
             debit__gt=0  # Expenditure is debited
-        ).filter(
-            Q(budget_head__nam_head__account_type=AccountType.EXPENDITURE) |
-            Q(budget_head__sub_head__nam_head__account_type=AccountType.EXPENDITURE)
         )
         
         if organization:
             entries = entries.filter(voucher__organization=organization)
         
-        # Annotate with code and name from either nam_head or sub_head
-        entries_with_code = entries.annotate(
-            head_code=Case(
-                # SubHead: concatenate nam_head.code + "-" + sub_code
-                When(
-                    budget_head__sub_head__isnull=False, 
-                    then=Concat(
-                        F('budget_head__sub_head__nam_head__code'),
-                        Value('-'),
-                        F('budget_head__sub_head__sub_code'),
-                        output_field=CharField()
-                    )
-                ),
-                # NAM Head: use directly
-                When(budget_head__nam_head__isnull=False, then=F('budget_head__nam_head__code')),
-                default=None,
-                output_field=CharField()
-            ),
-            head_name=Case(
-                When(budget_head__sub_head__isnull=False, then=F('budget_head__sub_head__name')),
-                When(budget_head__nam_head__isnull=False, then=F('budget_head__nam_head__name')),
-                default=None,
-                output_field=CharField()
-            )
-        )
-        
         # Group by budget head and sum debits
-        top_heads = entries_with_code.values(
-            'head_name',
-            'head_code'
+        top_heads = entries.values(
+            'budget_head__global_head__name',
+            'budget_head__global_head__code'
         ).annotate(
             total_spent=Sum('debit')
         ).order_by('-total_spent')[:limit]
         
         return [
             {
-                'head': item['head_name'],
-                'code': item['head_code'],
+                'head': item['budget_head__global_head__name'],
+                'code': item['budget_head__global_head__code'],
                 'amount': float(item['total_spent'])
             }
             for item in top_heads

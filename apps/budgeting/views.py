@@ -251,7 +251,7 @@ class BudgetAllocationListView(LoginRequiredMixin, ListView):
         queryset = super().get_queryset().select_related(
             'fiscal_year', 'budget_head', 'budget_head__function', 
             'budget_head__global_head', 'budget_head__global_head__minor__major',
-            'budget_head__department', 'organization'
+            'organization'
         )
         
         # Filter by organization
@@ -259,10 +259,6 @@ class BudgetAllocationListView(LoginRequiredMixin, ListView):
         if user.organization:
             # TMA users only see their own
             queryset = queryset.filter(organization=user.organization)
-            
-            # Apply department-level filtering if enabled
-            if user.should_see_own_department_only():
-                queryset = queryset.filter(budget_head__department=user.department)
         else:
             # LCB/Provincial users see all, but can filter by organization
             org_id = self.request.GET.get('organization')
@@ -341,10 +337,8 @@ class ReceiptEstimateCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateVi
         if fy_id:
             return get_object_or_404(FiscalYear, pk=fy_id)
         
-        # Get fiscal year with active planning/revision window
-        return FiscalYear.objects.filter(
-            Q(is_planning_active=True) | Q(is_revision_active=True)
-        ).first()
+        # Get current operating fiscal year
+        return FiscalYear.get_current_operating_year()
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -392,10 +386,8 @@ class ExpenditureEstimateCreateView(LoginRequiredMixin, MakerRequiredMixin, Crea
         if fy_id:
             return get_object_or_404(FiscalYear, pk=fy_id)
         
-        # Get fiscal year with active planning/revision window
-        return FiscalYear.objects.filter(
-            Q(is_planning_active=True) | Q(is_revision_active=True)
-        ).first()
+        # Get current operating fiscal year
+        return FiscalYear.get_current_operating_year()
     
     def get_context_data(self, **kwargs) -> Dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -1607,95 +1599,3 @@ class PrintBudgetBookView(LoginRequiredMixin, View):
             context
         )
 
-
-# ============================================================================
-# AJAX VIEWS for Cascading Dropdowns in Budget Estimate Forms
-# ============================================================================
-
-from django.shortcuts import render
-from apps.finance.models import FunctionCode, BudgetHead, AccountType
-
-
-def load_budget_functions(request):
-    """
-    AJAX view to load functions for a given department.
-    Used in budget estimate forms (BDR-1, BDC-1).
-    
-    Returns HTML with function <option> elements.
-    """
-    department_id = request.GET.get('department')
-    functions = FunctionCode.objects.none()
-    default_id = None
-    
-    if department_id:
-        try:
-            department = Department.objects.get(id=department_id)
-            functions = department.related_functions.filter(is_active=True).order_by('code')
-            default_id = department.default_function_id if department.default_function else None
-        except (ValueError, TypeError, Department.DoesNotExist):
-            pass
-    
-    return render(request, 'expenditure/partials/function_options.html', {
-        'functions': functions,
-        'default_id': default_id
-    })
-
-
-def load_budget_heads_for_estimate(request):
-    """
-    AJAX view to load budget heads filtered by department, function, AND account type.
-    Used in budget estimate forms (BDR-1 for revenue, BDC-1 for expenditure).
-    
-    Query params:
-        - department: Department ID
-        - function: FunctionCode ID
-        - account_type: 'EXP' for expenditure, 'REV' for revenue
-    
-    Returns HTML with budget head <option> elements.
-    """
-    department_id = request.GET.get('department')
-    function_id = request.GET.get('function')
-    account_type = request.GET.get('account_type', 'EXP')  # Default to expenditure
-    
-    budget_heads = BudgetHead.objects.none()
-    department = None
-    
-    # Validate account type
-    if account_type not in ['EXP', 'REV']:
-        account_type = 'EXP'
-    
-    # Build queryset with all filters
-    if department_id and function_id:
-        try:
-            department = Department.objects.get(id=department_id)
-            
-            budget_heads = BudgetHead.objects.filter(
-                department_id=department_id,
-                function_id=function_id,
-                global_head__account_type=account_type,
-                is_active=True,
-                posting_allowed=True
-            ).select_related(
-                'global_head', 'function', 'department'
-            ).order_by('global_head__code')
-            
-        except (ValueError, TypeError, Department.DoesNotExist):
-            pass
-    elif function_id:
-        # Fallback: filter by function only
-        try:
-            budget_heads = BudgetHead.objects.filter(
-                function_id=function_id,
-                global_head__account_type=account_type,
-                is_active=True,
-                posting_allowed=True
-            ).select_related(
-                'global_head', 'function', 'department'
-            ).order_by('global_head__code')
-        except (ValueError, TypeError):
-            pass
-    
-    return render(request, 'expenditure/partials/budget_head_options.html', {
-        'budget_heads': budget_heads,
-        'department': department
-    })

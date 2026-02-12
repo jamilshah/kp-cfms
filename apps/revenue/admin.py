@@ -40,7 +40,7 @@ class RevenueDemandAdmin(admin.ModelAdmin):
         'status', 'fiscal_year', 'issue_date', 'organization'
     )
     list_filter = ('status', 'fiscal_year', 'organization', 'issue_date')
-    search_fields = ('challan_no', 'payer__name', 'budget_head__nam_head__code')
+    search_fields = ('challan_no', 'payer__name', 'budget_head__global_head__code')
     ordering = ('-issue_date',)
     readonly_fields = ('challan_no', 'posted_by', 'posted_at', 'cancelled_by', 'cancelled_at', 'accrual_voucher')
     

@@ -23,8 +23,6 @@ urlpatterns = [
     # Organization Management
     path('organizations/', views.OrganizationListView.as_view(), name='organization_list'),
     path('organizations/create/', views.ProvisionOrganizationView.as_view(), name='provision_organization'),
-    path('organizations/settings/', views.OrganizationSettingsView.as_view(), name='organization_settings'),
-    path('organizations/<int:pk>/settings/', views.OrganizationSettingsView.as_view(), name='organization_settings_pk'),
     path('organizations/<int:org_pk>/admin/', views.CreateTenantAdminView.as_view(), name='create_tenant_admin'),
     path('organizations/<int:org_pk>/users/', views.TenantUserListView.as_view(), name='tenant_user_list'),
     path('organizations/<int:org_pk>/users/create/', views.TenantUserCreateView.as_view(), name='tenant_user_create'),
@@ -69,12 +67,6 @@ urlpatterns = [
     path('master-data/global-heads/create/', md_views.GlobalHeadCreateView.as_view(), name='global_head_create'),
     path('master-data/global-heads/<int:pk>/edit/', md_views.GlobalHeadUpdateView.as_view(), name='global_head_edit'),
     path('master-data/global-heads/<int:pk>/delete/', md_views.GlobalHeadDeleteView.as_view(), name='global_head_delete'),
-
-    # Function Codes
-    path('master-data/function-codes/', md_views.FunctionCodeListView.as_view(), name='function_code_list'),
-    path('master-data/function-codes/create/', md_views.FunctionCodeCreateView.as_view(), name='function_code_create'),
-    path('master-data/function-codes/<int:pk>/edit/', md_views.FunctionCodeUpdateView.as_view(), name='function_code_edit'),
-    path('master-data/function-codes/<int:pk>/delete/', md_views.FunctionCodeDeleteView.as_view(), name='function_code_delete'),
     
     # Tax Rate Configurations
     path('master-data/tax-rates/', md_views.TaxRateConfigurationListView.as_view(), name='tax_rate_list'),

@@ -389,13 +389,11 @@ class BillLineForm(forms.ModelForm):
             'amount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
         }
 
-    def __init__(self, *args, organization=None, fiscal_year=None, department=None, function=None, **kwargs):
+    def __init__(self, *args, organization=None, fiscal_year=None, **kwargs):
         super().__init__(*args, **kwargs)
         
         self._organization = organization
         self._fiscal_year = fiscal_year
-        self._department = department
-        self._function = function
         
         # If this is a POST request (form submission), populate the queryset
         # to allow validation to pass
@@ -422,34 +420,6 @@ class BillLineForm(forms.ModelForm):
         
         if not budget_head:
             return budget_head
-        
-        # Validate against DepartmentFunctionConfiguration if dept/func are set
-        if self._department and self._function:
-            from apps.finance.models import DepartmentFunctionConfiguration
-            
-            try:
-                config = DepartmentFunctionConfiguration.objects.get(
-                    department=self._department,
-                    function=self._function
-                )
-                
-                # Check if this budget head's global head is allowed
-                if budget_head.global_head not in config.allowed_global_heads.all():
-                    raise forms.ValidationError(
-                        f"Budget head {budget_head.get_full_code()} - {budget_head.name} is not configured "
-                        f"for {self._department.name} / {self._function.code}. "
-                        f"Please contact your administrator or select a different budget head."
-                    )
-                
-                # Check if configuration is locked
-                if config.is_locked:
-                    # Just informational - locked configs are stable and approved
-                    pass
-                    
-            except DepartmentFunctionConfiguration.DoesNotExist:
-                # Configuration doesn't exist - warn but don't block
-                # Admin may not have configured this dept-func combination yet
-                pass
         
         # If we have organization and fiscal year context, validate allocation
         if self._organization and self._fiscal_year:
@@ -500,40 +470,18 @@ class BillLineForm(forms.ModelForm):
 
 
 class BillLineFormSetBase(forms.BaseInlineFormSet):
-    """Custom formset to pass organization, fiscal_year, department, and function to each form."""
+    """Custom formset to pass organization and fiscal_year to each form."""
     
-    def __init__(self, *args, organization=None, fiscal_year=None, department_id=None, function_id=None, **kwargs):
+    def __init__(self, *args, organization=None, fiscal_year=None, **kwargs):
         self.organization = organization
         self.fiscal_year = fiscal_year
-        self.department_id = department_id
-        self.function_id = function_id
         super().__init__(*args, **kwargs)
     
     def get_form_kwargs(self, index):
-        """Pass organization, fiscal_year, department, and function to each form instance."""
+        """Pass organization and fiscal_year to each form instance."""
         kwargs = super().get_form_kwargs(index)
         kwargs['organization'] = self.organization
         kwargs['fiscal_year'] = self.fiscal_year
-        
-        # Convert IDs to actual objects for validation
-        if self.department_id:
-            try:
-                from apps.budgeting.models import Department
-                kwargs['department'] = Department.objects.get(id=self.department_id)
-            except (Department.DoesNotExist, ValueError):
-                kwargs['department'] = None
-        else:
-            kwargs['department'] = None
-            
-        if self.function_id:
-            try:
-                from apps.finance.models import FunctionCode
-                kwargs['function'] = FunctionCode.objects.get(id=self.function_id)
-            except (FunctionCode.DoesNotExist, ValueError):
-                kwargs['function'] = None
-        else:
-            kwargs['function'] = None
-        
         return kwargs
 
 

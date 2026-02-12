@@ -146,17 +146,6 @@ class BudgetOfficerRequiredMixin(RoleRequiredMixin):
     required_roles = ['BUDGET_OFFICER', 'DEALING_ASSISTANT', 'DA']
 
 
-class PropertyManagerRequiredMixin(RoleRequiredMixin):
-    """
-    Mixin that restricts access to Property Manager role.
-    
-    Used for property management (GIS) module access.
-    Only Property Managers and Super Admins can access property views.
-    """
-    
-    required_roles = ['PROPERTY_MANAGER', 'SUPER_ADMIN']
-
-
 class SuperAdminRequiredMixin(UserPassesTestMixin):
     """
     Mixin that restricts access to Super Admin / Superuser only.

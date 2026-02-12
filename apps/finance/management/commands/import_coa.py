@@ -295,20 +295,14 @@ class Command(BaseCommand):
                         continue  # Skip regular GlobalHead creation for sub-heads
                     
                     # Regular GlobalHead processing (non-sub-head)
-                    # Infer account type from PIFRA classification
+                    # Infer account type
                     account_type = AccountType.EXPENDITURE
                     if pifra_code:
                         first_char = pifra_code[0].upper()
-                        if first_char in ['A', 'B']:  # Current & Charged/Development Expenditure
-                            account_type = AccountType.EXPENDITURE
-                        elif first_char == 'C':  # Revenue
-                            account_type = AccountType.REVENUE
-                        elif first_char == 'F':  # Assets
-                            account_type = AccountType.ASSET
-                        elif first_char == 'G':  # Liabilities
-                            account_type = AccountType.LIABILITY
-                        elif first_char in ['H', 'K', '3']:  # Equity
-                            account_type = AccountType.EQUITY
+                        if first_char == 'C': account_type = AccountType.REVENUE
+                        elif first_char == 'G': account_type = AccountType.LIABILITY
+                        elif first_char == 'F': account_type = AccountType.ASSET
+                        elif first_char == '3': account_type = AccountType.EQUITY
                     
                     if pifra_code and pifra_code not in global_cache and minor_obj:
                         global_obj, _ = GlobalHead.objects.get_or_create(

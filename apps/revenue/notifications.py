@@ -257,7 +257,7 @@ class RevenueNotifications:
             organization=organization,
             status__in=[DemandStatus.POSTED, DemandStatus.PARTIAL],
             due_date__lt=today
-        ).select_related('payer', 'budget_head', 'budget_head__nam_head')
+        ).select_related('payer', 'budget_head', 'budget_head__global_head')
         
         notifications_sent = 0
         
@@ -323,7 +323,7 @@ class RevenueNotifications:
             status__in=[DemandStatus.POSTED, DemandStatus.PARTIAL],
             due_date__gte=today,
             due_date__lte=due_date_threshold
-        ).select_related('payer', 'budget_head', 'budget_head__nam_head')
+        ).select_related('payer', 'budget_head', 'budget_head__global_head')
         
         notifications_sent = 0
         
@@ -365,7 +365,7 @@ A revenue demand has been issued to you:
 
 Challan Number: {demand.challan_no}
 Organization: {demand.organization.name}
-Revenue Head: {demand.budget_head.nam_head.name}
+Revenue Head: {demand.budget_head.global_head.name}
 Amount: Rs. {demand.amount:,.2f}
 Issue Date: {demand.issue_date.strftime('%B %d, %Y')}
 Due Date: {demand.due_date.strftime('%B %d, %Y')}
@@ -438,7 +438,7 @@ This is a reminder that your payment is overdue:
 
 Challan Number: {demand.challan_no}
 Organization: {demand.organization.name}
-Revenue Head: {demand.budget_head.nam_head.name}
+Revenue Head: {demand.budget_head.global_head.name}
 Total Amount: Rs. {demand.amount:,.2f}
 Outstanding Balance: Rs. {outstanding:,.2f}
 Due Date: {demand.due_date.strftime('%B %d, %Y')}
@@ -478,7 +478,7 @@ This is a friendly reminder that your payment is due soon:
 
 Challan Number: {demand.challan_no}
 Organization: {demand.organization.name}
-Revenue Head: {demand.budget_head.nam_head.name}
+Revenue Head: {demand.budget_head.global_head.name}
 Outstanding Balance: Rs. {outstanding:,.2f}
 Due Date: {demand.due_date.strftime('%B %d, %Y')} ({days_until_due} days from now)
 

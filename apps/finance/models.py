@@ -8,6 +8,7 @@ Description: Finance models including BudgetHead (Chart of Accounts)
              following the PIFRA/NAM hierarchy structure.
 -------------------------------------------------------------------------
 """
+import re
 from decimal import Decimal
 from datetime import datetime, timedelta
 from typing import Optional
@@ -193,24 +194,19 @@ class SystemCode(models.TextChoices):
 
 class GlobalHead(TimeStampedMixin):
     """
-    DEPRECATED - DO NOT USE IN NEW CODE
+    Detailed Object classification (Level 3 of PIFRA hierarchy).
     
-    This model is deprecated in favor of NAMHead/SubHead hierarchy.
-    It exists only for historical data compatibility and will be removed
-    in a future release after complete data migration.
+    Examples: A01101 (Basic Pay - Officers), A01151 (Basic Pay - Other Staff)
     
-    Use NAMHead (Level 4) and SubHead (Level 5) instead.
+    This is Master Data - the provincial standard Chart of Accounts.
+    TMAs cannot modify this, but link to it via BudgetHead.
     
-    Legacy Attributes:
+    Attributes:
         code: Detailed object code (e.g., A01101)
         name: Description
         minor: Parent minor head
         account_type: Expenditure, Revenue, Asset, Liability
         system_code: Optional system code for automated workflows
-    
-    Migration Path:
-        All GlobalHead references should be migrated to NAMHead entries.
-        Access control should be managed via DepartmentFunctionConfiguration.
     """
     
     code = models.CharField(
@@ -245,8 +241,7 @@ class GlobalHead(TimeStampedMixin):
         help_text=_('System code for automated workflows (Suspense, Clearing, etc.).')
     )
     
-    # DEPRECATED: Access control fields - no longer used
-    # Access control is now managed exclusively via DepartmentFunctionConfiguration
+    # Department-based access control
     scope = models.CharField(
         max_length=20,
         choices=[
@@ -254,15 +249,15 @@ class GlobalHead(TimeStampedMixin):
             ('DEPARTMENTAL', _('Department-Specific'))
         ],
         default='UNIVERSAL',
-        verbose_name=_('Scope (DEPRECATED)'),
-        help_text=_('DEPRECATED: Use DepartmentFunctionConfiguration instead.')
+        verbose_name=_('Scope'),
+        help_text=_('Universal heads appear for all departments. Departmental heads only for selected departments.')
     )
     applicable_departments = models.ManyToManyField(
         'budgeting.Department',
         blank=True,
         related_name='applicable_global_heads',
-        verbose_name=_('Applicable Departments (DEPRECATED)'),
-        help_text=_('DEPRECATED: Use DepartmentFunctionConfiguration instead.')
+        verbose_name=_('Applicable Departments'),
+        help_text=_('Select departments where this head is relevant. Leave empty for Universal scope.')
     )
     
     # Function-based access control
@@ -270,8 +265,8 @@ class GlobalHead(TimeStampedMixin):
         'finance.FunctionCode',
         blank=True,
         related_name='applicable_global_heads',
-        verbose_name=_('Applicable Functions (DEPRECATED)'),
-        help_text=_('DEPRECATED: Use DepartmentFunctionConfiguration instead.')
+        verbose_name=_('Applicable Functions'),
+        help_text=_('Leave empty for universal heads (appear for all functions). Select specific functions to restrict this head.')
     )
     
     class Meta:
@@ -378,367 +373,6 @@ class GlobalHead(TimeStampedMixin):
 
 
 # ============================================================================
-# V2: CLEAN 5-LEVEL HIERARCHY (NAM HEAD + SUB-HEAD)
-# ============================================================================
-# These models implement a cleaner separation between Level 4 (NAM Official
-# Reporting Head) and Level 5 (Internal Sub-Heads for granular tracking).
-# They coexist with GlobalHead for backward compatibility.
-# ============================================================================
-
-class NAMHead(TimeStampedMixin):
-    """
-    Level 4: NAM Official Reporting Code (PIFRA Reporting Head).
-    
-    Examples: A12001 (Roads), A01101 (Basic Pay - Officers)
-    
-    This is the official reporting head for NAM/PIFRA.
-    Can accept transactions ONLY if no Level 5 sub-heads exist.
-    
-    When SubHead entries are created, this becomes a rollup-only head.
-    
-    Access Control:
-        Department-function access is controlled EXCLUSIVELY via
-        DepartmentFunctionConfiguration. NAMHead scope fields are deprecated.
-    
-    Attributes:
-        code: NAM Code (e.g., A12001, A01101)
-        name: Description of the head
-        minor: Parent MinorHead
-        account_type: EXP/REV/AST/LIA
-        allow_direct_posting: Auto-disabled when sub-heads created
-    """
-    
-    code = models.CharField(
-        max_length=10,
-        unique=True,
-        verbose_name=_('NAM Code'),
-        help_text=_('Format: A12001, A01101')
-    )
-    name = models.CharField(
-        max_length=255,
-        verbose_name=_('NAM Name')
-    )
-    minor = models.ForeignKey(
-        MinorHead,
-        on_delete=models.PROTECT,
-        related_name='nam_heads',
-        verbose_name=_('Minor Head')
-    )
-    account_type = models.CharField(
-        max_length=3,
-        choices=AccountType.choices,
-        default=AccountType.EXPENDITURE,
-        verbose_name=_('Account Type')
-    )
-    system_code = models.CharField(
-        max_length=20,
-        choices=SystemCode.choices,
-        null=True,
-        blank=True,
-        unique=True,
-        verbose_name=_('System Code'),
-        help_text=_('System code for automated workflows (AP, AR, Tax accounts, etc.).')
-    )
-    
-    # DEPRECATED: Scope-based access control - no longer used
-    # Access control is now managed exclusively via DepartmentFunctionConfiguration
-    # These fields remain for backward compatibility during migration
-    scope = models.CharField(
-        max_length=20,
-        choices=[
-            ('UNIVERSAL', _('Universal - All Departments')),
-            ('RESTRICTED', _('Restricted to Selected Departments'))
-        ],
-        default='UNIVERSAL',
-        verbose_name=_('Scope (DEPRECATED)'),
-        help_text=_('DEPRECATED: Use DepartmentFunctionConfiguration for access control.')
-    )
-    applicable_departments = models.ManyToManyField(
-        'budgeting.Department',
-        blank=True,
-        related_name='applicable_nam_heads',
-        verbose_name=_('Applicable Departments (DEPRECATED)'),
-        help_text=_('DEPRECATED: Configure via DepartmentFunctionConfiguration instead.')
-    )
-    applicable_functions = models.ManyToManyField(
-        'finance.FunctionCode',
-        blank=True,
-        related_name='applicable_nam_heads',
-        verbose_name=_('Applicable Functions (DEPRECATED)'),
-        help_text=_('DEPRECATED: Configure via DepartmentFunctionConfiguration instead.')
-    )
-    
-    # Control posting behavior
-    allow_direct_posting = models.BooleanField(
-        default=True,
-        verbose_name=_('Allow Direct Posting'),
-        help_text=_('Allow posting when no sub-heads exist. '
-                    'Auto-set to False when sub-heads are created.')
-    )
-    
-    is_active = models.BooleanField(default=True)
-    
-    class Meta:
-        verbose_name = _('NAM Head')
-        verbose_name_plural = _('NAM Heads')
-        ordering = ['code']
-        indexes = [
-            models.Index(fields=['code']),
-            models.Index(fields=['account_type']),
-            models.Index(fields=['is_active']),
-        ]
-    
-    def __str__(self) -> str:
-        return f"{self.code} - {self.name}"
-    
-    @property
-    def has_sub_heads(self) -> bool:
-        """Check if this NAM head has active sub-heads."""
-        return self.sub_heads.filter(is_active=True).exists()
-    
-    def update_posting_status(self) -> None:
-        """Auto-disable direct posting if sub-heads exist."""
-        if self.has_sub_heads:
-            self.allow_direct_posting = False
-            self.save(update_fields=['allow_direct_posting'])
-    
-    @property
-    def major_code(self) -> str:
-        """Get the major code via the hierarchy."""
-        return self.minor.major.code
-    
-    @property
-    def major_name(self) -> str:
-        """Get the major name via the hierarchy."""
-        return self.minor.major.name
-    
-    def is_applicable_to_department(self, department) -> bool:
-        """
-        DEPRECATED: Use DepartmentFunctionConfiguration instead.
-        
-        This method checks the deprecated scope field and will be removed.
-        Use DepartmentFunctionConfiguration.allowed_nam_heads for access control.
-        """
-        import warnings
-        warnings.warn(
-            'NAMHead.is_applicable_to_department() is deprecated. '
-            'Use DepartmentFunctionConfiguration for access control.',
-            DeprecationWarning,
-            stacklevel=2
-        )
-        if self.scope == 'UNIVERSAL':
-            return True
-        
-        if not department:
-            return False
-        
-        return self.applicable_departments.filter(pk=department.pk).exists()
-    
-    def is_applicable_to_function(self, function) -> bool:
-        """
-        DEPRECATED: Use DepartmentFunctionConfiguration instead.
-        
-        This method checks the deprecated scope field and will be removed.
-        Use DepartmentFunctionConfiguration.allowed_nam_heads for access control.
-        """
-        import warnings
-        warnings.warn(
-            'NAMHead.is_applicable_to_function() is deprecated. '
-            'Use DepartmentFunctionConfiguration for access control.',
-            DeprecationWarning,
-            stacklevel=2
-        )
-        # If no functions specified, it's universal
-        if not self.applicable_functions.exists():
-            return True
-        
-        if not function:
-            return False
-        
-        return self.applicable_functions.filter(pk=function.pk).exists()
-
-
-class SubHead(TimeStampedMixin):
-    """
-    Level 5: Internal Sub-Head for granular tracking.
-    
-    Examples: A12001-01 (PCC Streets), A12001-02 (Shingle Roads)
-    
-    Optional breakdown of Level 4 heads for internal management.
-    When created, parent NAM head becomes rollup-only.
-    
-    Attributes:
-        nam_head: Parent NAM Head
-        sub_code: Sub Code ('01', '02', '03', etc.)
-        name: Descriptive name for this sub-head
-        description: Optional detailed description
-    """
-    
-    nam_head = models.ForeignKey(
-        NAMHead,
-        on_delete=models.PROTECT,
-        related_name='sub_heads',
-        verbose_name=_('Parent NAM Head')
-    )
-    sub_code = models.CharField(
-        max_length=2,
-        verbose_name=_('Sub Code'),
-        help_text=_('Format: 01, 02, 03, etc.')
-    )
-    name = models.CharField(
-        max_length=255,
-        verbose_name=_('Sub-Head Name'),
-        help_text=_('Descriptive name for this sub-head')
-    )
-    description = models.TextField(
-        blank=True,
-        verbose_name=_('Description')
-    )
-    is_active = models.BooleanField(default=True)
-    
-    class Meta:
-        verbose_name = _('Sub-Head')
-        verbose_name_plural = _('Sub-Heads')
-        ordering = ['nam_head', 'sub_code']
-        unique_together = [['nam_head', 'sub_code']]
-        indexes = [
-            models.Index(fields=['nam_head', 'is_active']),
-        ]
-    
-    def __str__(self) -> str:
-        return f"{self.code} - {self.name}"
-    
-    @property
-    def code(self) -> str:
-        """
-        Full code: A12001-01
-        
-        WARNING: This is a computed property, NOT a database field.
-        Cannot use in queryset filters like .filter(code__startswith='A01').
-        Instead use: .filter(nam_head__code__startswith='A01')
-        """
-        return f"{self.nam_head.code}-{self.sub_code}"
-    
-    def save(self, *args, **kwargs) -> None:
-        """Update parent NAM head posting status on creation."""
-        is_new = self.pk is None
-        super().save(*args, **kwargs)
-        
-        if is_new:
-            # Disable direct posting on parent
-            self.nam_head.update_posting_status()
-
-
-# ============================================================================
-# CONFIGURATION LAYER - Department-Function-Head Mappings
-# ============================================================================
-
-class DepartmentFunctionConfiguration(TimeStampedMixin):
-    """
-    Defines valid NAMHead options for Department-Function combinations.
-    
-    This is the ONLY and PRIMARY access control mechanism for CoA.
-    
-    Replaced Mechanisms:
-        - GlobalHead.scope and applicable_departments (DEPRECATED)
-        - NAMHead.scope and applicable_departments (DEPRECATED)
-        - All access control now centralized here
-    
-    Purpose:
-        - Provincial level configures which NAM heads are valid for each dept-func pair
-        - TMAs consume this during budget preparation
-        - Simplifies selection from 500+ heads to 20-30 relevant heads
-        - Single source of truth for access control
-    
-    Examples:
-        Department: Health, Function: Public Health (PH)
-        → allowed_nam_heads: [A03303 Electricity, A03304 Water, ...]
-        
-        Department: Admin, Function: Administration (AD)
-        → allowed_nam_heads: [C03880 Rent, A03305 Telephone, ...]
-    
-    Workflow:
-        1. Super Admin configures combinations at provincial level
-        2. Locks configuration before fiscal year starts
-        3. TMAs use this filtered list during budget preparation
-        4. System validates all BudgetHead creation against this configuration
-    """
-    
-    department = models.ForeignKey(
-        'budgeting.Department',
-        on_delete=models.PROTECT,
-        related_name='function_configurations',
-        verbose_name=_('Department'),
-        help_text=_('Department for this configuration.')
-    )
-    function = models.ForeignKey(
-        'finance.FunctionCode',
-        on_delete=models.PROTECT,
-        related_name='department_configurations',
-        verbose_name=_('Function'),
-        help_text=_('Functional classification for this configuration.')
-    )
-    allowed_nam_heads = models.ManyToManyField(
-        'finance.NAMHead',
-        blank=True,
-        related_name='dept_func_configurations',
-        verbose_name=_('Allowed NAM Heads'),
-        help_text=_('NAM heads that can be used for this department-function combination. '
-                    'This is the ONLY access control mechanism - scope fields are deprecated.')
-    )
-    is_locked = models.BooleanField(
-        default=False,
-        verbose_name=_('Is Locked'),
-        help_text=_('Lock this configuration to prevent changes during fiscal year.')
-    )
-    notes = models.TextField(
-        blank=True,
-        verbose_name=_('Configuration Notes'),
-        help_text=_('Optional notes about this configuration.')
-    )
-    
-    class Meta:
-        verbose_name = _('Department-Function Configuration')
-        verbose_name_plural = _('Department-Function Configurations')
-        unique_together = [('department', 'function')]
-        ordering = ['department__name', 'function__code']
-        indexes = [
-            models.Index(fields=['department', 'function']),
-            models.Index(fields=['is_locked']),
-        ]
-    
-    def __str__(self) -> str:
-        return f"{self.department.name} - {self.function.code}"
-    
-    def get_head_count(self) -> int:
-        """Get count of allowed NAM heads."""
-        return self.allowed_nam_heads.count()
-    
-    def is_complete(self) -> bool:
-        """Check if configuration is complete (has at least 10 heads configured)."""
-        return self.get_head_count() >= 10
-    
-    def get_completion_status(self) -> str:
-        """Get completion status as string."""
-        count = self.get_head_count()
-        if count == 0:
-            return 'Not Configured'
-        elif count < 10:
-            return f'Incomplete ({count} heads)'
-        elif count < 100:
-            return f'Complete ({count} heads)'
-        else:
-            return f'Over-configured ({count} heads)'
-    
-    def validate_global_head(self, global_head) -> bool:
-        """Check if a NAM head is allowed for this configuration."""
-        # Try new field first, fallback to legacy
-        if hasattr(self, 'allowed_nam_heads'):
-            return self.allowed_nam_heads.filter(pk=global_head.pk).exists()
-        return self.allowed_global_heads.filter(pk=global_head.pk).exists()
-
-
-# ============================================================================
 # TRANSACTIONAL LAYER - Fund-Specific Budget Heads
 # ============================================================================
 
@@ -754,179 +388,20 @@ class HeadType(models.TextChoices):
     SUB_HEAD = 'SUB_HEAD', _('Local Sub-Head')
 
 
-class BudgetHeadManager(models.Manager):
-    """
-    Custom manager for BudgetHead with department-aware queries.
-    
-    Provides optimized methods for filtering budget heads by department
-    and function - the primary use case for transaction entry forms.
-    """
-    
-    def active(self):
-        """Get only active budget heads."""
-        return self.filter(is_active=True)
-    
-    def for_department(self, department):
-        """
-        Get all active budget heads for a specific department.
-        
-        Args:
-            department: Department instance or ID
-            
-        Returns:
-            QuerySet: Filtered budget heads
-        """
-        return self.active().filter(department=department)
-    
-    def for_department_and_function(self, department, function):
-        """
-        Get budget heads for specific department-function combination.
-        
-        This is the PRIMARY filter for transaction forms.
-        
-        Args:
-            department: Department instance or ID
-            function: FunctionCode instance or ID
-            
-        Returns:
-            QuerySet: Filtered budget heads, ready for dropdown
-        """
-        return self.active().filter(
-            department=department,
-            function=function,
-            posting_allowed=True
-        ).select_related(
-            'nam_head__minor__major',
-            'sub_head__nam_head__minor__major',
-            'function',
-            'department',
-            'fund'
-        ).order_by('nam_head__minor__code', 'nam_head__code', 'sub_head__sub_code')
-    
-    def for_transaction_entry(self, department, function, account_type=None, fund=None):
-        """
-        Get budget heads available for transaction entry with all filters.
-        
-        This returns 20-30 heads filtered by department and function.
-        
-        Args:
-            department: Department instance (required)
-            function: FunctionCode instance (required)
-            account_type: Filter by account type (EXP/REV/AST/LIA)
-            fund: Filter by fund (GEN/DEV/etc.)
-            
-        Returns:
-            QuerySet: Filtered, optimized for form dropdown
-        """
-        qs = self.for_department_and_function(department, function)
-        
-        if account_type:
-            # Filter by account type from NAM head
-            qs = qs.filter(
-                models.Q(nam_head__account_type=account_type) |
-                models.Q(sub_head__nam_head__account_type=account_type)
-            )
-        
-        if fund:
-            qs = qs.filter(fund=fund)
-        
-        return qs
-    
-    def get_hierarchy_tree(self, department, function, fund=None):
-        """
-        Get hierarchical tree structure for display in widgets.
-        
-        Groups by Major Head → NAM Head → Sub-Heads
-        
-        Returns:
-            dict: Nested structure for hierarchical display
-        """
-        from collections import defaultdict
-        
-        heads = self.for_transaction_entry(department, function, fund=fund)
-        tree = defaultdict(lambda: {'heads': []})
-        
-        # Group by major head
-        processed_nam = set()
-        
-        for head in heads:
-            if head.sub_head:
-                nam = head.sub_head.nam_head
-                nam_id = nam.id
-                major_code = nam.minor.major.code
-                
-                # Add major head if not yet added
-                if 'name' not in tree[major_code]:
-                    tree[major_code]['name'] = nam.minor.major.name
-                
-                # Add NAM head entry if not yet added
-                if nam_id not in processed_nam:
-                    nam_entry = {
-                        'code': nam.code,
-                        'name': nam.name,
-                        'type': 'NAM_WITH_SUBS',
-                        'sub_heads': []
-                    }
-                    tree[major_code]['heads'].append(nam_entry)
-                    processed_nam.add(nam_id)
-                
-                # Add sub-head to the NAM entry
-                for nam_entry in tree[major_code]['heads']:
-                    if nam_entry.get('code') == nam.code:
-                        nam_entry['sub_heads'].append({
-                            'id': head.id,
-                            'code': head.sub_head.code,
-                            'name': head.sub_head.name
-                        })
-                        break
-            
-            else:
-                # Level 4 direct (no sub-heads)
-                nam = head.nam_head
-                major_code = nam.minor.major.code
-                
-                if 'name' not in tree[major_code]:
-                    tree[major_code]['name'] = nam.minor.major.name
-                
-                tree[major_code]['heads'].append({
-                    'id': head.id,
-                    'code': nam.code,
-                    'name': nam.name,
-                    'type': 'NAM'
-                })
-        
-        return dict(tree)
-
-
 class BudgetHead(AuditLogMixin, StatusMixin):
     """
     Transactional Budget Head - Multi-dimensional matrix.
     
-    ENHANCED STRUCTURE (after CoA restructuring):
-    Budget Head = Department + Function + Fund + Global Head + Sub-Code
+    Structure: Fund + Function + Object (GlobalHead) + Sub-Code
     
     This represents the active Chart of Accounts for a specific Fund
-    with department and functional context. Supports local sub-heads for granularity.
+    with functional context. Supports local sub-heads for granularity.
     
     Examples:
-        - Standard: Health + PH + GEN + A03303 + 00 -> "Health - Public Health - Electricity"
-        - Sub-Head: Admin + AD + GEN + C03880 + 01 -> "Admin - Administration - Rent of Shops"
-    
-    Budget Preparation Workflow:
-    1. Department prepares budget
-    2. For each function under that department
-    3. Select minor/sub-heads (global heads)
-    4. Estimate amounts
-    → Creates department-function-specific budget heads
-    
-    Transaction Entry Workflow:
-    1. User selects Department first
-    2. Then selects Function (filtered by department)
-    3. Then selects Budget Head (filtered by dept + function)
-    → Only sees 20-30 relevant heads, not 500+
+        - Standard: GEN + AD + A03303 + 00 -> Electricity (Admin)
+        - Sub-Head: GEN + AD + C03880 + 01 -> Rent of Shops (sub of Other Revenue)
     
     Attributes:
-        department: The department responsible for this budget head (NEW)
         fund: The fund this budget head belongs to
         function: Functional classification (mandatory)
         global_head: Link to the master GlobalHead (PIFRA Object)
@@ -935,16 +410,6 @@ class BudgetHead(AuditLogMixin, StatusMixin):
         local_description: Custom name for sub-heads
     """
     
-    department = models.ForeignKey(
-        'budgeting.Department',
-        on_delete=models.PROTECT,
-        related_name='budget_heads',
-        verbose_name=_('Department'),
-        help_text=_('Department responsible for this budget head.'),
-        null=True,  # Temporarily nullable for migration
-        blank=True,
-        db_index=True
-    )
     fund = models.ForeignKey(
         'finance.Fund',
         on_delete=models.PROTECT,
@@ -958,25 +423,32 @@ class BudgetHead(AuditLogMixin, StatusMixin):
         verbose_name=_('Function'),
         help_text=_('Functional classification (e.g., AD for Admin, WS for Water Supply).')
     )
-    
-    # CLEAN 5-LEVEL HIERARCHY: Link to EITHER Level 4 (NAM) OR Level 5 (Sub-Head)
-    nam_head = models.ForeignKey(
-        'finance.NAMHead',
+    global_head = models.ForeignKey(
+        GlobalHead,
         on_delete=models.PROTECT,
-        null=True,
-        blank=True,
         related_name='budget_heads',
-        verbose_name=_('NAM Head'),
-        help_text=_('Level 4: Use when no sub-heads exist')
+        verbose_name=_('Global Head'),
+        help_text=_('PIFRA Object code from master chart.')
     )
-    sub_head = models.ForeignKey(
-        'finance.SubHead',
-        on_delete=models.PROTECT,
-        null=True,
+    sub_code = models.CharField(
+        max_length=5,
+        default='00',
+        verbose_name=_('Sub-Code'),
+        help_text=_("'00' for regular heads, '01'-'99' for local sub-divisions.")
+    )
+    head_type = models.CharField(
+        max_length=10,
+        choices=HeadType.choices,
+        default=HeadType.REGULAR,
+        verbose_name=_('Head Type'),
+        help_text=_('REGULAR for standard objects, SUB_HEAD for local breakdowns.')
+    )
+    local_description = models.CharField(
+        max_length=255,
         blank=True,
-        related_name='budget_heads',
-        verbose_name=_('Sub-Head'),
-        help_text=_('Level 5: Use for sub-head breakdown')
+        default='',
+        verbose_name=_('Local Description'),
+        help_text=_('Custom name for sub-heads (e.g., "Rent of Shops", "Annual Sports Festival").')
     )
     current_budget = models.DecimalField(
         max_digits=15,
@@ -1001,208 +473,93 @@ class BudgetHead(AuditLogMixin, StatusMixin):
         help_text=_('Whether transactions can be posted to this head.')
     )
     
-    # Custom manager for department-aware queries
-    objects = BudgetHeadManager()
-    
-    def clean(self):
-        """
-        Validate BudgetHead creation with clean 5-level hierarchy.
-        
-        Rules:
-        - Must have EITHER nam_head OR sub_head, not both
-        - If using nam_head, ensure it allows direct posting
-        - Validate department-function access for NAM heads
-        """
-        from django.core.exceptions import ValidationError
-        
-        super().clean()
-        
-        # Ensure exactly one of nam_head or sub_head is set
-        if not self.nam_head and not self.sub_head:
-            raise ValidationError(
-                'Either NAM Head or Sub-Head must be specified'
-            )
-        
-        if self.nam_head and self.sub_head:
-            raise ValidationError(
-                'Cannot specify both NAM Head and Sub-Head. Choose one.'
-            )
-        
-        # Validate NAM Head direct posting
-        if self.nam_head:
-            if not self.nam_head.allow_direct_posting:
-                raise ValidationError({
-                    'nam_head': _(
-                        f'NAM Head {self.nam_head.code} has sub-heads. '
-                        f'Please select a specific sub-head instead.'
-                    )
-                })
-            
-            # Validate department-function access via DepartmentFunctionConfiguration ONLY
-            if self.department and self.function:
-                config = DepartmentFunctionConfiguration.objects.filter(
-                    department=self.department,
-                    function=self.function
-                ).first()
-                
-                if config and not config.allowed_nam_heads.filter(pk=self.nam_head.pk).exists():
-                    raise ValidationError({
-                        'nam_head': _(
-                            f'NAM Head {self.nam_head.code} is not configured for '
-                            f'{self.department.name} - {self.function.code}. '
-                            f'Contact administrator to add this head to the department-function configuration.'
-                        )
-                    })
-        
-        # Validate Sub-Head access via parent NAM's configuration
-        if self.sub_head:
-            nam = self.sub_head.nam_head
-            if self.department and self.function:
-                config = DepartmentFunctionConfiguration.objects.filter(
-                    department=self.department,
-                    function=self.function
-                ).first()
-                
-                if config and not config.allowed_nam_heads.filter(pk=nam.pk).exists():
-                    raise ValidationError({
-                        'sub_head': _(
-                            f'Sub-Head {self.sub_head.code} is not configured for '
-                            f'{self.department.name} - {self.function.code}. '
-                            f'Contact administrator to add its parent NAM head to the configuration.'
-                        )
-                    })
-    
     class Meta:
         verbose_name = _('Budget Head')
         verbose_name_plural = _('Budget Heads')
-        # Multi-dimensional uniqueness: Department + Fund + Function + (NAM or SubHead)
-        unique_together = [
-            ['department', 'fund', 'function', 'nam_head', 'sub_head']
-        ]
-        ordering = ['department__name', 'function__code', 'nam_head__code', 'sub_head__sub_code']
+        # Multi-dimensional uniqueness: Fund + Function + Object + Sub-Code
+        unique_together = [['fund', 'function', 'global_head', 'sub_code']]
+        ordering = ['fund', 'function__code', 'global_head__code', 'sub_code']
         indexes = [
-            models.Index(fields=['fund', 'nam_head']),
-            models.Index(fields=['fund', 'sub_head']),
+            models.Index(fields=['fund', 'global_head']),
             models.Index(fields=['function']),
             models.Index(fields=['is_active']),
-            models.Index(fields=['department', 'function', 'is_active']),
-            models.Index(fields=['department', 'is_active']),
-            models.Index(fields=['nam_head', 'is_active']),
-            models.Index(fields=['sub_head', 'is_active']),
-            # Performance Indexes
-            models.Index(
-                fields=['department', 'function', 'is_active', 'posting_allowed'],
-                name='budgethead_search_idx'
-            ),
         ]
     
     def __str__(self) -> str:
         """
-        Dynamic string representation with department and function context.
+        Dynamic string representation with clear function context.
         
-        Format: "[Department] - [Function] - [Account Name] ([Code])"
+        Case A (Regular - sub_code='00'):
+            Format: "[Function Name] - [Object Name] ([Object Code])"
+            Example: "Administration - Electricity (A03303)"
         
-        Examples:
-            - NAM Head: "Health - Public Health - Roads (A12001)"
-            - Sub-Head: "Admin - Administration - PCC Streets (A12001-01)"
+        Case B (Sub-Head - sub_code!='00'):
+            Format: "[Function Name] - [Local Description] ([Object Code]-[Sub Code])"
+            Example: "Infrastructure - Rent of Shops (C03880-01)"
         """
-        dept_name = self.department.name if self.department else 'Unknown Dept'
         func_name = self.function.name if self.function else 'Unknown Function'
-        code = self.code
-        name = self.name
         
-        return f"{dept_name} - {func_name} - {name} ({code})"
+        if self.sub_code != '00' and self.local_description:
+            # Sub-Head format with function name
+            return f"{func_name} - {self.local_description} ({self.global_head.code}-{self.sub_code})"
+        else:
+            # Regular format with function name
+            return f"{func_name} - {self.global_head.name} ({self.global_head.code})"
     
     # Proxy properties for template compatibility
     @property
     def code(self) -> str:
-        """Return the account code (NAM or SubHead)."""
-        if self.sub_head:
-            return self.sub_head.code  # Returns "A12001-01"
-        return self.nam_head.code  # Returns "A12001"
+        """Proxy to global_head.code, with sub_code suffix if applicable."""
+        if self.sub_code != '00':
+            return f"{self.global_head.code}-{self.sub_code}"
+        return self.global_head.code
     
     @property
     def name(self) -> str:
-        """Return the account name."""
-        if self.sub_head:
-            return self.sub_head.name
-        return self.nam_head.name
+        """Proxy to local_description or global_head.name."""
+        if self.local_description:
+            return self.local_description
+        return self.global_head.name
     
     @property
-    def level(self) -> int:
-        """Return the hierarchy level (4 or 5)."""
-        return 5 if self.sub_head else 4
+    def is_officer(self) -> bool:
+        """Proxy to global_head.is_officer_related"""
+        return self.global_head.is_officer_related
     
     @property
     def account_type(self) -> str:
-        """Return account type from NAM head."""
-        if self.sub_head:
-            return self.sub_head.nam_head.account_type
-        return self.nam_head.account_type
+        """Proxy to global_head.account_type"""
+        return self.global_head.account_type
     
     @property
     def major_code(self) -> str:
-        """Get the major code via the hierarchy."""
-        if self.sub_head:
-            return self.sub_head.nam_head.minor.major.code
-        return self.nam_head.minor.major.code
+        """Proxy to global_head.major_code"""
+        return self.global_head.major_code
     
     @property
     def minor_code(self) -> str:
-        """Get the minor code."""
-        if self.sub_head:
-            return self.sub_head.nam_head.minor.code
-        return self.nam_head.minor.code
+        """Proxy to global_head.minor.code"""
+        return self.global_head.minor.code
     
     def get_full_code(self) -> str:
-        """Return the complete code path including department and fund."""
-        dept_code = self.department.code if self.department and self.department.code else 'XX'
+        """Return the complete NAM code path including sub-code."""
         func_code = self.function.code if self.function else 'XX'
-        account_code = self.code
-        return f"F{self.fund.code}-{dept_code}-{func_code}-{account_code}"
-    
-    @property
-    def display_name_short(self):
-        """
-        Short display for dropdowns.
-        
-        Format: "Account Name (Code)"
-        Example: "Roads (A12001)" or "PCC Streets (A12001-01)"
-        """
-        return f"{self.name} ({self.code})"
+        base = f"F{self.fund.code}-{func_code}-{self.global_head.code}"
+        if self.sub_code != '00':
+            return f"{base}-{self.sub_code}"
+        return base
     
     def is_salary_head(self) -> bool:
         """Check if this is a salary-related budget head (A01*)."""
-        code = self.nam_head.code if self.nam_head else self.sub_head.nam_head.code
-        return code.startswith('A01')
+        return self.global_head.code.startswith('A01')
     
     def is_development_head(self) -> bool:
         """Check if this is a development budget head."""
         return self.fund.code == Fund.CODE_DEVELOPMENT
     
     def is_sub_head(self) -> bool:
-        """Check if this is a Level 5 sub-head."""
-        return bool(self.sub_head)
-    
-    def get_hierarchy_path(self) -> str:
-        """Return full hierarchy path for display."""
-        if self.sub_head:
-            nam = self.sub_head.nam_head
-            return (
-                f"{nam.minor.major.classification} → "
-                f"{nam.minor.major.code} → "
-                f"{nam.minor.code} → "
-                f"{nam.code} → "
-                f"{self.sub_head.sub_code}"
-            )
-        else:
-            nam = self.nam_head
-            return (
-                f"{nam.minor.major.classification} → "
-                f"{nam.minor.major.code} → "
-                f"{nam.minor.code} → "
-                f"{nam.code}"
-            )
+        """Check if this is a local sub-head."""
+        return self.head_type == HeadType.SUB_HEAD or self.sub_code != '00'
 
     def get_available_budget(self, fiscal_year=None, organization=None) -> Decimal:
         """
@@ -2699,143 +2056,4 @@ class AccountBalance(TenantAwareMixin):
         total_credit = sum(b.total_credit for b in balances)
         
         return (total_debit, total_credit)
-
-
-# ============================================================================
-# USER PREFERENCES - Budget Head Selection
-# ============================================================================
-
-class BudgetHeadFavorite(TimeStampedMixin):
-    """
-    User's favorite budget heads for quick access.
-    
-    Purpose:
-        - Save frequently used budget heads for quick selection
-        - Personalized per user
-        - Shown at top of selection widget
-    """
-    
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='budget_head_favorites',
-        verbose_name=_('User')
-    )
-    budget_head = models.ForeignKey(
-        'finance.BudgetHead',
-        on_delete=models.CASCADE,
-        related_name='favorited_by',
-        verbose_name=_('Budget Head')
-    )
-    organization = models.ForeignKey(
-        'core.Organization',
-        on_delete=models.CASCADE,
-        related_name='budget_head_favorites',
-        verbose_name=_('Organization'),
-        help_text=_('Organization context for this favorite.')
-    )
-    
-    class Meta:
-        verbose_name = _('Budget Head Favorite')
-        verbose_name_plural = _('Budget Head Favorites')
-        unique_together = [['user', 'budget_head', 'organization']]
-        ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['user', 'organization']),
-        ]
-    
-    def __str__(self) -> str:
-        return f"{self.user.username} - {self.budget_head.code}"
-
-
-class BudgetHeadUsageHistory(TimeStampedMixin):
-    """
-    Track budget head usage for recently used functionality.
-    
-    Purpose:
-        - Track user's recently used budget heads
-        - Auto-populated when user creates transactions
-        - Shown in selection widget for quick access
-    """
-    
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='budget_head_usage_history',
-        verbose_name=_('User')
-    )
-    budget_head = models.ForeignKey(
-        'finance.BudgetHead',
-        on_delete=models.CASCADE,
-        related_name='usage_history',
-        verbose_name=_('Budget Head')
-    )
-    organization = models.ForeignKey(
-        'core.Organization',
-        on_delete=models.CASCADE,
-        related_name='budget_head_usage_history',
-        verbose_name=_('Organization')
-    )
-    last_used = models.DateTimeField(
-        auto_now=True,
-        verbose_name=_('Last Used'),
-        help_text=_('Timestamp of last use.')
-    )
-    usage_count = models.PositiveIntegerField(
-        default=1,
-        verbose_name=_('Usage Count'),
-        help_text=_('Number of times this head has been used.')
-    )
-    
-    class Meta:
-        verbose_name = _('Budget Head Usage History')
-        verbose_name_plural = _('Budget Head Usage History')
-        unique_together = [['user', 'budget_head', 'organization']]
-        ordering = ['-last_used']
-        indexes = [
-            models.Index(fields=['user', 'organization', '-last_used']),
-        ]
-    
-    def __str__(self) -> str:
-        return f"{self.user.username} - {self.budget_head.code} ({self.usage_count}x)"
-    
-    @classmethod
-    def record_usage(cls, user, budget_head, organization):
-        """
-        Record or update usage of a budget head by a user.
-        
-        Args:
-            user: User instance
-            budget_head: BudgetHead instance
-            organization: Organization instance
-        """
-        usage, created = cls.objects.get_or_create(
-            user=user,
-            budget_head=budget_head,
-            organization=organization
-        )
-        
-        if not created:
-            usage.usage_count += 1
-            usage.save(update_fields=['usage_count', 'last_used'])
-    
-    @classmethod
-    def get_recently_used(cls, user, organization, limit=10):
-        """
-        Get recently used budget heads for a user.
-        
-        Args:
-            user: User instance
-            organization: Organization instance
-            limit: Maximum number of results
-            
-        Returns:
-            QuerySet of BudgetHead objects
-        """
-        recent_ids = cls.objects.filter(
-            user=user,
-            organization=organization
-        ).values_list('budget_head_id', flat=True)[:limit]
-        
-        return BudgetHead.objects.filter(id__in=recent_ids, is_active=True)
 

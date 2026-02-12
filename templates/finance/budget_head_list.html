@@ -67,17 +67,6 @@
     </div>
 </div>
 
-<!-- Note: Budget heads created via configuration have departments assigned automatically -->
-{% if unmapped_count > 0 %}
-<div class="alert alert-info d-flex align-items-center mb-4">
-    <i class="bi bi-info-circle-fill fs-4 me-3"></i>
-    <div class="flex-grow-1">
-        <strong>{{ unmapped_count }} budget head{{ unmapped_count|pluralize }}</strong> without department assignment.
-        New budget heads created via <a href="{% url 'finance:dept_func_config_matrix' %}" class="alert-link">Configuration Matrix</a> have departments assigned automatically.
-    </div>
-</div>
-{% endif %}
-
 <!-- Filters Section -->
 <div class="filter-section mb-4">
     <form method="get" id="filterForm">
@@ -184,12 +173,10 @@
         <table class="table table-hover align-middle mb-0" id="coaTree">
             <thead class="table-light">
                 <tr>
-                    <th style="width: 35%;">Object Code / Description</th>
-                    <th style="width: 12%;">Department</th>
-                    <th style="width: 10%;">Function</th>
-                    <th style="width: 10%;">Fund</th>
-                    <th style="width: 10%;">Type</th>
-                    <th class="text-center" style="width: 8%;">Status</th>
+                    <th style="width: 50%;">Object Code / Description</th>
+                    <th style="width: 15%;">Fund</th>
+                    <th style="width: 15%;">Type</th>
+                    <th class="text-center" style="width: 10%;">Status</th>
                     <th class="text-end" style="width: 10%;">Actions</th>
                 </tr>
             </thead>
@@ -198,7 +185,7 @@
                 {% if node.is_group_header %}
                     <!-- Function Group Header -->
                     <tr class="tree-row table-light fw-bold" data-level="0" data-code="{{ node.obj.code }}" data-parent="">
-                        <td colspan="7">
+                        <td colspan="5">
                             <i class="bi bi-folder2-open text-primary me-2"></i>
                             <span class="tree-toggle expanded" data-code="{{ node.obj.code }}"></span>
                             {{ node.group_name }}
@@ -217,14 +204,6 @@
                                 </div>
                             </div>
                         </td>
-                        <td>
-                            {% if head.department %}
-                                <span class="badge bg-secondary" title="{{ head.department.name }}">{{ head.department.name|truncatewords:2 }}</span>
-                            {% else %}
-                                <span class="badge bg-warning text-dark" title="No department assigned"><i class="bi bi-exclamation-triangle"></i> Unmapped</span>
-                            {% endif %}
-                        </td>
-                        <td><code class="small">{{ head.function.code }}</code></td>
                         <td><span class="badge bg-light text-dark border">{{ head.fund.code }}</span></td>
                         <td>
                             <span class="badge badge-type-{{ head.global_head.account_type|lower }}">

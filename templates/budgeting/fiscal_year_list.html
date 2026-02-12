@@ -38,17 +38,23 @@ Description: Fiscal Year List template.
                     <td><strong>{{ fy.year_name }}</strong></td>
                     <td>{{ fy.start_date|date:"M d, Y" }} - {{ fy.end_date|date:"M d, Y" }}</td>
                     <td>
-                        {% if fy.is_planning_active %}
-                            <span class="badge bg-info">Planning Active</span>
-                        {% elif fy.is_revision_active %}
-                            <span class="badge bg-warning">Revision Active</span>
-                        {% else %}
-                            <span class="badge bg-secondary">Inactive</span>
+                        {% if fy.status == 'DRAFT' %}
+                            <span class="badge bg-secondary">Draft</span>
+                        {% elif fy.status == 'SUBMITTED' %}
+                            <span class="badge bg-info">Submitted</span>
+                        {% elif fy.status == 'VERIFIED' %}
+                            <span class="badge bg-warning">Verified</span>
+                        {% elif fy.status == 'APPROVED' %}
+                            <span class="badge bg-primary">Approved</span>
+                        {% elif fy.status == 'LOCKED' %}
+                            <span class="badge bg-success">Locked</span>
                         {% endif %}
                     </td>
                     <td>
-                        {% if fy.can_edit_budget %}
+                        {% if fy.is_active %}
                             <span class="badge bg-success"><i class="bi bi-unlock"></i> Open</span>
+                        {% elif fy.is_locked %}
+                            <span class="badge bg-danger"><i class="bi bi-lock"></i> Locked</span>
                         {% else %}
                             <span class="badge bg-secondary"><i class="bi bi-dash"></i> Closed</span>
                         {% endif %}
@@ -58,9 +64,14 @@ Description: Fiscal Year List template.
                         <a href="{% url 'budgeting:fiscal_year_detail' fy.pk %}" class="btn btn-sm btn-outline-primary">
                             <i class="bi bi-eye"></i> View
                         </a>
-                        {% if fy.can_edit_budget %}
+                        {% if fy.is_active and not fy.is_locked %}
                             <a href="{% url 'budgeting:budget_approval' fy.pk %}" class="btn btn-sm btn-outline-success">
                                 <i class="bi bi-check2-square"></i> Finalize
+                            </a>
+                        {% endif %}
+                        {% if fy.is_locked %}
+                            <a href="{% url 'budgeting:quarterly_release' fy.pk %}" class="btn btn-sm btn-outline-warning">
+                                <i class="bi bi-cash"></i> Releases
                             </a>
                         {% endif %}
                     </td>

@@ -231,42 +231,32 @@ class ProvincialAnalyticsService:
             voucher__fiscal_year=fiscal_year,
             voucher__is_posted=True,
             voucher__organization_id__in=org_ids,
+            budget_head__global_head__account_type=AccountType.EXPENDITURE,
             debit__gt=0
-        ).filter(
-            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__account_type=AccountType.EXPENDITURE) |
-            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__account_type=AccountType.EXPENDITURE)
         )
         
         # Employee Related (A01)
         employee_total = entries.filter(
-            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A01') |
-            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A01')
+            budget_head__global_head__code__startswith='A01'
         ).aggregate(total=Sum('debit'))['total'] or Decimal('0.00')
         
         # Operating Expenses (A03)
         operating_total = entries.filter(
-            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A03') |
-            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A03')
+            budget_head__global_head__code__startswith='A03'
         ).aggregate(total=Sum('debit'))['total'] or Decimal('0.00')
         
         # Assets/Development (A09, A12)
         development_total = entries.filter(
-            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A09') |
-            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A12') |
-            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A09') |
-            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A12')
+            Q(budget_head__global_head__code__startswith='A09') |
+            Q(budget_head__global_head__code__startswith='A12')
         ).aggregate(total=Sum('debit'))['total'] or Decimal('0.00')
         
         # Other (everything else)
         other_total = entries.exclude(
-            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A01') |
-            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A03') |
-            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A09') |
-            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A12') |
-            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A01') |
-            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A03') |
-            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A09') |
-            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A12')
+            Q(budget_head__global_head__code__startswith='A01') |
+            Q(budget_head__global_head__code__startswith='A03') |
+            Q(budget_head__global_head__code__startswith='A09') |
+            Q(budget_head__global_head__code__startswith='A12')
         ).aggregate(total=Sum('debit'))['total'] or Decimal('0.00')
         
         return [

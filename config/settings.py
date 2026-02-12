@@ -54,7 +54,6 @@ INSTALLED_APPS = [
     'apps.budgeting',
     'apps.expenditure',
     'apps.revenue',
-    'apps.property',
     'apps.reporting',
     'apps.dashboard',
     'apps.system_admin',
@@ -159,10 +158,6 @@ LOGIN_REDIRECT_URL = 'dashboard:workspace_redirect'
 LOGOUT_REDIRECT_URL = 'login'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-
-# Media files (User uploaded files)
-MEDIA_URL = 'media/'
-MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

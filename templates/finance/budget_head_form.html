@@ -53,47 +53,18 @@
                         </div>
                     </div>
                     
-                    <h5 class="mb-3 text-muted">Object Code (NAM Head or Sub-Head)</h5>
-                    <div class="alert alert-info small mb-3">
-                        <i class="bi bi-info-circle me-2"></i>
-                        Select <strong>either</strong> NAM Head (Level 4) <strong>or</strong> Sub-Head (Level 5), not both.
-                        Sub-Heads are for more specific subdivisions.
-                    </div>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label for="{{ form.nam_head.id_for_label }}" class="form-label">
-                                {{ form.nam_head.label }}
-                            </label>
-                            {{ form.nam_head }}
-                            <div class="form-text">{{ form.nam_head.help_text }}</div>
-                            {% if form.nam_head.errors %}
-                                <div class="text-danger small">{{ form.nam_head.errors.0 }}</div>
-                            {% endif %}
-                        </div>
-                        <div class="col-md-6">
-                            <label for="{{ form.sub_head.id_for_label }}" class="form-label">
-                                {{ form.sub_head.label }}
-                            </label>
-                            {{ form.sub_head }}
-                            <div class="form-text">{{ form.sub_head.help_text }}</div>
-                            {% if form.sub_head.errors %}
-                                <div class="text-danger small">{{ form.sub_head.errors.0 }}</div>
-                            {% endif %}
-                        </div>
+                    <h5 class="mb-3 text-muted">Object Code</h5>
+                    <div class="mb-4">
+                        <label for="{{ form.global_head.id_for_label }}" class="form-label">{{ form.global_head.label }}</label>
+                        {{ form.global_head }}
+                        <div class="form-text">{{ form.global_head.help_text }}</div>
+                        {% if form.global_head.errors %}
+                            <div class="text-danger small">{{ form.global_head.errors.0 }}</div>
+                        {% endif %}
                     </div>
                     
                     <h5 class="mb-3 text-muted">Budget & Settings</h5>
 
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label for="{{ form.current_budget.id_for_label }}" class="form-label">{{ form.current_budget.label }}</label>
-                            {{ form.current_budget }}
-                            <div class="form-text">Initial budget allocation for this head (optional)</div>
-                            {% if form.current_budget.errors %}
-                                <div class="text-danger small">{{ form.current_budget.errors.0 }}</div>
-                            {% endif %}
-                        </div>
-                    </div>
 
                     <div class="row g-3 mb-4">
                         <div class="col-md-3 pt-2">
@@ -142,62 +113,4 @@
         </div>
     </div>
 </div>
-
-<script>
-// Initialize Select2 for NAM head and Sub-head dropdowns
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize Select2 for searchable selects
-    if (typeof $.fn.select2 !== 'undefined') {
-        $('.searchable-select').each(function() {
-            const $select = $(this);
-            if (!$select.hasClass('select2-hidden-accessible')) {
-                $select.select2({
-                    theme: 'bootstrap-5',
-                    placeholder: 'Type to search...',
-                    allowClear: true,
-                    width: '100%'
-                });
-            }
-        });
-    }
-    
-    // Add mutual exclusivity between NAM head and Sub-head
-    const namHeadSelect = document.getElementById('id_nam_head');
-    const subHeadSelect = document.getElementById('id_sub_head');
-    
-    if (namHeadSelect && subHeadSelect) {
-        // Clear sub_head when nam_head is selected
-        $('#id_nam_head').on('select2:select', function() {
-            if (this.value) {
-                $('#id_sub_head').val(null).trigger('change');
-            }
-        });
-        
-        // Clear nam_head when sub_head is selected
-        $('#id_sub_head').on('select2:select', function() {
-            if (this.value) {
-                $('#id_nam_head').val(null).trigger('change');
-            }
-        });
-    }
-});
-
-// Reinitialize Select2 after HTMX content swaps
-document.body.addEventListener('htmx:afterSwap', function(evt) {
-    if (typeof $.fn.select2 !== 'undefined') {
-        $('.searchable-select').each(function() {
-            const $select = $(this);
-            if ($select.hasClass('select2-hidden-accessible')) {
-                $select.select2('destroy');
-            }
-            $select.select2({
-                theme: 'bootstrap-5',
-                placeholder: 'Type to search...',
-                allowClear: true,
-                width: '100%'
-            });
-        });
-    }
-});
-</script>
 {% endblock %}

@@ -167,10 +167,10 @@ class DemandForm(forms.ModelForm):
         
         # Base Queryset: Revenue accounts
         self.fields['budget_head'].queryset = BudgetHead.objects.filter(
-            nam_head__account_type=AccountType.REVENUE,
+            global_head__account_type=AccountType.REVENUE,
             posting_allowed=True,
             is_active=True
-        ).order_by('nam_head__name', 'nam_head__code')
+        ).order_by('global_head__name', 'global_head__code')
 
         if organization:
             # Get current operating fiscal year (FiscalYear is global, no organization filter)

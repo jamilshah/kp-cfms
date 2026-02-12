@@ -399,15 +399,15 @@ class RoleForm(forms.ModelForm):
         }
 
 
-from apps.finance.models import NAMHead, FunctionCode
+from apps.finance.models import GlobalHead
 
 class GlobalHeadForm(forms.ModelForm):
-    """Form for creating/editing NAM Heads (Level 4 official reporting heads)."""
+    """Form for creating/editing Global Heads."""
     
     class Meta:
-        model = NAMHead
-        fields = ['code', 'name', 'minor', 'account_type', 'scope',
-                  'applicable_departments', 'applicable_functions', 'allow_direct_posting']
+        model = GlobalHead
+        fields = ['code', 'name', 'minor', 'account_type', 'system_code', 
+                  'scope', 'applicable_departments', 'applicable_functions']
         widgets = {
             'code': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -423,6 +423,9 @@ class GlobalHeadForm(forms.ModelForm):
             'account_type': forms.Select(attrs={
                 'class': 'form-select'
             }),
+            'system_code': forms.Select(attrs={
+                'class': 'form-select'
+            }),
             'scope': forms.Select(attrs={
                 'class': 'form-select'
             }),
@@ -433,43 +436,6 @@ class GlobalHeadForm(forms.ModelForm):
             'applicable_functions': forms.SelectMultiple(attrs={
                 'class': 'form-select searchable-select',
                 'size': '5'
-            }),
-            'allow_direct_posting': forms.CheckboxInput(attrs={
-                'class': 'form-check-input'
-            }),
-        }
-
-
-class FunctionCodeForm(forms.ModelForm):
-    """Form for creating/editing Function Codes."""
-
-    class Meta:
-        model = FunctionCode
-        fields = ['code', 'name', 'description', 'usage_notes', 'is_default', 'is_active']
-        widgets = {
-            'code': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g. AD'
-            }),
-            'name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'e.g. Administration'
-            }),
-            'description': forms.Textarea(attrs={
-                'class': 'form-control',
-                'rows': 3,
-                'placeholder': 'Optional short description'
-            }),
-            'usage_notes': forms.Textarea(attrs={
-                'class': 'form-control',
-                'rows': 4,
-                'placeholder': 'Optional accounting guidance for this function code'
-            }),
-            'is_default': forms.CheckboxInput(attrs={
-                'class': 'form-check-input'
-            }),
-            'is_active': forms.CheckboxInput(attrs={
-                'class': 'form-check-input'
             }),
         }
 
