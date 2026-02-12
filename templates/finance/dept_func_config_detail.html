@@ -1,0 +1,547 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Configure {{ department.name }} - {{ function.code }} ({{ function.name }}){% endblock %}
+
+{% block extra_css %}
+<style>
+    .global-head-card {
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 2px solid #dee2e6;
+    }
+    .global-head-card:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15);
+        transform: translateY(-2px);
+    }
+    .global-head-card.selected {
+        border-color: #28a745;
+        background-color: #f0f9ff;
+    }
+    .selection-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        font-size: 1.5rem;
+    }
+    .filter-section {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 0.25rem;
+        margin-bottom: 1.5rem;
+    }
+    .sticky-save-bar {
+        position: sticky;
+        bottom: 0;
+        background-color: #fff;
+        border-top: 3px solid #007bff;
+        padding: 1rem;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        z-index: 100;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="bi bi-gear"></i> Configure: {{ department.name }} - {{ function.code }} ({{ function.name }})</h2>
+                    <p class="text-muted mb-0">
+                        Select which NAM heads are allowed for this department-function combination.
+                        These will be the only heads available during budget preparation.
+                    </p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createBudgetHeadsModal">
+                        <i class="bi bi-plus-circle"></i> Create Budget Heads
+                    </button>
+                    <a href="{% url 'finance:dept_func_config_matrix' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to Matrix
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Stats & Actions -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <h4 class="text-primary">{{ selected_count }}</h4>
+                            <small class="text-muted">Heads Selected</small>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="{% if config.is_complete %}text-success{% else %}text-warning{% endif %}">
+                                {{ config.get_completion_status }}
+                            </h4>
+                            <small class="text-muted">Status</small>
+                        </div>
+                        <div class="col-md-3">
+                            <h4>
+                                {% if config.is_locked %}
+                                <span class="text-danger"><i class="bi bi-lock-fill"></i> Locked</span>
+                                {% else %}
+                                <span class="text-success"><i class="bi bi-unlock-fill"></i> Unlocked</span>
+                                {% endif %}
+                            </h4>
+                            <small class="text-muted">Lock Status</small>
+                        </div>
+                        <div class="col-md-3">
+                            <form method="post" style="display: inline;">
+                                {% csrf_token %}
+                                {% if config.is_locked %}
+                                <input type="hidden" name="action" value="unlock_config">
+                                <button type="submit" class="btn btn-sm btn-danger">
+                                    <i class="bi bi-unlock"></i> Unlock
+                                </button>
+                                {% else %}
+                                <input type="hidden" name="action" value="lock_config">
+                                <button type="submit" class="btn btn-sm btn-success">
+                                    <i class="bi bi-lock"></i> Lock
+                                </button>
+                                {% endif %}
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6>Configuration Notes</h6>
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="update_notes">
+                        <textarea name="notes" class="form-control" rows="2" 
+                                  {% if config.is_locked %}disabled{% endif %}>{{ config.notes }}</textarea>
+                        {% if not config.is_locked %}
+                        <button type="submit" class="btn btn-sm btn-primary mt-2">Save Notes</button>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-section">
+        <form method="get" id="filterForm" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Search</label>
+                <input type="text" name="search" class="form-control" 
+                       value="{{ search }}" placeholder="Search by code or name...">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Account Type</label>
+                <select name="account_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for value, label in account_types %}
+                    <option value="{{ value }}" {% if account_type == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary me-2">
+                    <i class="bi bi-funnel"></i> Apply Filters
+                </button>
+                <a href="?" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle"></i> Clear
+                </a>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="button" class="btn btn-outline-primary w-100" onclick="selectAll()">
+                    Select All
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Global Heads Selection -->
+    <form method="post" id="configForm">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_heads">
+        
+        <div class="row">
+            {% for item in heads_data %}
+            <div class="col-md-4 col-lg-3 mb-3">
+                <div class="card global-head-card {% if item.is_selected %}selected{% endif %}" 
+                     onclick="toggleSelection(this, '{{ item.head.id }}')">
+                    <div class="card-body position-relative">
+                        <span class="selection-badge">
+                            <i class="bi {% if item.is_selected %}bi-check-circle-fill text-success{% else %}bi-circle text-muted{% endif %}"></i>
+                        </span>
+                        <input type="checkbox" name="selected_heads" value="{{ item.head.id }}" 
+                               class="d-none" {% if item.is_selected %}checked{% endif %}>
+                        
+                        <h6 class="text-primary mb-1">{{ item.head.code }}</h6>
+                        <p class="mb-2 small">{{ item.head.name }}</p>
+                        
+                        <!-- Hierarchy Info -->
+                        <div class="mb-2">
+                            <small class="text-muted d-block">
+                                <i class="bi bi-diagram-2"></i> <strong>Major:</strong> {{ item.major_name|truncatewords:3 }}
+                            </small>
+                            <small class="text-muted d-block">
+                                <i class="bi bi-diagram-3"></i> <strong>Minor:</strong> {{ item.minor_name|truncatewords:3 }}
+                            </small>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="badge bg-secondary">{{ item.head.get_account_type_display }}</span>
+                                {% if item.sub_heads_count > 0 %}
+                                <span class="badge bg-info ms-1" 
+                                      onclick="event.stopPropagation(); showSubHeads('{{ item.head.id }}', '{{ item.head.code }}')" 
+                                      style="cursor: pointer;"
+                                      title="Click to view sub-heads">
+                                    <i class="bi bi-list-nested"></i> {{ item.sub_heads_count }} Sub{{ item.sub_heads_count|pluralize }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">{{ item.head.code|slice:":3" }}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-12">
+                <div class="alert alert-warning">
+                    <i class="bi bi-info-circle"></i> No global heads found matching the filters.
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Sticky Save Bar -->
+        {% if not config.is_locked %}
+        <div class="sticky-save-bar">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-info-circle text-primary me-2" style="font-size: 1.5rem;"></i>
+                            <div>
+                                <strong id="selectedCountDisplay">{{ selected_count }}</strong> heads selected
+                                <br>
+                                <small class="text-muted">
+                                    {% if selected_count < 10 %}
+                                    ⚠️ Recommended: Select at least 10 heads for proper functionality
+                                    {% elif selected_count > 100 %}
+                                    ⚠️ Warning: Over 100 heads may be too many
+                                    {% else %}
+                                    ✅ Configuration looks good
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <button type="button" class="btn btn-outline-secondary me-2" onclick="deselectAll()">
+                            <i class="bi bi-x-circle"></i> Deselect All
+                        </button>
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-save"></i> Save Configuration
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-warning mb-5">
+            <i class="bi bi-lock-fill"></i> This configuration is locked. Unlock it to make changes.
+        </div>
+        {% endif %}
+    </form>
+
+    <!-- Help -->
+    <div class="row mt-5 mb-5">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <h6><i class="bi bi-lightbulb"></i> Configuration Tips:</h6>
+                <ul class="mb-0">
+                    <li><strong>Be Selective:</strong> Only include heads relevant to this department-function combination</li>
+                    <li><strong>Target Range:</strong> Aim for 10-100 heads per combination</li>
+                    <li><strong>Lock When Ready:</strong> Lock configurations before fiscal year to prevent accidental changes</li>
+                    <li><strong>Function Restriction:</strong> Only heads applicable to {{ function.code }} are shown</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sub-Heads Modal -->
+<div class="modal fade" id="subHeadsModal" tabindex="-1" aria-labelledby="subHeadsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="subHeadsModalLabel">
+                    <i class="bi bi-list-nested"></i> Sub-Heads for <span id="modalNamCode"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="subHeadsContent">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Loading sub-heads...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Budget Heads Modal -->
+<div class="modal fade" id="createBudgetHeadsModal" tabindex="-1" aria-labelledby="createBudgetHeadsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="createBudgetHeadsModalLabel">
+                    <i class="bi bi-plus-circle"></i> Create Budget Heads from Configuration
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> This will create BudgetHead records for all configured department-function combinations.
+                </div>
+                
+                <form id="createBudgetHeadsForm" method="post" action="#">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="fundSelect" class="form-label"><strong>Select Fund:</strong></label>
+                        <p class="text-muted small mb-2">Choose which fund to create budget heads for. You can run this multiple times for different funds.</p>
+                        
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="fund" id="fundGEN" value="GEN" checked>
+                            <label class="form-check-label" for="fundGEN">
+                                <strong>GEN - General Fund</strong><br>
+                                <small class="text-muted">Regular operational budget</small>
+                            </label>
+                        </div>
+                        
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="fund" id="fundDEV" value="DEV">
+                            <label class="form-check-label" for="fundDEV">
+                                <strong>DEV - Development Fund</strong><br>
+                                <small class="text-muted">Capital development projects</small>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="overwrite" id="overwriteCheck">
+                            <label class="form-check-label" for="overwriteCheck">
+                                Update existing budget heads (reactivate if disabled)
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> <strong>Note:</strong> Budget heads for configurations with 0 NAM heads will be skipped.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="createBudgetHeads()">
+                    <i class="bi bi-check-circle"></i> Create Budget Heads
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleSelection(card, headId) {
+        // Don't toggle if locked
+        {% if config.is_locked %}
+        return;
+        {% endif %}
+        
+        const checkbox = card.querySelector('input[type="checkbox"]');
+        const icon = card.querySelector('.selection-badge i');
+        
+        checkbox.checked = !checkbox.checked;
+        
+        if (checkbox.checked) {
+            card.classList.add('selected');
+            icon.classList.remove('bi-circle', 'text-muted');
+            icon.classList.add('bi-check-circle-fill', 'text-success');
+        } else {
+            card.classList.remove('selected');
+            icon.classList.remove('bi-check-circle-fill', 'text-success');
+            icon.classList.add('bi-circle', 'text-muted');
+        }
+        
+        updateSelectedCount();
+    }
+    
+    function updateSelectedCount() {
+        const count = document.querySelectorAll('input[name="selected_heads"]:checked').length;
+        document.getElementById('selectedCountDisplay').textContent = count;
+    }
+    
+    function selectAll() {
+        {% if not config.is_locked %}
+        document.querySelectorAll('.global-head-card:not(.selected)').forEach(card => {
+            const checkbox = card.querySelector('input[type="checkbox"]');
+            if (checkbox && !checkbox.checked) {
+                toggleSelection(card);
+            }
+        });
+        {% endif %}
+    }
+    
+    function deselectAll() {
+        {% if not config.is_locked %}
+        document.querySelectorAll('.global-head-card.selected').forEach(card => {
+            const checkbox = card.querySelector('input[type="checkbox"]');
+            if (checkbox && checkbox.checked) {
+                toggleSelection(card);
+            }
+        });
+        {% endif %}
+    }
+    
+    function showSubHeads(namHeadId, namCode) {
+        // Update modal title
+        document.getElementById('modalNamCode').textContent = namCode;
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('subHeadsModal'));
+        modal.show();
+        
+        // Fetch sub-heads via AJAX
+        const contentDiv = document.getElementById('subHeadsContent');
+        contentDiv.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading sub-heads...</p>
+            </div>
+        `;
+        
+        fetch(`/finance/nam-head/${namHeadId}/subheads/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.sub_heads.length > 0) {
+                    let html = '<div class="list-group list-group-flush">';
+                    data.sub_heads.forEach(sub => {
+                        html += `
+                            <div class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1 text-primary">${sub.code}</h6>
+                                        <p class="mb-1">${sub.name}</p>
+                                        ${sub.description ? `<small class="text-muted">${sub.description}</small>` : ''}
+                                    </div>
+                                    <span class="badge ${sub.is_active ? 'bg-success' : 'bg-secondary'}">
+                                        ${sub.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    contentDiv.innerHTML = html;
+                } else {
+                    contentDiv.innerHTML = `
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> No sub-heads found for this NAM head.
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                contentDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> Error loading sub-heads: ${error.message}
+                    </div>
+                `;
+            });
+    }
+    
+    function createBudgetHeads() {
+        const form = document.getElementById('createBudgetHeadsForm');
+        const fundValue = form.querySelector('input[name="fund"]:checked').value;
+        const overwrite = form.querySelector('#overwriteCheck').checked;
+        
+        // Confirm action
+        if (!confirm(`Create budget heads for ${fundValue} fund?\n\nThis will process all configured department-function combinations.`)) {
+            return;
+        }
+        
+        // Show loading state
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+        
+        // Submit via fetch
+        fetch('{% url "finance:create_budget_heads_from_config_ui" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                fund: fundValue,
+                overwrite: overwrite
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            
+            if (data.success) {
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('createBudgetHeadsModal')).hide();
+                
+                // Show success message
+                alert(`Success!\n\nCreated: ${data.created}\nUpdated: ${data.updated}\nSkipped: ${data.skipped}\n\nView at: /budgeting/setup/coa/`);
+                
+                // Optionally reload page to show updated stats
+                if (confirm('Would you like to view the created budget heads?')) {
+                    window.location.href = '/budgeting/setup/coa/';
+                }
+            } else {
+                alert(`Error: ${data.error || 'Unknown error occurred'}`);
+            }
+        })
+        .catch(error => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            alert(`Error: ${error.message || 'Network error occurred'}`);
+        });
+    }
+    
+    // Prevent form submission when clicking inside cards
+    document.querySelectorAll('.global-head-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    });
+</script>
+{% endblock %}

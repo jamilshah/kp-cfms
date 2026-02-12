@@ -163,12 +163,22 @@ Description: Expenditure Dashboard Template
                                     <span class="badge bg-secondary">Draft</span>
                                     {% elif bill.status == 'SUBMITTED' %}
                                     <span class="badge bg-warning text-dark">Submitted</span>
+                                    {% elif bill.status == 'VERIFIED' %}
+                                    <span class="badge bg-info text-white">Verified</span>
+                                    {% elif bill.status == 'MARKED_FOR_AUDIT' %}
+                                    <span class="badge bg-warning text-dark">Marked for Audit</span>
+                                    {% elif bill.status == 'AUDITED' %}
+                                    <span class="badge bg-success">Audited</span>
                                     {% elif bill.status == 'APPROVED' %}
                                     <span class="badge bg-success">Approved</span>
                                     {% elif bill.status == 'PAID' %}
                                     <span class="badge bg-primary">Paid</span>
                                     {% elif bill.status == 'REJECTED' %}
                                     <span class="badge bg-danger">Rejected</span>
+                                    {% elif bill.status == 'RETURNED' %}
+                                    <span class="badge bg-warning text-dark">Returned</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ bill.get_status_display }}</span>
                                     {% endif %}
                                 </td>
                                 <td>Rs. {{ bill.gross_amount|currency }}</td>

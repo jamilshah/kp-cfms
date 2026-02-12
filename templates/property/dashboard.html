@@ -1,0 +1,235 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ page_title }} - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-2">
+                <i class="fas fa-map-marked-alt text-primary"></i> {{ page_title }}
+            </h2>
+            <p class="text-muted">Comprehensive property tracking and GIS management system</p>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Properties
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ total_properties|default:0|intcomma }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-building fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Rented Properties
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ rented_properties|default:0|intcomma }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-key fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Vacant Properties
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ vacant_properties|default:0|intcomma }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-door-open fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Under Litigation
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ litigation_properties|default:0|intcomma }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-gavel fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Financial Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Total Annual Rent
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                Rs. {{ total_annual_rent|default:0|floatformat:2|intcomma }}
+                            </div>
+                            <small class="text-muted">
+                                Monthly: Rs. {{ total_monthly_rent|default:0|floatformat:2|intcomma }}
+                            </small>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-money-bill-wave fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Area
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ total_area_marlas|default:0|floatformat:2|intcomma }} Marlas
+                            </div>
+                            <small class="text-muted">
+                                {{ total_area_sqft|default:0|floatformat:0|intcomma }} Sq.ft |
+                                {{ total_area_sqm|default:0|floatformat:0|intcomma }} Sq.m
+                            </small>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-ruler-combined fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <a href="{% url 'property:map' %}" class="btn btn-lg btn-block" 
+                               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+                                <i class="fas fa-map-marked-alt"></i> View GIS Map
+                            </a>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <a href="{% url 'property:create' %}" class="btn btn-primary btn-block btn-lg">
+                                <i class="fas fa-plus-circle"></i> Add New Property
+                            </a>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <a href="{% url 'property:lease_list' %}" class="btn btn-success btn-block btn-lg">
+                                <i class="fas fa-file-contract"></i> Manage Leases
+                            </a>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <a href="{% url 'property:list' %}" class="btn btn-info btn-block btn-lg">
+                                <i class="fas fa-list"></i> View All Properties
+                            </a>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <a href="{% url 'admin:property_property_changelist' %}" class="btn btn-secondary btn-block btn-lg">
+                                <i class="fas fa-cog"></i> Manage in Admin
+                            </a>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <a href="{% url 'property:district_list' %}" class="btn btn-outline-primary btn-block btn-lg">
+                                <i class="fas fa-database"></i> Master Data
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Coming Soon: GIS Map -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3 bg-gradient-primary text-white">
+                    <h6 class="m-0 font-weight-bold">
+                        <i class="fas fa-map"></i> GIS Map View
+                        <span class="badge badge-warning ml-2">Coming in Phase 3</span>
+                    </h6>
+                </div>
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-map-marked-alt fa-5x text-muted mb-3"></i>
+                    <h5>Interactive Map View</h5>
+                    <p class="text-muted">
+                        OpenStreetMap integration with property markers, search, filters, and GPS navigation
+                        will be available in Phase 3 (Week 3-4).
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Styles -->
+<style>
+    .border-left-primary {
+        border-left: 0.25rem solid #4e73df !important;
+    }
+    .border-left-success {
+        border-left: 0.25rem solid #1cc88a !important;
+    }
+    .border-left-info {
+        border-left: 0.25rem solid #36b9cc !important;
+    }
+    .border-left-warning {
+        border-left: 0.25rem solid #f6c23e !important;
+    }
+</style>
+{% endblock %}

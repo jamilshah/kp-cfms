@@ -32,7 +32,7 @@
                 return;
             }
             
-            const url = `{% url 'finance:load_functions' %}?department=${departmentId}`;
+            const url = `{% url 'expenditure:load_functions' %}?department=${departmentId}`;
             
             fetch(url)
                 .then(response => response.text())
@@ -41,7 +41,11 @@
                     functionSelect.value = '';
                     
                     if (typeof $ !== 'undefined') {
-                        $(functionSelect).select2('destroy').select2({
+                        // Destroy existing Select2 if it exists
+                        if ($(functionSelect).data('select2')) {
+                            $(functionSelect).select2('destroy');
+                        }
+                        $(functionSelect).select2({
                             theme: 'bootstrap-5',
                             width: '100%',
                             placeholder: "Select function...",
@@ -54,26 +58,41 @@
         }
         
         function clearBudgetHeads() {
-            const selects = document.querySelectorAll('select[name$="-budget_head"]');
+            // Don't clear smart budget head selects - they handle their own data loading via AJAX
+            const selects = document.querySelectorAll('select[name$="-budget_head"]:not(.smart-budget-head-select)');
             selects.forEach(select => {
                 select.innerHTML = '<option value="">---------</option>';
-                if (typeof $ !== 'undefined') {
-                    $(select).val(null).trigger('change.select2'); 
+                if (typeof $ !== 'undefined' && $(select).data('select2')) {
+                    $(select).select2('destroy');
                 }
             });
+            
+            // For smart selects, just clear the selection (but keep Select2 initialized)
+            const smartSelects = document.querySelectorAll('.smart-budget-head-select');
+            smartSelects.forEach(select => {
+                if (typeof $ !== 'undefined' && $(select).data('select2')) {
+                    $(select).val(null).trigger('change');
+                }
+            });
+            
             currentBudgetHeadOptions = '<option value="">---------</option>';
         }
         
         // --- Budget Head Loading ---
         function loadBudgetHeads() {
             const functionId = functionSelect.value;
+            const departmentId = departmentSelect.value;  // NEW: Get department ID
             
             if (!functionId) {
                 clearBudgetHeads();
                 return;
             }
             
-            const url = `{% url 'expenditure:load_budget_heads' %}?function=${functionId}`;
+            // NEW: Pass both department and function for precise filtering
+            let url = `{% url 'expenditure:load_budget_heads' %}?function=${functionId}`;
+            if (departmentId) {
+                url += `&department=${departmentId}`;
+            }
             
             fetch(url)
                 .then(response => response.text())
@@ -198,8 +217,10 @@
         }
         
         if (functionSelect) {
-            // Use change event (works with Select2 if configured or standard select)
-            $(functionSelect).on('change', loadBudgetHeads);
+            // OLD: Use change event (works with Select2 if configured or standard select)
+            // $(functionSelect).on('change', loadBudgetHeads);
+            // NEW: Smart budget head select handles its own AJAX loading
+            // The event listener below at line ~565 handles re-initialization
         }
         
         if (payeeSelect) {
@@ -219,6 +240,12 @@
         const addLineBtn = document.getElementById('addLineBtn');
         const totalFormsInput = document.querySelector('#id_lines-TOTAL_FORMS');
         let currentBudgetHeadOptions = '<option value="">---------</option>';
+        
+        console.log('FormSet elements:', {
+            linesContainer: linesContainer,
+            addLineBtn: addLineBtn,
+            totalFormsInput: totalFormsInput
+        });
         
         // --- Tax Calculation Helper ---
         function updateNetPayableDisplay() {
@@ -285,7 +312,9 @@
              
              const deleteBtn = row.querySelector('.delete-row');
              if (deleteBtn) {
-                 deleteBtn.addEventListener('click', function() {
+                 deleteBtn.addEventListener('click', function(e) {
+                     e.preventDefault();
+                     e.stopPropagation();
                      const deleteInput = row.querySelector('input[name$="-DELETE"]');
                      if (deleteInput) {
                          deleteInput.checked = true;
@@ -298,40 +327,460 @@
              }
              
              // Initialize Select2 in new row
-             const select = row.querySelector('select');
+             const select = row.querySelector('select.smart-budget-head-select');
              if (select && typeof $ !== 'undefined') {
-                 $(select).select2({
-                    theme: 'bootstrap-5',
-                    width: '100%',
-                    placeholder: "Search Budget Head...",
-                    allowClear: true
-                });
+                 console.log('Initializing select for row:', select.id);
+                 initSmartBudgetHeadSelect(select);
              }
         }
         
         // Add Line Handler
-        addLineBtn.addEventListener('click', function() {
-            const currentFormCount = parseInt(totalFormsInput.value);
-            const template = document.getElementById('emptyRowTemplate').innerHTML;
-            const newHtml = template.replace(/__prefix__/g, currentFormCount);
-            
-            linesContainer.insertAdjacentHTML('beforeend', newHtml);
-            totalFormsInput.value = currentFormCount + 1;
-            
-            const newRow = linesContainer.lastElementChild;
-            const newSelect = newRow.querySelector('select[name$="-budget_head"]');
-            if (newSelect) {
-                newSelect.innerHTML = currentBudgetHeadOptions;
-            }
-            attachRowListeners(newRow);
-        });
+        if (addLineBtn) {
+            addLineBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('Add Item clicked');
+                const currentFormCount = parseInt(totalFormsInput.value);
+                const template = document.getElementById('emptyRowTemplate').innerHTML;
+                const newHtml = template.replace(/__prefix__/g, currentFormCount);
+                
+                linesContainer.insertAdjacentHTML('beforeend', newHtml);
+                totalFormsInput.value = currentFormCount + 1;
+                
+                const newRow = linesContainer.lastElementChild;
+                console.log('New row added, initializing...');
+                // Select2 initialization is handled by attachRowListeners()
+                attachRowListeners(newRow);
+            });
+        } else {
+            console.error('addLineBtn not found!');
+        }
         
-        // Initial setup for existing rows
+        // Initial setup for existing rows (skip template)
         document.querySelectorAll('.line-row').forEach(row => {
-            attachRowListeners(row);
+            // Don't attach to rows inside hidden template
+            if (!row.closest('#emptyRowTemplate')) {
+                attachRowListeners(row);
+            }
         });
         
         // Initial Calculation
         updateGrossTotal();
+        
+        // --- Smart Budget Head Widget Enhancement ---
+        
+        // Toggle favorite budget head
+        function toggleFavorite(budgetHeadId, addToFavorites, $starElement) {
+            const action = addToFavorites ? 'add' : 'remove';
+            const apiUrl = '{% url 'finance:toggle_budget_head_favorite' %}';
+            
+            fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    budget_head_id: budgetHeadId,
+                    action: action
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update star icon and data attribute
+                    const newIcon = addToFavorites ? '⭐' : '☆';
+                    const newTitle = addToFavorites ? 'Remove from favorites' : 'Add to favorites';
+                    $starElement.text(newIcon);
+                    $starElement.attr('title', newTitle);
+                    $starElement.data('is-favorite', addToFavorites);  // Update data attribute for next toggle
+                    
+                    console.log('Favorite toggled:', budgetHeadId, 'Now favorite:', addToFavorites);
+                    
+                    // Show toast notification
+                    const message = addToFavorites ? '⭐ Added to favorites' : 'Removed from favorites';
+                    showToast(message, 'success');
+                    
+                    // No need to refresh dropdown - the star icon already updated
+                    // The item stays in its current position
+                } else {
+                    console.error('Error toggling favorite:', data.error);
+                    showToast('Error updating favorite', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error toggling favorite:', error);
+                showToast('Error updating favorite', 'error');
+            });
+        }
+        
+        // Simple toast notification
+        function showToast(message, type) {
+            const bgColor = type === 'success' ? '#28a745' : '#dc3545';
+            const toast = $(`
+                <div style="position: fixed; top: 20px; right: 20px; z-index: 9999; background: ${bgColor}; color: white; padding: 12px 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+                    ${message}
+                </div>
+            `);
+            $('body').append(toast);
+            setTimeout(() => toast.fadeOut(300, () => toast.remove()), 2000);
+        }
+        
+        function initSmartBudgetHeadSelect(selectElement) {
+            if (!selectElement || typeof $ === 'undefined') {
+                console.error('Cannot init smart select - element or jQuery missing');
+                return;
+            }
+            
+            // Skip template elements
+            if (selectElement.id && selectElement.id.includes('__prefix__')) {
+                console.log('Skipping template element in initSmartBudgetHeadSelect:', selectElement.id);
+                return;
+            }
+            
+            const $select = $(selectElement);
+            
+            // Destroy existing Select2 if present to reinitialize cleanly
+            if ($select.data('select2')) {  
+                console.log('Destroying existing Select2 for:', selectElement.id);
+                $select.select2('destroy');
+            }
+            
+            const apiUrl = '{% url 'finance:smart_budget_head_search_api' %}';
+            
+            // Get current department and function values
+            const getDepartmentId = () => departmentSelect ? departmentSelect.value : null;
+            const getFunctionId = () => {
+                if (!functionSelect) return null;
+                // If functionSelect is a Select2, use jQuery val()
+                if ($(functionSelect).data('select2')) {
+                    return $(functionSelect).val();
+                }
+                // Fallback to regular value
+                return functionSelect.value;
+            };
+            
+            // Initialize Select2 with comprehensive configuration
+            console.log('Initializing Select2 for:', selectElement.id);
+            $select.select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                placeholder: "🔍 Type to search budget heads...",
+                allowClear: true,
+                minimumInputLength: 0,
+                minimumResultsForSearch: 0,  // Force search box to ALWAYS show
+                dropdownAutoWidth: false,
+                closeOnSelect: true,
+                debug: true,  // Verbose logging
+                language: {
+                    searching: function() {
+                        return "🔍 Searching...";
+                    },
+                    noResults: function() {
+                        return "No budget heads found. Check that department and function are selected.";
+                    },
+                    inputTooShort: function() {
+                        return "Please enter at least 1 character";
+                    },
+                    loadingMore: function() {
+                        return "Loading more results...";
+                    }
+                },
+                ajax: {
+                    url: apiUrl,
+                    dataType: 'json',
+                    delay: 250,
+                    data: function (params) {
+                        const deptId = getDepartmentId();
+                        const funcId = getFunctionId();
+                        
+                        const searchParams = {
+                            q: params.term || '',
+                            department_id: deptId || '',
+                            function_id: funcId || '',
+                            page: params.page || 1
+                        };
+                        
+                        console.log('AJAX Request params:', searchParams);
+                        return searchParams;
+                    },
+                    processResults: function (data, params) {
+                        console.log('API response:', data);
+                        
+                        if (data.error) {
+                            console.error('API error:', data.error);
+                            return { results: [] };
+                        }
+                        
+                        if (!data.results || data.results.length === 0) {
+                            console.warn('No budget heads returned');
+                            return { 
+                                results: [{
+                                    id: '',
+                                    text: 'No budget heads found. Select department and function first.',
+                                    disabled: true
+                                }]
+                            };
+                        }
+                        
+                        // Map results and preserve is_favorite flag
+                        const mappedResults = data.results.map(function(head) {
+                            // Build budget info display
+                            let budgetInfo = '';
+                            if (head.budget && head.budget.has_budget) {
+                                const available = head.budget.available;
+                                const utilization = head.budget.utilization_percentage;
+                                let statusColor = available > 0 ? '🟢' : '🔴';
+                                if (available > 0 && utilization > 80) statusColor = '🟡';
+                                
+                                budgetInfo = ` ${statusColor} Available: Rs ${available.toLocaleString('en-PK', {minimumFractionDigits: 2})} (${utilization.toFixed(0)}% used)`;
+                            } else {
+                                budgetInfo = ' ⚠️ No budget';
+                            }
+                            
+                            return {
+                                id: head.id,
+                                text: `${head.code} - ${head.name}${budgetInfo}`,
+                                budget: head.budget,
+                                code: head.code,
+                                name: head.name,
+                                is_favorite: head.is_favorite || false  // Preserve favorite status
+                            };
+                        });
+                        
+                        // Build final results array
+                        // Favorites stay in their original position, no need to reorder
+                        // The star icon already indicates favorite status
+                        let finalResults = mappedResults;
+                        
+                        // Optionally add favorites count info at top (only on first page)
+                        if (params.page === 1) {
+                            const favCount = mappedResults.filter(item => item.is_favorite).length;
+                            if (favCount > 0) {
+                                finalResults = [{
+                                    id: 'fav-info',
+                                    text: `⭐ ${favCount} favorite${favCount > 1 ? 's' : ''} in this list (marked with ⭐)`,
+                                    disabled: true,
+                                    _isHeader: true
+                                }].concat(mappedResults);
+                            }
+                        }
+                        
+                        return {
+                            results: finalResults,
+                            pagination: {
+                                more: data.pagination && data.pagination.more || false
+                            }
+                        };
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('AJAX Error:', {
+                            status: status,
+                            error: error,
+                            responseText: xhr.responseText,
+                            statusCode: xhr.status
+                        });
+                        
+                        // Show user-friendly error message
+                        if (xhr.status === 400 || xhr.status === 403) {
+                            try {
+                                const errorData = JSON.parse(xhr.responseText);
+                                if (errorData.error) {
+                                    alert('Error loading budget heads: ' + errorData.error);
+                                }
+                            } catch(e) {
+                                console.error('Could not parse error response');
+                            }
+                        }
+                    },
+                    cache: true
+                },
+                templateResult: function(item) {
+                    if (item.loading) return item.text;
+                    
+                    // Handle section headers
+                    if (item._isHeader) {
+                        return $('<div class="select2-section-header" style="font-weight: bold; background-color: #f8f9fa; padding: 8px 12px; margin: 0 -12px; border-top: 1px solid #dee2e6; border-bottom: 1px solid #dee2e6;">' + item.text + '</div>');
+                    }
+                    
+                    // Handle items without budget data (error messages, etc)
+                    if (!item.budget) return $('<span>' + item.text + '</span>');
+                    
+                    // Enhanced display with budget bar and favorite star
+                    let $container = $('<div class="select2-budget-head-item d-flex justify-content-between align-items-start"></div>');
+                    let $content = $('<div class="flex-grow-1"></div>');
+                    
+                    // Header with code and name
+                    let $header = $('<div><strong>' + item.code + '</strong> ' + item.name + '</div>');
+                    $content.append($header);
+                    
+                    // Budget information
+                    if (item.budget.has_budget) {
+                        const available = item.budget.available;
+                        const utilization = item.budget.utilization_percentage;
+                        let barColor = available > 0 ? '#28a745' : '#dc3545';
+                        if (available > 0 && utilization > 80) barColor = '#ffc107';
+                        
+                        let $info = $(`
+                            <div class="small text-muted mt-1">
+                                <div class="d-flex justify-content-between">
+                                    <span>Available: Rs ${available.toLocaleString('en-PK', {minimumFractionDigits: 2})}</span>
+                                    <span>${utilization.toFixed(0)}% used</span>
+                                </div>
+                                <div class="progress mt-1" style="height: 4px;">
+                                    <div class="progress-bar" style="width: ${Math.min(utilization, 100)}%; background-color: ${barColor};"></div>
+                                </div>
+                            </div>
+                        `);
+                        $content.append($info);
+                    } else {
+                        $content.append('<div class="small text-warning">⚠️ No budget allocated</div>');
+                    }
+                    
+                    $container.append($content);
+                    
+                    // Favorite star icon (clickable)
+                    const isFavorite = item.is_favorite || false;
+                    const starIcon = isFavorite ? '⭐' : '☆';
+                    const starTitle = isFavorite ? 'Remove from favorites' : 'Add to favorites';
+                    let $star = $(`<span class="favorite-star ms-2" style="cursor: pointer; font-size: 1.2em; user-select: none;" title="${starTitle}" data-budget-head-id="${item.id}" data-is-favorite="${isFavorite}">${starIcon}</span>`);
+                    
+                    $container.append($star);
+                    
+                    return $container;
+                },
+                templateSelection: function(item) {
+                    return item.code ? `${item.code} - ${item.name}` : item.text;
+                }
+            });
+            
+            // Attach event handlers separately
+            $select.on('select2:open', function(e) {
+                console.log('Select2 dropdown opened for:', this.id);
+                
+                // Attach event handlers for favorite stars using event delegation
+                setTimeout(function() {
+                    const $dropdown = $('.select2-dropdown');
+                    
+                    // Handle all mouse events on stars to prevent selection
+                    $dropdown.off('mousedown.favstar mouseup.favstar click.favstar', '.favorite-star');
+                    
+                    $dropdown.on('mousedown.favstar', '.favorite-star', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        console.log('Star mousedown prevented');
+                    });
+                    
+                    $dropdown.on('mouseup.favstar', '.favorite-star', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        console.log('Star mouseup prevented');
+                    });
+                    
+                    $dropdown.on('click.favstar', '.favorite-star', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        
+                        const $star = $(this);
+                        const budgetHeadId = $star.data('budget-head-id');
+                        const isFavorite = $star.data('is-favorite') === true || $star.data('is-favorite') === 'true';
+                        
+                        console.log('Star clicked - ID:', budgetHeadId, 'Current isFavorite:', isFavorite);
+                        
+                        // Toggle favorite
+                        toggleFavorite(budgetHeadId, !isFavorite, $star);
+                        
+                        // Also prevent on the parent result item
+                        $star.closest('.select2-results__option').addClass('select2-results__option--disabled');
+                        setTimeout(function() {
+                            $star.closest('.select2-results__option').removeClass('select2-results__option--disabled');
+                        }, 100);
+                    });
+                }, 50);
+                
+                // Prevent selection when clicking on favorite stars
+                $select.on('select2:selecting.favstar', function(e) {
+                    const $target = $(e.params.args.originalEvent.target);
+                    if ($target.hasClass('favorite-star') || $target.closest('.favorite-star').length > 0) {
+                        console.log('Prevented selection due to star click');
+                        e.preventDefault();
+                        return false;
+                    }
+                });
+            });
+            
+            $select.on('select2:close', function(e) {
+                console.log('Select2 dropdown closed for:', this.id);
+                // Clean up event handlers
+                $(this).off('select2:selecting.favstar');
+                $('.select2-dropdown').off('.favstar');
+            });
+        }
+        
+        // Initialize all smart budget head selects
+        function initAllSmartSelects() {
+            const deptId = departmentSelect ? departmentSelect.value : null;
+            const funcId = functionSelect ? functionSelect.value : null;
+            
+            console.log('Initializing smart selects with dept:', deptId, 'func:', funcId);
+            
+            document.querySelectorAll('.smart-budget-head-select').forEach(function(select) {
+                // Skip template rows (those with __prefix__ in id)
+                if (select.id.includes('__prefix__')) {
+                    console.log('Skipping template select:', select.id);
+                    return;
+                }
+                console.log('Processing smart select:', select.id);
+                // Always initialize - the function handles destroy/recreate
+                initSmartBudgetHeadSelect(select);
+            });
+        }
+        
+        // Initialize on department or function change
+        if (departmentSelect) {
+            departmentSelect.addEventListener('change', function() {
+                console.log('Department changed to:', this.value);
+                // Wait for function to be loaded and Select2 to be initialized
+                setTimeout(function() {
+                    if (functionSelect && functionSelect.value) {
+                        console.log('Auto-refreshing smart selects after department change');
+                        initAllSmartSelects();
+                    } else {
+                        console.log('Function not selected yet, waiting...');
+                    }
+                }, 800);
+            });
+        }
+        
+        if (functionSelect) {
+            // Use jQuery event listener since functionSelect is a Select2
+            $(functionSelect).on('change', function() {
+                console.log('Function changed to:', this.value);
+                if (departmentSelect && departmentSelect.value && this.value) {
+                    console.log('Refreshing smart selects after function change');
+                    initAllSmartSelects();
+                }
+            });
+        }
+        
+        // FORCE initialization on page load for all smart selects
+        console.log('=== PAGE LOAD: Checking for smart selects ===');
+        const smartSelects = document.querySelectorAll('.smart-budget-head-select');
+        console.log('Found', smartSelects.length, 'smart budget head selects');
+        
+        // Initialize all smart selects after a brief delay
+        setTimeout(function() {
+            smartSelects.forEach(function(select) {
+                // Skip template rows
+                if (select.id.includes('__prefix__')) {
+                    console.log('Page load: Skipping template select:', select.id);
+                    return;
+                }
+                console.log('Page load: Initializing select:', select.id);
+                initSmartBudgetHeadSelect(select);
+            });
+        }, 500);
     });
 </script>

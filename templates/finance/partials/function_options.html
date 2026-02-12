@@ -1,0 +1,13 @@
+<option value="">---------</option>
+{% for func in functions %}
+<option value="{{ func.pk }}" 
+        {% if func.pk == default_id %}selected{% endif %}
+        {% if func.usage_notes %}title="{{ func.usage_notes }}"{% endif %}>
+    {{ func }}
+</option>
+{% endfor %}
+
+{# Clear global heads when function list is reloaded #}
+<div id="id_global_head" hx-swap-oob="innerHTML">
+    <option value="">---------</option>
+</div>

@@ -124,25 +124,12 @@ class MasterDataSeedView(LoginRequiredMixin, SuperAdminRequiredMixin, TemplateVi
                 'icon': 'bi-calendar3'
             },
             {
-                'name': 'import_coa',
-                'title': 'Import Chart of Accounts',
-                'description': 'Imports budget heads from CoA.csv file.',
-                'icon': 'bi-journal-text'
-            },
-            {
                 'name': 'import_locations',
                 'title': 'Import Locations',
                 'description': 'Imports Divisions, Districts, and TMAs from CSV.',
                 'icon': 'bi-geo-alt'
             },
         ]
-        
-        # Add funds, functions, and departments for CoA import modal
-        from apps.finance.models import Fund, FunctionCode
-        from apps.budgeting.models import Department
-        context['funds'] = Fund.objects.filter(is_active=True).order_by('code')
-        context['functions'] = FunctionCode.objects.filter(is_active=True).order_by('code')
-        context['departments'] = Department.objects.filter(is_active=True).order_by('name')
         
         return context
     
@@ -157,7 +144,6 @@ class MasterDataSeedView(LoginRequiredMixin, SuperAdminRequiredMixin, TemplateVi
             'import_bps_scales': 'import_bps_scales',
             'seed_departments': 'seed_departments',
             'setup_fy': 'setup_fy',
-            'import_coa': 'import_coa',
             'import_locations': 'import_locations',
             'migrate_roles': 'migrate_roles',
             'seed_tax_rates': 'seed_tax_rates',  # Tax withholding configuration
@@ -168,36 +154,8 @@ class MasterDataSeedView(LoginRequiredMixin, SuperAdminRequiredMixin, TemplateVi
             return redirect('system_admin:master_data_seed')
         
         try:
-            # Handle import_coa with extra parameters
-            if command_name == 'import_coa':
-                fund_code = request.POST.get('fund', 'GEN')
-                function_code = request.POST.get('function')
-                department_id = request.POST.get('department')
-                skip_budget_heads = request.POST.get('skip_budget_heads') == 'on'
-                
-                # Prepare arguments
-                kwargs = {
-                    'fund': fund_code,
-                    'skip_budget_heads': skip_budget_heads
-                }
-                
-                if function_code:
-                    kwargs['function'] = function_code
-                
-                if department_id:
-                    kwargs['department_id'] = department_id
-                
-                call_command(allowed_commands[command_name], **kwargs)
-                
-                if skip_budget_heads:
-                    messages.success(request, f'Successfully imported Master Data (GlobalHeads only).')
-                elif department_id:
-                    messages.success(request, f'Successfully imported CoA for Fund={fund_code} and selected Department.')
-                else:
-                    messages.success(request, f'Successfully imported CoA for Fund={fund_code}, Function={function_code}.')
-            else:
-                call_command(allowed_commands[command_name])
-                messages.success(request, f'Successfully executed: {command_name}')
+            call_command(allowed_commands[command_name])
+            messages.success(request, f'Successfully executed: {command_name}')
         except Exception as e:
             messages.error(request, f'Error executing {command_name}: {str(e)}')
         
@@ -580,3 +538,78 @@ class RoleDeleteView(LoginRequiredMixin, SuperAdminRequiredMixin, DeleteView):
     def delete(self, request, *args, **kwargs):
         messages.success(request, 'Role deleted successfully.')
         return super().delete(request, *args, **kwargs)
+
+
+class OrganizationSettingsView(LoginRequiredMixin, UpdateView):
+    """
+    Organization settings page for TMA Admin or Super Admin.
+    
+    Allows toggling department-level access control.
+    TMA Admins can only edit their own organization settings.
+    Super Admins can edit any organization.
+    """
+    model = Organization
+    template_name = 'system_admin/organization_settings.html'
+    fields = ['enforce_department_isolation']
+    success_url = reverse_lazy('system_admin:organization_settings')
+    
+    def dispatch(self, request, *args, **kwargs):
+        """Check permissions and ensure user edits their own organization."""
+        user = request.user
+        
+        # Superusers can edit any organization (pass pk in URL)
+        if user.is_superuser:
+            return super().dispatch(request, *args, **kwargs)
+        
+        # TMA Admins can only edit their own organization
+        if user.is_tma_admin() and user.organization:
+            # Override pk to always use user's organization
+            self.kwargs['pk'] = user.organization.pk
+            return super().dispatch(request, *args, **kwargs)
+        
+        # No permission
+        messages.error(request, 'You do not have permission to access organization settings.')
+        return redirect('home')
+    
+    def get_object(self, queryset=None):
+        """Get organization - either from URL (superuser) or from user (TMA admin)."""
+        user = self.request.user
+        
+        if user.is_superuser and 'pk' in self.kwargs:
+            return super().get_object(queryset)
+        
+        # TMA Admin: always their own organization
+        if user.organization:
+            return user.organization
+        
+        # Fallback
+        return super().get_object(queryset)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        org = self.get_object()
+        
+        # Count users who would be affected by department isolation
+        if org:
+            from django.db.models import Q
+            affected_users = CustomUser.objects.filter(
+                organization=org,
+                department__isnull=False
+            ).exclude(
+                Q(is_superuser=True) |
+                Q(roles__code__in=['TMO', 'FINANCE_OFFICER', 'TMA_ADMIN'])
+            ).count()
+            
+            context['affected_users_count'] = affected_users
+            context['total_users'] = CustomUser.objects.filter(organization=org).count()
+        
+        return context
+    
+    def form_valid(self, form):
+        org = form.instance
+        status = "enabled" if org.enforce_department_isolation else "disabled"
+        messages.success(
+            self.request,
+            f'Department isolation has been {status} for {org.name}.'
+        )
+        return super().form_valid(form)

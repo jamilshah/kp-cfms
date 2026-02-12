@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from apps.finance.models import (
     BudgetHead, FunctionCode, ChequeBook, ChequeLeaf,
     BankStatement, BankStatementLine, StatementStatus,
-    Voucher, JournalEntry
+    Voucher, JournalEntry, NAMHead, SubHead
 )
 from apps.core.models import BankAccount
 from apps.budgeting.models import FiscalYear, Department
@@ -17,20 +17,34 @@ from django.urls import reverse_lazy
 class BudgetHeadForm(forms.ModelForm):
     """
     Form for creating/editing Budget Heads (Chart of Accounts).
-    Links a Fund to a GlobalHead.
+    
+    NAM CoA Structure (5-level hierarchy):
+    - Department + Fund + Function are required
+    - EITHER nam_head OR sub_head must be selected (mutually exclusive)
+    - Selecting department/function filters available NAM heads
     """
     
     class Meta:
         model = BudgetHead
         fields = [
-            'fund', 'global_head', 'function',
+            'department', 'fund', 'function',
+            'nam_head', 'sub_head',
+            'current_budget',
             'is_active',
             'budget_control', 'posting_allowed', 'project_required'
         ]
         widgets = {
-            'fund': forms.Select(attrs={'class': 'form-select select2-enable'}),
-            'global_head': forms.Select(attrs={'class': 'form-select select2-enable'}),
-            'function': forms.Select(attrs={'class': 'form-select select2-enable'}),
+            'department': forms.Select(attrs={'class': 'form-select'}),
+            'fund': forms.Select(attrs={'class': 'form-select'}),
+            'function': forms.Select(attrs={'class': 'form-select', 'id': 'id_function'}),
+            'nam_head': forms.Select(attrs={'class': 'form-select searchable-select', 'id': 'id_nam_head'}),
+            'sub_head': forms.Select(attrs={'class': 'form-select searchable-select', 'id': 'id_sub_head'}),
+            'current_budget': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'step': '0.01',
+                'min': '0',
+                'placeholder': '0.00'
+            }),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'budget_control': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'posting_allowed': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -39,65 +53,57 @@ class BudgetHeadForm(forms.ModelForm):
     
     def __init__(self, *args, **kwargs):
         self.request = kwargs.pop('request', None)
+        kwargs.pop('mode', '')  # Remove mode parameter (no longer used)
         super().__init__(*args, **kwargs)
         
-        # Add Department filter field (not part of model)
-        self.fields['department'] = forms.ModelChoiceField(
-            queryset=Department.objects.filter(is_active=True).order_by('name'),
-            label=_('Department (Filter)'),
-            required=False,
-            widget=forms.Select(attrs={
-                'class': 'form-select select2-enable',
-                'hx-get': reverse_lazy('finance:load_functions'),
-                'hx-target': '#id_function',
-                'hx-trigger': 'change',
-            }),
-            help_text=_('Select your department to filter the function list.')
-        )
+        # Configure department field
+        self.fields['department'].queryset = Department.objects.filter(is_active=True).order_by('name')
+        self.fields['department'].help_text = _('Select the department responsible for this budget head.')
         
-        # Add HTMX to function field to filter GlobalHead
-        self.fields['function'].widget.attrs.update({
-            'hx-get': reverse_lazy('finance:load_global_heads'),
-            'hx-target': '#id_global_head',
-            'hx-trigger': 'change',
-        })
+        # Configure function field
+        self.fields['function'].label = _('Function Code')
+        self.fields['function'].help_text = _('The PIFRA functional classification code.')
         
-        # Reorder fields to put department first
-        field_order = ['fund', 'department', 'function', 'global_head', 'is_active', 'budget_control', 'posting_allowed', 'project_required']
-        self.fields = {k: self.fields[k] for k in field_order if k in self.fields}
+        # Configure NAM Head field
+        self.fields['nam_head'].label = _('NAM Head (Level 4)')
+        self.fields['nam_head'].help_text = _('Select if this is a regular budget head without sub-divisions.')
+        self.fields['nam_head'].required = False
         
-        # Rename labels for clarity
-        self.fields['function'].label = _('Department Code (Function)')
-        self.fields['function'].help_text = _('The official PIFRA code for your department/shoba.')
+        # Configure Sub-Head field
+        self.fields['sub_head'].label = _('Sub-Head (Level 5)')
+        self.fields['sub_head'].help_text = _('Select if this is a sub-divided budget head.')
+        self.fields['sub_head'].required = False
         
-        self.fields['global_head'].label = _('Bill Item / Object')
-        self.fields['global_head'].help_text = _('What is this expense for? (e.g., Electricity, Salary, Petrol)')
-        
-        # Order global heads by code for easier selection
-        # Filter by function if available (for edit mode or when function is pre-selected)
+        # Filter NAM heads by department and function if available
         from django.db.models import Q
-        global_head_qs = self.fields['global_head'].queryset.select_related(
-            'minor__major'
-        ).order_by('code')
+        from apps.finance.models import NAMHead, SubHead
         
-        # If editing and function is set, filter GlobalHead by function
-        if self.instance and self.instance.pk and self.instance.function:
-            function = self.instance.function
-            global_head_qs = global_head_qs.filter(
-                Q(applicable_functions__isnull=True) |  # Universal heads
-                Q(applicable_functions=function)  # Function-specific heads
-            ).distinct()
+        nam_head_qs = NAMHead.objects.select_related('minor__major').order_by('code')
+        # SubHead.code is a @property, not a DB field - must order by nam_head__code, sub_code
+        sub_head_qs = SubHead.objects.select_related('nam_head__minor__major').order_by('nam_head__code', 'sub_code')
         
-        self.fields['global_head'].queryset = global_head_qs
-        
-        # If editing (instance exists)
+        # If editing instance with department/function, filter by DepartmentFunctionConfiguration
+        # This replaces the deprecated scope-based filtering
         if self.instance and self.instance.pk:
-            # Populate department if function is set
-            if self.instance.function:
-                # Note: FunctionCode.departments is the related_name from Department model
-                dept = self.instance.function.departments.first()
-                if dept:
-                    self.fields['department'].initial = dept
+            if self.instance.department and self.instance.function:
+                # Get configured NAM heads for this dept-func combination
+                from apps.finance.models import DepartmentFunctionConfiguration
+                config = DepartmentFunctionConfiguration.objects.filter(
+                    department=self.instance.department,
+                    function=self.instance.function
+                ).first()
+                
+                if config:
+                    # Only show NAM heads configured for this department-function
+                    allowed_nam_ids = list(config.allowed_nam_heads.values_list('id', flat=True))
+                    nam_head_qs = nam_head_qs.filter(id__in=allowed_nam_ids)
+                    
+                    # Filter sub-heads by their parent NAM head
+                    sub_head_qs = sub_head_qs.filter(nam_head_id__in=allowed_nam_ids)
+                else:
+                    # No configuration found - show all heads with a warning
+                    # (backward compatibility - in production this shouldn't happen)
+                    pass
             
             # Lock identity fields unless superuser
             is_superuser = self.request and self.request.user.is_superuser
@@ -105,7 +111,152 @@ class BudgetHeadForm(forms.ModelForm):
                 self.fields['fund'].disabled = True
                 self.fields['department'].disabled = True
                 self.fields['function'].disabled = True
-                self.fields['global_head'].disabled = True
+                self.fields['nam_head'].disabled = True
+                self.fields['sub_head'].disabled = True
+        
+        self.fields['nam_head'].queryset = nam_head_qs
+        self.fields['sub_head'].queryset = sub_head_qs
+    
+    def clean(self):
+        """
+        Validate budget head:
+        - Delegates mutual exclusivity validation to model's clean() method
+        - Check for duplicate budget heads
+        """
+        cleaned_data = super().clean()
+        
+        department = cleaned_data.get('department')
+        fund = cleaned_data.get('fund')
+        function = cleaned_data.get('function')
+        nam_head = cleaned_data.get('nam_head')
+        sub_head = cleaned_data.get('sub_head')
+        
+        # NOTE: Mutual exclusivity validation is handled by model's clean() method
+        # No need to duplicate that logic here
+        
+        # Check for duplicates
+        if department and fund and function and (nam_head or sub_head):
+            # Build the query
+            duplicate_query = BudgetHead.objects.filter(
+                department=department,
+                fund=fund,
+                function=function,
+            )
+            
+            if nam_head:
+                duplicate_query = duplicate_query.filter(nam_head=nam_head)
+            else:
+                duplicate_query = duplicate_query.filter(sub_head=sub_head)
+            
+            # Exclude current instance if editing
+            if self.instance and self.instance.pk:
+                duplicate_query = duplicate_query.exclude(pk=self.instance.pk)
+            
+            if duplicate_query.exists():
+                existing = duplicate_query.first()
+                error_msg = _(
+                    f'This budget head already exists: {existing}. '
+                    f'Each combination of Department + Fund + Function + (NAM Head OR Sub-Head) must be unique.'
+                )
+                raise ValidationError(error_msg)
+        
+        return cleaned_data
+
+
+class SubHeadForm(forms.ModelForm):
+    """
+    Form for creating/editing Sub-Heads (Level 5 of CoA hierarchy).
+    
+    Sub-Heads provide optional subdivisions of NAM Heads for more granular tracking.
+    Example: A01101-01, A01101-02 under parent NAM Head A01101.
+    """
+    
+    class Meta:
+        model = SubHead
+        fields = ['nam_head', 'sub_code', 'name', 'description', 'is_active']
+        widgets = {
+            'nam_head': forms.Select(attrs={
+                'class': 'form-select searchable-select',
+                'data-placeholder': 'Select parent NAM Head...'
+            }),
+            'sub_code': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '01, 02, 03...',
+                'maxlength': '2',
+                'pattern': '[0-9]{2}',
+                'title': 'Enter 2-digit code (e.g., 01, 02, 03)'
+            }),
+            'name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Descriptive name for this sub-head'
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Optional detailed description'
+            }),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+        help_texts = {
+            'nam_head': _('Select the parent NAM Head (Level 4) for this sub-head'),
+            'sub_code': _('2-digit code (01-99). Must be unique within the parent NAM head.'),
+            'name': _('Descriptive name for this specific subdivision'),
+            'description': _('Optional detailed description or usage notes'),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Order NAM heads by code for easier selection
+        self.fields['nam_head'].queryset = NAMHead.objects.filter(
+            is_active=True
+        ).select_related('minor__major').order_by('code')
+        
+        # Make description optional but encourage usage
+        self.fields['description'].required = False
+        
+        # Set default to active
+        if not self.instance.pk:
+            self.fields['is_active'].initial = True
+    
+    def clean_sub_code(self):
+        """Validate sub_code format."""
+        sub_code = self.cleaned_data.get('sub_code', '').strip()
+        
+        if not sub_code:
+            raise ValidationError(_('Sub-code is required'))
+        
+        # Ensure 2 digits
+        if not sub_code.isdigit() or len(sub_code) != 2:
+            raise ValidationError(_('Sub-code must be exactly 2 digits (e.g., 01, 02, 03)'))
+        
+        return sub_code
+    
+    def clean(self):
+        """Check for duplicate nam_head + sub_code combination."""
+        cleaned_data = super().clean()
+        nam_head = cleaned_data.get('nam_head')
+        sub_code = cleaned_data.get('sub_code')
+        
+        if nam_head and sub_code:
+            # Check for duplicates
+            duplicate_query = SubHead.objects.filter(
+                nam_head=nam_head,
+                sub_code=sub_code
+            )
+            
+            # Exclude current instance if editing
+            if self.instance and self.instance.pk:
+                duplicate_query = duplicate_query.exclude(pk=self.instance.pk)
+            
+            if duplicate_query.exists():
+                existing = duplicate_query.first()
+                raise ValidationError(
+                    _(f'Sub-head {existing.code} already exists. '
+                      f'Each sub-code must be unique within its parent NAM head.')
+                )
+        
+        return cleaned_data
 
 
 class ChequeBookForm(forms.ModelForm):

@@ -150,8 +150,12 @@ class BillListView(LoginRequiredMixin, ListView):
         queryset = Bill.objects.filter(
             organization=org
         ).select_related(
-            'payee', 'fiscal_year'
+            'payee', 'fiscal_year', 'department'
         ).order_by('-bill_date', '-created_at')
+        
+        # Apply department-level filtering if enabled
+        if user.should_see_own_department_only():
+            queryset = queryset.filter(department=user.department)
         
         # Filter by status if provided
         status = self.request.GET.get('status')
@@ -228,12 +232,21 @@ class BillCreateView(LoginRequiredMixin, MakerRequiredMixin, CreateView):
             
         # Get fiscal year for formset
         fy = FiscalYear.get_current_operating_year() if org else None
+        
+        # Get department and function from form data
+        department_id = None
+        function_id = None
+        if self.request.POST:
+            department_id = self.request.POST.get('department')
+            function_id = self.request.POST.get('function')
             
         if self.request.POST:
             context['lines'] = BillLineFormSet(
                 self.request.POST,
                 organization=org,
-                fiscal_year=fy
+                fiscal_year=fy,
+                department_id=department_id,
+                function_id=function_id
             )
         else:
             context['lines'] = BillLineFormSet(
@@ -686,11 +699,17 @@ class PaymentListView(LoginRequiredMixin, ListView):
         if not org:
             return Payment.objects.none()
         
-        return Payment.objects.filter(
+        queryset = Payment.objects.filter(
             organization=org
         ).select_related(
-            'bill', 'bill__payee', 'bank_account'
+            'bill', 'bill__payee', 'bill__department', 'bank_account'
         ).order_by('-cheque_date', '-created_at')
+        
+        # Apply department-level filtering if enabled
+        if user.should_see_own_department_only():
+            queryset = queryset.filter(bill__department=user.department)
+        
+        return queryset
 
 
 class BillAmountAPIView(LoginRequiredMixin, View):
@@ -740,14 +759,15 @@ def load_functions(request):
 
 def load_budget_heads(request):
     """
-    AJAX view to load budget heads filtered by function.
+    AJAX view to load budget heads filtered by department and function.
     
-    All budget heads are now UNIVERSAL scope.
-    Filtering is done by the selected function.
-    Excludes salary heads (A01*) as they have separate salary bill workflow.
+    NEW BEHAVIOR (after CoA restructuring):
+    - Filters by department FK directly on BudgetHead
+    - When both department AND function provided: returns precise filtered set
+    - Excludes salary heads (A01*) as they have separate salary bill workflow.
     """
     function_id = request.GET.get('function')
-    department_id = request.GET.get('department')  # Keep for backward compatibility
+    department_id = request.GET.get('department')
     department = None
     
     # Base queryset - Expenditure heads only (Bills are for expenses, not revenue)
@@ -758,30 +778,41 @@ def load_budget_heads(request):
         is_active=True
     ).exclude(
         global_head__code__startswith='A01'
-    ).select_related('global_head', 'function').order_by('global_head__code', 'function__code')
+    ).select_related('global_head', 'function', 'department').order_by('global_head__code', 'function__code')
     
-    # Filter by function (primary method)
-    if function_id:
+    # PRIMARY FILTER: Use both department + function for most precise results
+    if department_id and function_id:
+        try:
+            department = Department.objects.get(id=department_id)
+            # Use the new department FK directly for precise filtering
+            budget_heads = budget_heads.filter(
+                department_id=department_id,
+                function_id=function_id
+            )
+        except (ValueError, TypeError, Department.DoesNotExist):
+            pass
+    # Filter by function only
+    elif function_id:
         try:
             budget_heads = budget_heads.filter(function_id=function_id)
-            # Get department for display purposes
-            function = FunctionCode.objects.get(id=function_id)
-            # Try to find which department this function belongs to
-            dept_with_function = Department.objects.filter(related_functions=function).first()
-            if dept_with_function:
-                department = dept_with_function
+            # Get department for display - try from budget head's department first
+            first_head = budget_heads.first()
+            if first_head and first_head.department:
+                department = first_head.department
+            else:
+                # Fallback: Try to find via M2M
+                function = FunctionCode.objects.get(id=function_id)
+                dept_with_function = Department.objects.filter(related_functions=function).first()
+                if dept_with_function:
+                    department = dept_with_function
         except (ValueError, TypeError, FunctionCode.DoesNotExist):
             pass
-    # Fallback to department filtering (for backward compatibility)
+    # Filter by department only
     elif department_id:
         try:
             department = Department.objects.get(id=department_id)
-            
-            # Only show budget heads for functions assigned to this department
-            budget_heads = budget_heads.filter(
-                function__in=department.related_functions.all()
-            )
-            
+            # Use the new department FK directly
+            budget_heads = budget_heads.filter(department=department)
         except (ValueError, TypeError, Department.DoesNotExist):
             pass
             

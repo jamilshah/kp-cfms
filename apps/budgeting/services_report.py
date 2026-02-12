@@ -88,8 +88,9 @@ class BudgetBookService:
         # GROUP A: OPERATING RECEIPTS (Revenue)
         # ============================================================
         operating_receipts = allocations.filter(
-            budget_head__global_head__account_type=AccountType.REVENUE
-        ).order_by('budget_head__global_head__code')
+            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__account_type=AccountType.REVENUE) |
+            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__account_type=AccountType.REVENUE)
+        ).order_by('budget_head__department__name', 'budget_head__function__code')
         
         total_operating_receipts = operating_receipts.aggregate(
             total=Sum('original_allocation')
@@ -100,15 +101,18 @@ class BudgetBookService:
         # Exclude A09 (Physical Assets/Development)
         # ============================================================
         operating_expenditure = allocations.filter(
-            budget_head__global_head__account_type=AccountType.EXPENDITURE
+            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__account_type=AccountType.EXPENDITURE) |
+            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__account_type=AccountType.EXPENDITURE)
         ).exclude(
-            budget_head__global_head__code__startswith='A09'
+            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A09') |
+            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A09')
         )
         
         # Sub-group B1: Salaries (A01*)
         operating_expenditure_salary = operating_expenditure.filter(
-            budget_head__global_head__code__startswith='A01'
-        ).order_by('budget_head__global_head__code')
+            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A01') |
+            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A01')
+        ).order_by('budget_head__department__name', 'budget_head__function__code')
         
         total_salary = operating_expenditure_salary.aggregate(
             total=Sum('original_allocation')
@@ -116,8 +120,9 @@ class BudgetBookService:
         
         # Sub-group B2: Non-Salary (A03, A04, A05, etc. - excluding A01 and A09)
         operating_expenditure_nonsalary = operating_expenditure.exclude(
-            budget_head__global_head__code__startswith='A01'
-        ).order_by('budget_head__global_head__code')
+            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A01') |
+            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A01')
+        ).order_by('budget_head__department__name', 'budget_head__function__code')
         
         total_nonsalary = operating_expenditure_nonsalary.aggregate(
             total=Sum('original_allocation')
@@ -129,14 +134,15 @@ class BudgetBookService:
         # GROUP C: CAPITAL RECEIPTS
         # Development Grants, Loans, etc.
         # ============================================================
-        # Note: Adjust this filter based on your CoA structure
-        # Common capital receipt codes: B01 (Development Grants), B02 (Loans)
+        # Note: Capital receipts typically start with 'B' in the CoA
         capital_receipts = allocations.filter(
-            Q(budget_head__global_head__account_type=AccountType.REVENUE,
-              budget_head__global_head__code__startswith='B') |
-            Q(budget_head__global_head__code__icontains='GRANT') |
-            Q(budget_head__global_head__code__icontains='DEVELOPMENT')
-        ).order_by('budget_head__global_head__code')
+            Q(budget_head__nam_head__isnull=False,
+              budget_head__nam_head__account_type=AccountType.REVENUE,
+              budget_head__nam_head__code__startswith='B') |
+            Q(budget_head__sub_head__isnull=False,
+              budget_head__sub_head__nam_head__account_type=AccountType.REVENUE,
+              budget_head__sub_head__nam_head__code__startswith='B')
+        ).order_by('budget_head__department__name', 'budget_head__function__code')
         
         total_capital_receipts = capital_receipts.aggregate(
             total=Sum('original_allocation')
@@ -146,9 +152,11 @@ class BudgetBookService:
         # GROUP D: CAPITAL EXPENDITURE (Development/A09)
         # ============================================================
         capital_expenditure = allocations.filter(
-            Q(budget_head__global_head__code__startswith='A09') |
-            Q(budget_head__global_head__account_type=AccountType.ASSET)
-        ).order_by('budget_head__global_head__code')
+            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A09') |
+            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__account_type=AccountType.ASSET) |
+            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A09') |
+            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__account_type=AccountType.ASSET)
+        ).order_by('budget_head__department__name', 'budget_head__function__code')
         
         total_capital_expenditure = capital_expenditure.aggregate(
             total=Sum('original_allocation')

@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - KP-CFMS</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin=""/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" crossorigin=""/>
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    
+    <style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+    
+    body, html {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    
+    #map {
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+    }
+    
+    /* Floating Sidebar */
+    #floating-sidebar {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        width: 320px;
+        max-height: calc(100vh - 40px);
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+    
+    #floating-sidebar.collapsed {
+        width: 60px;
+        height: 60px;
+    }
+    
+    #floating-sidebar.collapsed .sidebar-content {
+        display: none;
+    }
+    
+    .sidebar-header {
+        padding: 16px 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+    }
+    
+    .sidebar-header h5 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+    }
+    
+    .sidebar-toggle {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 0;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+    }
+    
+    .sidebar-toggle:hover {
+        background: rgba(255, 255, 255, 0.2);
+    }
+    
+    .sidebar-content {
+        padding: 8px;
+        max-height: calc(100vh - 120px);
+        overflow-y: auto;
+    }
+    
+    .sidebar-content::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .sidebar-content::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+    
+    .sidebar-content::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 3px;
+    }
+    
+    .sidebar-section {
+        margin-bottom: 8px;
+    }
+    
+    .section-header {
+        padding: 12px 12px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 600;
+        font-size: 14px;
+        color: #333;
+        transition: all 0.2s;
+    }
+    
+    .section-header:hover {
+        background: #e9ecef;
+    }
+    
+    .section-header i {
+        font-size: 16px;
+    }
+    
+    .section-content {
+        padding: 12px;
+        display: none;
+    }
+    
+    .section-content.active {
+        display: block;
+    }
+    
+    .sidebar-btn {
+        width: 100%;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: #495057;
+        transition: all 0.2s;
+    }
+    
+    .sidebar-btn:hover {
+        background: #f8f9fa;
+        border-color: #667eea;
+        color: #667eea;
+    }
+    
+    .sidebar-btn.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: transparent;
+    }
+    
+    .sidebar-btn i {
+        font-size: 16px;
+        width: 20px;
+    }
+    
+    /* Compact Legend */
+    #compact-legend {
+        position: fixed;
+        bottom: 20px;
+        right: 360px;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        padding: 12px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 1000;
+        font-size: 12px;
+        max-width: 180px;
+    }
+    
+    .legend-title {
+        font-weight: 600;
+        margin-bottom: 8px;
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #666;
+        letter-spacing: 0.5px;
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 4px;
+    }
+    
+    .legend-color {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid white;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+    
+    .legend-item span {
+        font-size: 11px;
+        color: #333;
+    }
+    
+    /* Statistics Card */
+    #stats-card {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        padding: 16px;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+        min-width: 320px;
+    }
+    
+    .stats-header {
+        font-size: 12px;
+        font-weight: 600;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+    
+    .stat-box {
+        text-align: center;
+        padding: 8px;
+        border-radius: 6px;
+        background: #f8f9fa;
+    }
+    
+    .stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+    
+    .stat-value.success { color: #28a745; }
+    .stat-value.danger { color: #dc3545; }
+    .stat-value.warning { color: #ffc107; }
+    .stat-value.primary { color: #007bff; }
+    .stat-value.dark { color: #333; }
+    
+    .stat-label {
+        font-size: 11px;
+        color: #666;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    
+    /* Analysis Panel */
+    #analysis-panel {
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        min-width: 320px;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        padding: 16px;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        z-index: 1001;
+        display: none;
+    }
+    
+    #analysis-panel.active {
+        display: block;
+    }
+    
+    .analysis-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .analysis-header h6 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: #333;
+    }
+    
+    .analysis-close {
+        background: none;
+        border: none;
+        font-size: 18px;
+        cursor: pointer;
+        color: #999;
+        padding: 0;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .analysis-close:hover {
+        color: #333;
+    }
+    
+    .analysis-stat {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .analysis-stat:last-child {
+        border-bottom: none;
+    }
+    
+    .analysis-label {
+        font-size: 12px;
+        color: #666;
+        font-weight: 500;
+    }
+    
+    .analysis-value {
+        font-size: 13px;
+        font-weight: 600;
+        color: #333;
+    }
+    
+    .analysis-value.success {
+        color: #28a745;
+    }
+    
+    .analysis-value.danger {
+        color: #dc3545;
+    }
+    
+    .analysis-value.warning {
+        color: #ffc107;
+    }
+    
+    .analysis-value.primary {
+        color: #007bff;
+    }
+    
+    /* Filter inputs */
+    .filter-group {
+        margin-bottom: 12px;
+    }
+    
+    .filter-label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: #666;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .filter-input, .filter-select {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        font-size: 13px;
+        transition: all 0.2s;
+    }
+    
+    .filter-input:focus, .filter-select:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    .filter-actions {
+        display: flex;
+        gap: 6px;
+        margin-top: 12px;
+    }
+    
+    .btn-apply {
+        flex: 1;
+        padding: 8px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    
+    .btn-apply:hover {
+        opacity: 0.9;
+    }
+    
+    .btn-reset {
+        padding: 8px 12px;
+        background: white;
+        color: #666;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    
+    .btn-reset:hover {
+        background: #f8f9fa;
+    }
+    
+    /* Loading overlay */
+    #loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.95);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        flex-direction: column;
+    }
+    
+    .spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    @keyframes pulse {
+        0% { transform: scale(1); opacity: 0.3; }
+        50% { transform: scale(1.5); opacity: 0.1; }
+        100% { transform: scale(1); opacity: 0.3; }
+    }
+    
+    .ghost-asset-marker {
+        background: transparent;
+        border: none;
+    }
+    
+    .marker-tooltip {
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 12px;
+        font-weight: 500;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .marker-tooltip::before {
+        border-top-color: rgba(0, 0, 0, 0.8);
+    }
+    
+    /* Exit fullscreen button */
+    #exit-fullscreen {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: none;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        color: #333;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        z-index: 1000;
+        transition: all 0.2s;
+    }
+    
+    #exit-fullscreen:hover {
+        background: white;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+    </style>
+</head>
+<body>
+    <!-- Map Container -->
+    <div id="map"></div>
+    
+    <!-- Exit Fullscreen Button -->
+    <button id="exit-fullscreen" onclick="window.location.href='{% url 'property:map' %}'">
+        <i class="bi bi-x-lg"></i> Exit Fullscreen
+    </button>
+    
+    <!-- Floating Sidebar -->
+    <div id="floating-sidebar">
+        <div class="sidebar-header" onclick="toggleSidebar()">
+            <h5><i class="bi bi-gear"></i> Controls</h5>
+            <button class="sidebar-toggle">
+                <i class="bi bi-chevron-left" id="toggle-icon"></i>
+            </button>
+        </div>
+        
+        <div class="sidebar-content">
+            <!-- Tools Section -->
+            <div class="sidebar-section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span><i class="bi bi-tools"></i> Tools</span>
+                    <i class="bi bi-chevron-down"></i>
+                </div>
+                <div class="section-content active">
+                    <button class="sidebar-btn" id="btn-my-location">
+                        <i class="bi bi-geo-alt"></i> My Location
+                    </button>
+                    <button class="sidebar-btn" id="btn-help">
+                        <i class="bi bi-question-circle"></i> Help
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Layers Section -->
+            <div class="sidebar-section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span><i class="bi bi-layers"></i> Analytical Layers</span>
+                    <i class="bi bi-chevron-down"></i>
+                </div>
+                <div class="section-content">
+                    <button class="sidebar-btn" id="btn-revenue-shadow">
+                        <i class="bi bi-circle"></i> Revenue Shadow
+                    </button>
+                    <button class="sidebar-btn" id="btn-ghost-assets">
+                        <i class="bi bi-exclamation-triangle"></i> Ghost Assets
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Drawing Tools Section -->
+            <div class="sidebar-section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span><i class="bi bi-pencil"></i> Analysis Tools</span>
+                    <i class="bi bi-chevron-down"></i>
+                </div>
+                <div class="section-content">
+                    <button class="sidebar-btn" id="btn-draw-rectangle">
+                        <i class="bi bi-square"></i> Draw Rectangle
+                    </button>
+                    <button class="sidebar-btn" id="btn-draw-polygon">
+                        <i class="bi bi-pentagon"></i> Draw Polygon
+                    </button>
+                    <button class="sidebar-btn" id="btn-draw-circle">
+                        <i class="bi bi-circle"></i> Draw Circle
+                    </button>
+                    <button class="sidebar-btn" id="btn-clear-drawings">
+                        <i class="bi bi-trash"></i> Clear Drawings
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Filters Section -->
+            <div class="sidebar-section">
+                <div class="section-header" onclick="toggleSection(this)">
+                    <span><i class="bi bi-funnel"></i> Filters</span>
+                    <i class="bi bi-chevron-down"></i>
+                </div>
+                <div class="section-content">
+                    <div class="filter-group">
+                        <label class="filter-label">Status</label>
+                        <select class="filter-select" id="filter-status">
+                            <option value="">All Statuses</option>
+                            {% for value, label in property_statuses %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label class="filter-label">District</label>
+                        <select class="filter-select" id="filter-district">
+                            <option value="">All Districts</option>
+                            {% for district in districts %}
+                            <option value="{{ district.id }}">{{ district.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label class="filter-label">Search</label>
+                        <input type="text" class="filter-input" id="filter-search" placeholder="Property name, address...">
+                    </div>
+                    
+                    <div class="filter-actions">
+                        <button class="btn-apply" onclick="applyFilters()">Apply</button>
+                        <button class="btn-reset" onclick="resetFilters()">Reset</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Compact Legend -->
+    <div id="compact-legend">
+        <div class="legend-title">Status</div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #28a745;"></div>
+            <span>Rented</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #dc3545;"></div>
+            <span>Vacant</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffc107;"></div>
+            <span>Litigation</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #007bff;"></div>
+            <span>Self Use</span>
+        </div>
+    </div>
+    
+    <!-- Statistics Card -->
+    <div id="stats-card">
+        <div class="stats-header">
+            <i class="bi bi-bar-chart"></i> Property Statistics
+        </div>
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-value dark" id="stat-total">{{ total_properties }}</div>
+                <div class="stat-label">Total</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value success" id="stat-rented">0</div>
+                <div class="stat-label">Rented</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value danger" id="stat-vacant">0</div>
+                <div class="stat-label">Vacant</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value warning" id="stat-litigation">0</div>
+                <div class="stat-label">Litigation</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Analysis Panel (shown when shape is drawn) -->
+    <div id="analysis-panel">
+        <div class="analysis-header">
+            <h6><i class="bi bi-bar-chart"></i> Shape Analysis</h6>
+            <button class="analysis-close" onclick="closeAnalysisPanel()">X</button>
+        </div>
+        <div id="analysis-results">
+            <div class="analysis-stat">
+                <span class="analysis-label">Total Properties:</span>
+                <span class="analysis-value" id="stat-total-in-shape">0</span>
+            </div>
+            <div class="analysis-stat">
+                <span class="analysis-label">Rented (Filled):</span>
+                <span class="analysis-value success" id="stat-rented-in-shape">0</span>
+            </div>
+            <div class="analysis-stat">
+                <span class="analysis-label">Vacant:</span>
+                <span class="analysis-value danger" id="stat-vacant-in-shape">0</span>
+            </div>
+            <div class="analysis-stat">
+                <span class="analysis-label">Under Litigation:</span>
+                <span class="analysis-value warning" id="stat-litigation-in-shape">0</span>
+            </div>
+            <div class="analysis-stat">
+                <span class="analysis-label">Annual Revenue:</span>
+                <span class="analysis-value primary" id="stat-revenue-in-shape">PKR 0</span>
+            </div>
+            <div class="analysis-stat">
+                <span class="analysis-label">Area Covered:</span>
+                <span class="analysis-value" id="stat-area-in-shape">0</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <p style="margin-top: 16px; color: #667eea; font-weight: 600;">Loading map...</p>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js" crossorigin=""></script>
+    
+    <script>
+    // Constants
+    const API_ENDPOINT = "{% url 'property:api_geojson' %}";
+    
+    // Global variables
+    let map;
+    let markers;
+    let revenueShadowLayer;
+    let ghostAssetLayer;
+    let drawnItems;
+    let drawControl;
+    let allProperties = [];
+    let layersActive = {
+        revenueShadow: false,
+        ghostAssets: false
+    };
+    
+    // Initialize map
+    function initMap() {
+        // Create map centered on Khyber Pakhtunkhwa (zoom control position set to topright)
+        map = L.map('map', {
+            center: [34.0082744, 71.5731692],
+            zoom: 9,
+            zoomControl: false  // We'll add it manually with custom position
+        });
+        
+        // Add zoom control to bottom left instead
+        L.control.zoom({
+            position: 'bottomleft'
+        }).addTo(map);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            maxZoom: 19,
+        }).addTo(map);
+        
+        // Initialize marker cluster group
+        markers = L.markerClusterGroup({
+            chunkedLoading: true,
+            maxClusterRadius: 60,
+            spiderfyOnMaxZoom: true
+        });
+        
+        // Initialize feature group for drawn shapes
+        drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+        
+        // Initialize draw control
+        drawControl = new L.Control.Draw({
+            draw: {
+                polyline: false,
+                marker: false,
+                circlemarker: false,
+            },
+            edit: {
+                featureGroup: drawnItems,
+                remove: true
+            }
+        });
+        
+        // Add drawn items layer
+        map.addLayer(markers);
+        
+        // Initialize revenue shadow and ghost asset layers
+        revenueShadowLayer = L.layerGroup();
+        ghostAssetLayer = L.layerGroup();
+        
+        // Load properties
+        loadProperties();
+        
+        // Setup event handlers
+        setupEventHandlers();
+    }
+    
+    // Setup event handlers
+    function setupEventHandlers() {
+        // Drawing events
+        map.on(L.Draw.Event.CREATED, function(e) {
+            const layer = e.layer;
+            drawnItems.addLayer(layer);
+            analyzeShapeContents(layer);
+        });
+        
+        map.on(L.Draw.Event.DELETED, function(e) {
+            closeAnalysisPanel();
+        });
+        
+        // Button events
+        document.getElementById('btn-my-location').addEventListener('click', locateUser);
+        document.getElementById('btn-help').addEventListener('click', toggleHelp);
+        document.getElementById('btn-revenue-shadow').addEventListener('click', toggleRevenueShadow);
+        document.getElementById('btn-ghost-assets').addEventListener('click', toggleGhostAssets);
+        document.getElementById('btn-draw-rectangle').addEventListener('click', startDrawRectangle);
+        document.getElementById('btn-draw-polygon').addEventListener('click', startDrawPolygon);
+        document.getElementById('btn-draw-circle').addEventListener('click', startDrawCircle);
+        document.getElementById('btn-clear-drawings').addEventListener('click', clearDrawings);
+    }
+    
+    // Load properties from API
+    function loadProperties(filters = {}) {
+        document.getElementById('loading-overlay').style.display = 'flex';
+        
+        const params = new URLSearchParams(filters);
+        const url = `${API_ENDPOINT}?${params.toString()}`;
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) throw new Error(data.message || data.error);
+                allProperties = data.features;
+                renderMarkers(data.features);
+                hideLoading();
+            })
+            .catch(error => {
+                console.error('Error loading properties:', error);
+                hideLoading();
+                alert('Error loading properties: ' + error.message);
+            });
+    }
+    
+    // Render markers on map
+    function renderMarkers(features) {
+        markers.clearLayers();
+        
+        features.forEach(feature => {
+            const [lng, lat] = feature.geometry.coordinates;
+            const props = feature.properties;
+            
+            const marker = L.circleMarker([lat, lng], {
+                radius: 8,
+                fillColor: props.color,
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            });
+            
+            // Pre-bind popup with GeoJSON data for immediate display
+            const name = escapeHtml(props.name || 'N/A');
+            const type = escapeHtml(props.property_type_display || 'N/A');
+            const status = escapeHtml(props.status_display || 'N/A');
+            const area = escapeHtml(props.area_marlas || '0');
+            const rent = props.annual_rent ? `PKR ${Number(props.annual_rent).toLocaleString()}` : 'N/A';
+            const district = escapeHtml(props.district_name || 'N/A');
+            const mauza = escapeHtml(props.mauza_name || 'N/A');
+            
+            const popupContent = `
+                <div style="padding: 12px; min-width: 250px;">
+                    <h6 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600;">${name}</h6>
+                    <div style="font-size: 12px; line-height: 1.8;">
+                        <div><strong>Type:</strong> ${type}</div>
+                        <div><strong>Status:</strong> <span style="color: ${props.color}; font-weight: 600;">${status}</span></div>
+                        <div><strong>Area:</strong> ${area} marlas</div>
+                        <div><strong>Annual Rent:</strong> ${rent}</div>
+                        <div><strong>District:</strong> ${district}</div>
+                        <div><strong>Mauza:</strong> ${mauza}</div>
+                    </div>
+                    <div style="margin-top: 12px; display: flex; gap: 8px;">
+                        <a href="${'{% url "property:detail" 0 %}'.replace('/0/', `/${props.id}/`)}" style="flex: 1; padding: 6px; background: #667eea; color: white; text-align: center; text-decoration: none; border-radius: 4px; font-size: 12px;">View</a>
+                        <a href="${'{% url "property:update" 0 %}'.replace('/0/', `/${props.id}/`)}" style="flex: 1; padding: 6px; background: white; color: #667eea; border: 1px solid #667eea; text-align: center; text-decoration: none; border-radius: 4px; font-size: 12px;">Edit</a>
+                    </div>
+                </div>
+            `;
+            
+            marker.bindPopup(popupContent, { maxWidth: 300 });
+            
+            marker.bindTooltip(escapeHtml(props.name), {
+                permanent: false,
+                direction: 'top',
+                className: 'marker-tooltip'
+            });
+            
+            markers.addLayer(marker);
+        });
+        
+        // Update statistics
+        updateStats(features);
+    }
+    
+    // Update statistics card
+    function updateStats(features) {
+        let rented = 0, vacant = 0, litigation = 0;
+        
+        features.forEach(feature => {
+            const status = feature.properties.status_code;
+            if (status === 'RENTED_OUT') rented++;
+            else if (status === 'VACANT') vacant++;
+            else if (status === 'UNDER_LITIGATION') litigation++;
+        });
+        
+        document.getElementById('stat-total').textContent = features.length;
+        document.getElementById('stat-rented').textContent = rented;
+        document.getElementById('stat-vacant').textContent = vacant;
+        document.getElementById('stat-litigation').textContent = litigation;
+    }
+    
+    // Analyze properties within drawn shape
+    function analyzeShapeContents(layer) {
+        const bounds = layer.getBounds ? layer.getBounds() : null;
+        let propertiesInShape = [];
+        
+        if (bounds) {
+            // Rectangle - use bounds
+            propertiesInShape = allProperties.filter(feature => {
+                const [lng, lat] = feature.geometry.coordinates;
+                return bounds.contains([lat, lng]);
+            });
+        } else if (layer instanceof L.Circle) {
+            // Circle - use distance calculation
+            const center = layer.getLatLng();
+            const radius = layer.getRadius();
+            
+            propertiesInShape = allProperties.filter(feature => {
+                const [lng, lat] = feature.geometry.coordinates;
+                const distance = center.distanceTo([lat, lng]);
+                return distance <= radius;
+            });
+        } else if (layer instanceof L.Polygon) {
+            // Polygon - use contains check
+            propertiesInShape = allProperties.filter(feature => {
+                const [lng, lat] = feature.geometry.coordinates;
+                const point = L.latLng(lat, lng);
+                
+                // Ray casting algorithm for point in polygon
+                const latlngs = layer.getLatLngs()[0];
+                let inside = false;
+                
+                for (let i = 0, j = latlngs.length - 1; i < latlngs.length; j = i++) {
+                    const xi = latlngs[i].lat, yi = latlngs[i].lng;
+                    const xj = latlngs[j].lat, yj = latlngs[j].lng;
+                    
+                    const intersect = ((yi > point.lng) != (yj > point.lng))
+                        && (point.lat < (xj - xi) * (point.lng - yi) / (yj - yi) + xi);
+                    if (intersect) inside = !inside;
+                }
+                
+                return inside;
+            });
+        }
+        
+        // Calculate statistics
+        const stats = {
+            total: propertiesInShape.length,
+            rented: 0,
+            vacant: 0,
+            litigation: 0,
+            revenue: 0
+        };
+        
+        propertiesInShape.forEach(feature => {
+            const props = feature.properties;
+            
+            if (props.status_code === 'RENTED_OUT') stats.rented++;
+            else if (props.status_code === 'VACANT') stats.vacant++;
+            else if (props.status_code === 'UNDER_LITIGATION') stats.litigation++;
+            
+            stats.revenue += props.annual_rent || 0;
+        });
+        
+        // Calculate area
+        let area = 0;
+        if (layer.getBounds) {
+            const sw = layer.getBounds().getSouthWest();
+            const ne = layer.getBounds().getNorthEast();
+            area = sw.distanceTo(ne);
+        } else if (layer instanceof L.Circle) {
+            area = Math.PI * Math.pow(layer.getRadius(), 2);
+        }
+        
+        // Display results
+        displayAnalysisResults(stats, area);
+    }
+    
+    // Display analysis results
+    function displayAnalysisResults(stats, area) {
+        document.getElementById('stat-total-in-shape').textContent = stats.total;
+        document.getElementById('stat-rented-in-shape').textContent = stats.rented;
+        document.getElementById('stat-vacant-in-shape').textContent = stats.vacant;
+        document.getElementById('stat-litigation-in-shape').textContent = stats.litigation;
+        document.getElementById('stat-revenue-in-shape').textContent = 'PKR ' + stats.revenue.toLocaleString();
+        
+        if (area > 1000000) {
+            document.getElementById('stat-area-in-shape').textContent = (area / 1000000).toFixed(2) + ' km²';
+        } else {
+            document.getElementById('stat-area-in-shape').textContent = area.toFixed(0) + ' m²';
+        }
+        
+        document.getElementById('analysis-panel').classList.add('active');
+    }
+    
+    // Close analysis panel
+    function closeAnalysisPanel() {
+        document.getElementById('analysis-panel').classList.remove('active');
+        // Also clear the drawn shapes when closing
+        drawnItems.clearLayers();
+    }
+    
+    // Drawing functions
+    function startDrawRectangle() {
+        new L.Draw.Rectangle(map, drawControl.options.draw.rectangle).enable();
+    }
+    
+    function startDrawPolygon() {
+        new L.Draw.Polygon(map, drawControl.options.draw.polygon).enable();
+    }
+    
+    function startDrawCircle() {
+        new L.Draw.Circle(map, drawControl.options.draw.circle).enable();
+    }
+    
+    function clearDrawings() {
+        drawnItems.clearLayers();
+        closeAnalysisPanel();
+    }
+    
+    // Toggle layers
+    function toggleRevenueShadow() {
+        layersActive.revenueShadow = !layersActive.revenueShadow;
+        const btn = document.getElementById('btn-revenue-shadow');
+        
+        if (layersActive.revenueShadow) {
+            btn.classList.add('active');
+            renderRevenueShadow();
+            map.addLayer(revenueShadowLayer);
+        } else {
+            btn.classList.remove('active');
+            map.removeLayer(revenueShadowLayer);
+            revenueShadowLayer.clearLayers();
+        }
+    }
+    
+    function renderRevenueShadow() {
+        revenueShadowLayer.clearLayers();
+        
+        const maxRent = Math.max(...allProperties.map(f => f.properties.annual_rent || 0));
+        const baseRadius = 50;
+        const maxRadius = 500;
+        
+        allProperties.forEach(feature => {
+            const [lng, lat] = feature.geometry.coordinates;
+            const props = feature.properties;
+            const rent = props.annual_rent || 0;
+            
+            if (rent > 0) {
+                const radius = baseRadius + (Math.log(rent + 1) / Math.log(maxRent + 1)) * (maxRadius - baseRadius);
+                
+                const circle = L.circle([lat, lng], {
+                    radius: radius,
+                    fillColor: props.color,
+                    fillOpacity: props.status_code === 'RENTED_OUT' ? 0.4 : 0.3,
+                    color: props.color,
+                    weight: 1,
+                    opacity: 0.5
+                });
+                
+                circle.bindPopup(`
+                    <div style="padding: 8px;">
+                        <strong>${escapeHtml(props.name)}</strong><br>
+                        Annual Rent: PKR ${rent.toLocaleString()}<br>
+                        <small>Circle size represents revenue</small>
+                    </div>
+                `);
+                
+                revenueShadowLayer.addLayer(circle);
+            }
+        });
+    }
+    
+    function toggleGhostAssets() {
+        layersActive.ghostAssets = !layersActive.ghostAssets;
+        const btn = document.getElementById('btn-ghost-assets');
+        
+        if (layersActive.ghostAssets) {
+            btn.classList.add('active');
+            renderGhostAssets();
+            map.addLayer(ghostAssetLayer);
+        } else {
+            btn.classList.remove('active');
+            map.removeLayer(ghostAssetLayer);
+            ghostAssetLayer.clearLayers();
+        }
+    }
+    
+    function renderGhostAssets() {
+        ghostAssetLayer.clearLayers();
+        
+        const ghostAssets = allProperties.filter(feature => {
+            const props = feature.properties;
+            return props.status_code === 'VACANT' || (props.annual_rent || 0) === 0;
+        });
+        
+        ghostAssets.forEach(feature => {
+            const [lng, lat] = feature.geometry.coordinates;
+            const props = feature.properties;
+            
+            let severity = 'Medium';
+            let color = '#ffc107';
+            
+            if (props.status_code === 'VACANT' && (props.annual_rent || 0) === 0) {
+                severity = 'Critical';
+                color = '#dc3545';
+            } else if ((props.annual_rent || 0) === 0) {
+                severity = 'High';
+                color = '#ff6b6b';
+            }
+            
+            const icon = L.divIcon({
+                className: 'ghost-asset-marker',
+                html: `<div style="width: 40px; height: 40px; background: ${color}; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; animation: pulse 2s infinite; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">⚠️</div>`,
+                iconSize: [40, 40]
+            });
+            
+            const marker = L.marker([lat, lng], { icon: icon });
+            
+            marker.bindPopup(`
+                <div style="padding: 12px;">
+                    <div style="background: ${color}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-bottom: 8px;">${severity} Priority</div>
+                    <strong>${escapeHtml(props.name)}</strong><br>
+                    <small>Status: ${props.status_code || 'Unknown'}</small><br>
+                    <small>Revenue: PKR ${(props.annual_rent || 0).toLocaleString()}</small><br>
+                    <a href="${'{% url "property:detail" 0 %}'.replace('/0/', `/${props.id}/`)}" style="margin-top: 8px; display: inline-block; padding: 4px 12px; background: ${color}; color: white; text-decoration: none; border-radius: 4px; font-size: 12px;">Investigate</a>
+                </div>
+            `);
+            
+            ghostAssetLayer.addLayer(marker);
+        });
+        
+        if (ghostAssets.length > 0) {
+            alert(`Found ${ghostAssets.length} ghost assets requiring attention!`);
+        }
+    }
+    
+    // Other functions
+    function locateUser() {
+        map.locate({ setView: true, maxZoom: 16 });
+    }
+    
+    function toggleHelp() {
+        alert('Map Controls:\n\n' +
+              '• Use drawing tools to analyze properties in specific areas\n' +
+              '• Draw a shape to see statistics for properties within that area\n' +
+              '• Toggle layers to visualize revenue patterns and problem assets\n' +
+              '• Apply filters to focus on specific property types or locations\n' +
+              '• Click markers for detailed property information');
+    }
+    
+    function hideLoading() {
+        document.getElementById('loading-overlay').style.display = 'none';
+    }
+    
+    // Sidebar functions
+    function toggleSidebar() {
+        const sidebar = document.getElementById('floating-sidebar');
+        const icon = document.getElementById('toggle-icon');
+        sidebar.classList.toggle('collapsed');
+        
+        if (sidebar.classList.contains('collapsed')) {
+            icon.className = 'bi bi-chevron-right';
+        } else {
+            icon.className = 'bi bi-chevron-left';
+        }
+    }
+    
+    function toggleSection(header) {
+        const content = header.nextElementSibling;
+        const icon = header.querySelector('.bi-chevron-down, .bi-chevron-up');
+        
+        content.classList.toggle('active');
+        
+        if (content.classList.contains('active')) {
+            icon.className = 'bi bi-chevron-up';
+        } else {
+            icon.className = 'bi bi-chevron-down';
+        }
+    }
+    
+    // Filter functions
+    function applyFilters() {
+        const filters = {
+            status: document.getElementById('filter-status').value,
+            district: document.getElementById('filter-district').value,
+            search: document.getElementById('filter-search').value
+        };
+        
+        // Remove empty filters
+        Object.keys(filters).forEach(key => {
+            if (!filters[key]) delete filters[key];
+        });
+        
+        loadProperties(filters);
+    }
+    
+    function resetFilters() {
+        document.getElementById('filter-status').value = '';
+        document.getElementById('filter-district').value = '';
+        document.getElementById('filter-search').value = '';
+        loadProperties();
+    }
+    
+    // Initialize on load
+    document.addEventListener('DOMContentLoaded', initMap);
+
+    function escapeHtml(value) {
+        const str = String(value ?? '');
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+    </script>
+</body>
+</html>

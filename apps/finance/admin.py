@@ -13,7 +13,9 @@ from django.utils.translation import gettext_lazy as _
 from .models import (
     FunctionCode, BudgetHead, Fund, Voucher, JournalEntry, 
     ChequeBook, ChequeLeaf, BankStatement, BankStatementLine,
-    MajorHead, MinorHead, GlobalHead
+    MajorHead, MinorHead, GlobalHead, NAMHead, SubHead,
+    DepartmentFunctionConfiguration,
+    BudgetHeadFavorite, BudgetHeadUsageHistory
 )
 
 
@@ -88,35 +90,227 @@ class GlobalHeadAdmin(admin.ModelAdmin):
     get_dept_display.short_description = 'Departments'
 
 
+@admin.register(NAMHead)
+class NAMHeadAdmin(admin.ModelAdmin):
+    """Admin configuration for NAMHead model (Level 4 - Official Reporting Head)."""
+    
+    list_display = ('code', 'name', 'minor', 'account_type', 'scope', 'has_sub_heads', 'allow_direct_posting', 'is_active')
+    list_filter = ('account_type', 'scope', 'is_active', 'minor__major', 'applicable_departments')
+    search_fields = ('code', 'name')
+    ordering = ('code',)
+    readonly_fields = ('has_sub_heads', 'major_code', 'major_name')
+    filter_horizontal = ('applicable_departments', 'applicable_functions')
+    
+    fieldsets = (
+        (_('Identification'), {
+            'fields': ('code', 'name', 'minor')
+        }),
+        (_('Classification'), {
+            'fields': ('account_type',)
+        }),
+        (_('Department-Function Access Control'), {
+            'fields': ('scope', 'applicable_departments', 'applicable_functions'),
+            'description': _('Control which departments and functions can use this head.')
+        }),
+        (_('Posting Control'), {
+            'fields': ('allow_direct_posting', 'is_active'),
+            'description': _('allow_direct_posting is auto-disabled when sub-heads are created.')
+        }),
+        (_('Hierarchy (Read-Only)'), {
+            'fields': ('has_sub_heads', 'major_code', 'major_name'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    actions = ['enable_posting', 'disable_posting', 'activate_heads', 'deactivate_heads']
+    
+    @admin.action(description='Enable direct posting for selected NAM heads')
+    def enable_posting(self, request, queryset):
+        """Enable posting only for NAM heads without sub-heads."""
+        count = 0
+        for obj in queryset:
+            if not obj.has_sub_heads:
+                obj.allow_direct_posting = True
+                obj.save()
+                count += 1
+        self.message_user(request, f'Enabled posting for {count} NAM head(s) without sub-heads')
+    
+    @admin.action(description='Disable direct posting')
+    def disable_posting(self, request, queryset):
+        updated = queryset.update(allow_direct_posting=False)
+        self.message_user(request, f'Disabled posting for {updated} NAM head(s)')
+    
+    @admin.action(description='Activate selected NAM heads')
+    def activate_heads(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'Activated {updated} NAM head(s)')
+    
+    @admin.action(description='Deactivate selected NAM heads')
+    def deactivate_heads(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'Deactivated {updated} NAM head(s)')
+
+
+@admin.register(SubHead)
+class SubHeadAdmin(admin.ModelAdmin):
+    """Admin configuration for SubHead model (Level 5 - Internal Sub-Heads)."""
+    
+    list_display = ('get_code', 'name', 'nam_head', 'sub_code', 'is_active')
+    list_filter = ('is_active', 'nam_head__minor__major', 'nam_head__account_type')
+    search_fields = ('sub_code', 'name', 'nam_head__code', 'nam_head__name')
+    ordering = ('nam_head__code', 'sub_code')
+    readonly_fields = ('created_at', 'updated_at')
+    autocomplete_fields = ['nam_head']
+    
+    fieldsets = (
+        (_('Parent Head'), {
+            'fields': ('nam_head',)
+        }),
+        (_('Sub-Head Details'), {
+            'fields': ('sub_code', 'name', 'description')
+        }),
+        (_('Status'), {
+            'fields': ('is_active',)
+        }),
+        (_('Audit'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_code(self, obj):
+        return obj.code
+    get_code.short_description = 'Full Code'
+    
+    actions = ['activate_subheads', 'deactivate_subheads']
+    
+    @admin.action(description='Activate selected sub-heads')
+    def activate_subheads(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'Activated {updated} sub-head(s)')
+    
+    @admin.action(description='Deactivate selected sub-heads')
+    def deactivate_subheads(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'Deactivated {updated} sub-head(s)')
+
+
+@admin.register(DepartmentFunctionConfiguration)
+class DepartmentFunctionConfigurationAdmin(admin.ModelAdmin):
+    """Admin configuration for DepartmentFunctionConfiguration model."""
+    
+    list_display = ('department', 'function', 'get_head_count', 'get_completion_status', 'is_locked', 'updated_at')
+    list_filter = ('is_locked', 'department', 'function')
+    search_fields = ('department__name', 'function__code', 'function__name')
+    ordering = ('department__name', 'function__code')
+    filter_horizontal = ('allowed_nam_heads',)
+    readonly_fields = ('get_head_count', 'get_completion_status', 'created_at', 'updated_at')
+    actions = ['lock_configurations', 'unlock_configurations', 'export_configurations']
+    
+    fieldsets = (
+        (_('Configuration'), {
+            'fields': ('department', 'function', 'is_locked')
+        }),
+        (_('Allowed NAM Heads'), {
+            'fields': ('allowed_nam_heads',),
+            'description': _('Select which NAM heads are available for this department-function combination. '
+                           'This is the ONLY access control mechanism.')
+        }),
+        (_('Additional Information'), {
+            'fields': ('notes', 'get_head_count', 'get_completion_status'),
+            'classes': ('collapse',)
+        }),
+        (_('Timestamps'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_head_count(self, obj):
+        """Display count of allowed heads."""
+        return obj.get_head_count()
+    get_head_count.short_description = 'Head Count'
+    
+    def get_completion_status(self, obj):
+        """Display completion status."""
+        return obj.get_completion_status()
+    get_completion_status.short_description = 'Status'
+    
+    @admin.action(description='Lock selected configurations')
+    def lock_configurations(self, request, queryset):
+        """Bulk lock configurations."""
+        updated = queryset.update(is_locked=True)
+        self.message_user(request, f'Locked {updated} configuration(s)')
+    
+    @admin.action(description='Unlock selected configurations')
+    def unlock_configurations(self, request, queryset):
+        """Bulk unlock configurations."""
+        updated = queryset.update(is_locked=False)
+        self.message_user(request, f'Unlocked {updated} configuration(s)')
+    
+    @admin.action(description='Export selected configurations to CSV')
+    def export_configurations(self, request, queryset):
+        """Export selected configurations to CSV."""
+        import csv
+        from django.http import HttpResponse
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="dept_func_configs.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'Department Code', 'Department Name', 'Function Code', 'Function Name',
+            'Allowed Global Heads', 'Head Count', 'Is Locked', 'Notes'
+        ])
+        
+        for config in queryset.prefetch_related('allowed_global_heads'):
+            head_codes = ', '.join(config.allowed_global_heads.values_list('code', flat=True))
+            writer.writerow([
+                config.department.code,
+                config.department.name,
+                config.function.code,
+                config.function.name,
+                head_codes,
+                config.get_head_count(),
+                'Yes' if config.is_locked else 'No',
+                config.notes
+            ])
+        
+        self.message_user(request, f'Exported {queryset.count()} configuration(s)')
+        return response
+
+
 
 @admin.register(BudgetHead)
 class BudgetHeadAdmin(admin.ModelAdmin):
     """Admin configuration for BudgetHead model."""
     
     list_display = (
-        'fund', 'get_function', 'get_code', 'get_name', 'sub_code', 'head_type',
-        'get_account_type', 'budget_control', 'is_active'
+        'get_department', 'fund', 'get_function', 'get_code', 'get_name', 'get_level',
+        'get_account_type', 'budget_control', 'posting_allowed', 'is_active'
     )
     list_filter = (
-        'fund', 'function', 'head_type', 'global_head__account_type',
-        'budget_control', 'project_required', 'is_active'
+        'department', 'fund', 'function', 'budget_control', 'posting_allowed', 'is_active',
+        'nam_head__account_type', 'sub_head__nam_head__account_type'
     )
     search_fields = (
-        'global_head__code', 'global_head__name', 'local_description', 'sub_code'
+        'nam_head__code', 'nam_head__name', 'sub_head__name', 'sub_head__sub_code',
+        'department__name', 'department__code'
     )
-    ordering = ('fund', 'function__code', 'global_head__code', 'sub_code')
-    list_editable = ('sub_code', 'head_type')
+    ordering = ('department__name', 'function__code', 'nam_head__code', 'sub_head__sub_code')
+    actions = ['activate_heads', 'deactivate_heads', 'enable_posting', 'disable_posting']
     
-    readonly_fields = ('created_at', 'updated_at', 'created_by', 'updated_by')
-    autocomplete_fields = ['fund', 'function', 'global_head']
+    readonly_fields = ('created_at', 'updated_at', 'created_by', 'updated_by', 'get_hierarchy_path')
+    autocomplete_fields = ['department', 'fund', 'function', 'nam_head', 'sub_head']
     
     fieldsets = (
-        (_('Classification'), {
-            'fields': ('fund', 'function', 'global_head')
+        (_('Department & Classification'), {
+            'fields': ('department', 'fund', 'function'),
+            'description': _('Select department, fund, and function first.')
         }),
-        (_('Sub-Head Configuration'), {
-            'fields': ('head_type', 'sub_code', 'local_description'),
-            'description': _('For local sub-heads, set head_type to SUB_HEAD, provide sub_code (01-99), and a local description.')
+        (_('Account Head (Choose Either NAM or Sub-Head)'), {
+            'fields': ('nam_head', 'sub_head'),
+            'description': _('Link to EITHER a NAM Head (Level 4) OR a Sub-Head (Level 5), not both.')
         }),
         (_('Budget'), {
             'fields': ('current_budget',)
@@ -124,11 +318,20 @@ class BudgetHeadAdmin(admin.ModelAdmin):
         (_('Control Flags'), {
             'fields': ('budget_control', 'project_required', 'posting_allowed', 'is_active')
         }),
+        (_('Hierarchy Path'), {
+            'fields': ('get_hierarchy_path',),
+            'classes': ('collapse',)
+        }),
         (_('Audit Trail'), {
             'fields': ('created_at', 'updated_at', 'created_by', 'updated_by'),
             'classes': ('collapse',)
         }),
     )
+    
+    def get_department(self, obj):
+        return obj.department.code if obj.department else '-'
+    get_department.short_description = 'Dept'
+    get_department.admin_order_field = 'department__code'
     
     def get_function(self, obj):
         return obj.function.code if obj.function else '-'
@@ -136,18 +339,44 @@ class BudgetHeadAdmin(admin.ModelAdmin):
     get_function.admin_order_field = 'function__code'
     
     def get_code(self, obj):
-        return obj.code  # Uses the updated proxy property
+        return obj.code  # Uses proxy property
     get_code.short_description = 'Code'
-    get_code.admin_order_field = 'global_head__code'
     
     def get_name(self, obj):
-        return obj.name  # Uses the updated proxy property
+        return obj.name  # Uses proxy property
     get_name.short_description = 'Name'
     
+    def get_level(self, obj):
+        return f'L{obj.level}'
+    get_level.short_description = 'Level'
+    
     def get_account_type(self, obj):
-        return obj.global_head.get_account_type_display()
-    get_account_type.short_description = 'Account Type'
-    get_account_type.admin_order_field = 'global_head__account_type'
+        return obj.account_type
+    get_account_type.short_description = 'Type'
+    
+    @admin.action(description='Activate selected budget heads')
+    def activate_heads(self, request, queryset):
+        """Bulk activate budget heads."""
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'Activated {updated} budget head(s)')
+    
+    @admin.action(description='Deactivate selected budget heads')
+    def deactivate_heads(self, request, queryset):
+        """Bulk deactivate budget heads."""
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'Deactivated {updated} budget head(s)')
+    
+    @admin.action(description='Enable posting for selected budget heads')
+    def enable_posting(self, request, queryset):
+        """Bulk enable posting."""
+        updated = queryset.update(posting_allowed=True)
+        self.message_user(request, f'Enabled posting for {updated} budget head(s)')
+    
+    @admin.action(description='Disable posting for selected budget heads')
+    def disable_posting(self, request, queryset):
+        """Bulk disable posting."""
+        updated = queryset.update(posting_allowed=False)
+        self.message_user(request, f'Disabled posting for {updated} budget head(s)')
 
 
 
@@ -470,5 +699,47 @@ class BankStatementLineAdmin(admin.ModelAdmin):
             return f'{obj.description[:40]}...'
         return obj.description
     description_short.short_description = _('Description')
+
+
+@admin.register(BudgetHeadFavorite)
+class BudgetHeadFavoriteAdmin(admin.ModelAdmin):
+    """Admin configuration for BudgetHeadFavorite model."""
+    
+    list_display = ('user', 'budget_head', 'organization', 'created_at')
+    list_filter = ('organization', 'created_at')
+    search_fields = ('user__username', 'budget_head__global_head__code', 'budget_head__global_head__name')
+    ordering = ('-created_at',)
+    readonly_fields = ('created_at', 'updated_at')
+    
+    fieldsets = (
+        (_('Favorite'), {
+            'fields': ('user', 'budget_head', 'organization')
+        }),
+        (_('Timestamps'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(BudgetHeadUsageHistory)
+class BudgetHeadUsageHistoryAdmin(admin.ModelAdmin):
+    """Admin configuration for BudgetHeadUsageHistory model."""
+    
+    list_display = ('user', 'budget_head', 'organization', 'usage_count', 'last_used')
+    list_filter = ('organization', 'last_used')
+    search_fields = ('user__username', 'budget_head__global_head__code', 'budget_head__global_head__name')
+    ordering = ('-last_used',)
+    readonly_fields = ('created_at', 'updated_at', 'last_used')
+    
+    fieldsets = (
+        (_('Usage'), {
+            'fields': ('user', 'budget_head', 'organization', 'usage_count')
+        }),
+        (_('Timestamps'), {
+            'fields': ('last_used', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
 
 

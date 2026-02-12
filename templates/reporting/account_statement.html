@@ -23,7 +23,7 @@
                         <option value="">Type to search...</option>
                         {% if selected_budget_head %}
                         <option value="{{ selected_budget_head.id }}" selected>
-                            {{ selected_budget_head.code }} - {{ selected_budget_head.global_head.name }}
+                            {{ selected_budget_head.code }} - {{ selected_budget_head.nam_head.name }}
                         </option>
                         {% endif %}
                     </select>
@@ -56,20 +56,20 @@
         <div class="card-body">
             <div class="row mb-4">
                 <div class="col-md-8">
-                    <p class="mb-1"><strong>Account:</strong> {{ selected_budget_head.global_head.code }} - {{ selected_budget_head.global_head.name }}</p>
+                    <p class="mb-1"><strong>Account:</strong> {{ selected_budget_head.nam_head.code }} - {{ selected_budget_head.nam_head.name }}</p>
                     <p class="mb-0"><strong>Type:</strong> 
-                        {% if selected_budget_head.global_head.account_type == 'LIA' %}
+                        {% if selected_budget_head.nam_head.account_type == 'LIA' %}
                             Liability
-                        {% elif selected_budget_head.global_head.account_type == 'AST' %}
+                        {% elif selected_budget_head.nam_head.account_type == 'AST' %}
                             Asset
-                        {% elif selected_budget_head.global_head.account_type == 'EXP' %}
+                        {% elif selected_budget_head.nam_head.account_type == 'EXP' %}
                             Expenditure
-                        {% elif selected_budget_head.global_head.account_type == 'REV' %}
+                        {% elif selected_budget_head.nam_head.account_type == 'REV' %}
                             Revenue
-                        {% elif selected_budget_head.global_head.account_type == 'EQT' %}
+                        {% elif selected_budget_head.nam_head.account_type == 'EQT' %}
                             Equity
                         {% else %}
-                            {{ selected_budget_head.global_head.account_type }}
+                            {{ selected_budget_head.nam_head.account_type }}
                         {% endif %}
                     </p>
                 </div>

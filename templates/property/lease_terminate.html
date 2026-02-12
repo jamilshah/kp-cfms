@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Terminate Lease - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-triangle"></i> Terminate Lease Agreement
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <strong>Warning:</strong> You are about to terminate this lease agreement. This action cannot be undone.
+                    </div>
+
+                    <div class="mb-4">
+                        <h6>Lease Information:</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>Lease Number:</strong> {{ lease.lease_number }}</li>
+                            <li><strong>Property:</strong> {{ lease.property.property_code }} - {{ lease.property.name }}</li>
+                            <li><strong>Tenant:</strong> {{ lease.tenant.name }}</li>
+                            <li><strong>Monthly Rent:</strong> Rs. {{ lease.monthly_rent|floatformat:2|intcomma }}</li>
+                            <li><strong>Lease Period:</strong> {{ lease.lease_start_date|date:"M d, Y" }} 
+                                {% if lease.lease_end_date %}to {{ lease.lease_end_date|date:"M d, Y" }}{% endif %}
+                            </li>
+                        </ul>
+                    </div>
+
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="form-group">
+                            <label for="termination_reason">Termination Reason <span class="text-danger">*</span></label>
+                            <textarea name="termination_reason" id="termination_reason" class="form-control" rows="4" required placeholder="Enter reason for terminating this lease (e.g., Mutual agreement, Breach of contract, Property sold, etc.)"></textarea>
+                            <small class="text-muted">This information will be recorded in the lease history.</small>
+                        </div>
+
+                        <div class="alert alert-info mt-3">
+                            <strong>What will happen:</strong>
+                            <ul class="mb-0 mt-2">
+                                <li>Lease status will be changed to "TERMINATED"</li>
+                                <li>Property status will be updated to "VACANT"</li>
+                                <li>Termination date will be set to today</li>
+                                <li>This lease will appear in history but won't be active</li>
+                            </ul>
+                        </div>
+
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-ban"></i> Terminate Lease
+                            </button>
+                            <a href="{% url 'property:lease_detail' lease.pk %}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

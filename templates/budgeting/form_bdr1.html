@@ -42,6 +42,30 @@ Description: Form BDR-1 - Receipt Estimate Entry template.
             {% csrf_token %}
             
             <div class="row g-3">
+                <!-- Department Filter -->
+                <div class="col-md-6">
+                    <label for="{{ form.department.id_for_label }}" class="form-label">
+                        Department <span class="text-danger">*</span>
+                    </label>
+                    {{ form.department }}
+                    {% if form.department.errors %}
+                        <div class="invalid-feedback d-block">{{ form.department.errors|join:", " }}</div>
+                    {% endif %}
+                    <div class="form-text">Select department to filter revenue heads</div>
+                </div>
+                
+                <!-- Function Filter -->
+                <div class="col-md-6">
+                    <label for="{{ form.function.id_for_label }}" class="form-label">
+                        Function <span class="text-danger">*</span>
+                    </label>
+                    {{ form.function }}
+                    {% if form.function.errors %}
+                        <div class="invalid-feedback d-block">{{ form.function.errors|join:", " }}</div>
+                    {% endif %}
+                    <div class="form-text">Select function to filter revenue heads</div>
+                </div>
+                
                 <!-- Budget Head Selection -->
                 <div class="col-12">
                     <label for="{{ form.budget_head.id_for_label }}" class="form-label">
@@ -125,4 +149,67 @@ Description: Form BDR-1 - Receipt Estimate Entry template.
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const departmentSelect = document.getElementById('id_department');
+    const functionSelect = document.getElementById('id_function');
+    const budgetHeadSelect = document.getElementById('id_budget_head');
+    
+    // Load functions when department changes
+    departmentSelect.addEventListener('change', function() {
+        const deptId = this.value;
+        functionSelect.innerHTML = '<option value="">---------</option>';
+        budgetHeadSelect.innerHTML = '<option value="">---------</option>';
+        
+        if (deptId) {
+            functionSelect.disabled = false;
+            loadFunctions(deptId);
+        } else {
+            functionSelect.disabled = true;
+            budgetHeadSelect.disabled = true;
+        }
+    });
+    
+    // Load budget heads when function changes
+    functionSelect.addEventListener('change', function() {
+        const funcId = this.value;
+        const deptId = departmentSelect.value;
+        budgetHeadSelect.innerHTML = '<option value="">---------</option>';
+        
+        if (funcId && deptId) {
+            budgetHeadSelect.disabled = false;
+            loadBudgetHeads(deptId, funcId);
+        } else {
+            budgetHeadSelect.disabled = true;
+        }
+    });
+    
+    function loadFunctions(deptId) {
+        fetch(`{% url 'budgeting:load_budget_functions' %}?department=${deptId}`)
+            .then(response => response.text())
+            .then(html => {
+                functionSelect.innerHTML = html;
+                
+                // Check if a function was auto-selected (default function)
+                if (functionSelect.value) {
+                    budgetHeadSelect.disabled = false;
+                    loadBudgetHeads(deptId, functionSelect.value);
+                }
+            })
+            .catch(error => console.error('Error loading functions:', error));
+    }
+    
+    function loadBudgetHeads(deptId, funcId) {
+        fetch(`{% url 'budgeting:load_budget_heads_for_estimate' %}?department=${deptId}&function=${funcId}&account_type=REV`)
+            .then(response => response.text())
+            .then(html => {
+                budgetHeadSelect.innerHTML = html;
+            })
+            .catch(error => console.error('Error loading budget heads:', error));
+    }
+});
+</script>
 {% endblock %}

@@ -220,6 +220,18 @@ class Organization(TimeStampedMixin):
         verbose_name=_('Is Active')
     )
     
+    # Department-Level Access Control
+    enforce_department_isolation = models.BooleanField(
+        default=False,
+        verbose_name=_('Enforce Department Isolation'),
+        help_text=_(
+            'When enabled, users can only access data (bills, budgets, etc.) '
+            'from their assigned department. Disable to allow all users to see '
+            'all departments within this organization. '
+            'Note: TMO, Finance Officers, and Superusers always have full access.'
+        )
+    )
+    
     class Meta:
         verbose_name = _('Organization')
         verbose_name_plural = _('Organizations')

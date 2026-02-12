@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete Property - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>
+                <i class="fas fa-trash text-danger"></i> Delete Property
+            </h2>
+        </div>
+    </div>
+
+    <!-- Confirmation Card -->
+    <div class="card shadow border-danger">
+        <div class="card-header bg-danger text-white">
+            <h5 class="m-0">
+                <i class="fas fa-exclamation-triangle"></i> Confirm Deletion
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-danger" role="alert">
+                <strong>Warning!</strong> This action cannot be undone. All related data (photos, documents, history) will also be deleted.
+            </div>
+            
+            <h4 class="mb-3">Property Details:</h4>
+            <table class="table table-bordered">
+                <tr>
+                    <th width="30%">Property Code:</th>
+                    <td><strong>{{ object.property_code }}</strong></td>
+                </tr>
+                <tr>
+                    <th>Ownership Title:</th>
+                    <td>{{ object.ownership_title }}</td>
+                </tr>
+                <tr>
+                    <th>Location:</th>
+                    <td>{{ object.district.name }} - {{ object.mauza.name }}</td>
+                </tr>
+                <tr>
+                    <th>Type:</th>
+                    <td>{{ object.get_property_type_display }}</td>
+                </tr>
+                <tr>
+                    <th>Area:</th>
+                    <td>{{ object.area_marlas }} Marlas ({{ object.area_sqft|floatformat:0 }} sq.ft)</td>
+                </tr>
+                {% if object.is_rented %}
+                <tr>
+                    <th>Tenant:</th>
+                    <td>
+                        {% if object.current_tenant %}
+                            {{ object.current_tenant.name }}
+                        {% else %}
+                            {{ object.tenant_name }}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endif %}
+            </table>
+            
+            <form method="post">
+                {% csrf_token %}
+                <p class="mb-3"><strong>Are you absolutely sure you want to delete this property?</strong></p>
+                <button type="submit" class="btn btn-danger btn-lg">
+                    <i class="fas fa-trash"></i> Yes, Delete This Property
+                </button>
+                <a href="{% url 'property:detail' object.pk %}" class="btn btn-secondary btn-lg">
+                    <i class="fas fa-times"></i> No, Cancel
+                </a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

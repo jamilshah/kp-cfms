@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Organization Settings - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <!-- Page Header -->
+            <div class="mb-4">
+                <h2 class="mb-1">
+                    <i class="bi bi-gear me-2"></i>Organization Settings
+                </h2>
+                <p class="text-muted mb-0">
+                    {{ object.name }} - Access Control Configuration
+                </p>
+            </div>
+
+            <!-- Info Alert -->
+            <div class="alert alert-info mb-4">
+                <div class="d-flex align-items-start">
+                    <i class="bi bi-info-circle-fill fs-4 me-3 mt-1"></i>
+                    <div>
+                        <strong>About Department-Level Access Control:</strong>
+                        <p class="mb-1 mt-2">
+                            Control whether users can only access data from their assigned department, or if they can see all departments within your organization.
+                        </p>
+                        <ul class="mb-0 small">
+                            <li><strong>Enabled:</strong> Users (DA, Accountant) see only their department's bills, budgets, etc.</li>
+                            <li><strong>Disabled:</strong> All users can see all departments (current default behavior)</li>
+                            <li><strong>Note:</strong> TMO, Finance Officers, and TMA Admins always see all departments</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics Card -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h5 class="mb-0">
+                        <i class="bi bi-people me-2"></i>User Impact Analysis
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="p-3 bg-light rounded">
+                                <h3 class="mb-1 text-primary">{{ total_users|intcomma }}</h3>
+                                <small class="text-muted">Total Users in Organization</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="p-3 bg-light rounded">
+                                <h3 class="mb-1 text-info">{{ affected_users_count|intcomma }}</h3>
+                                <small class="text-muted">Users with Department Assigned<br>
+                                    <span class="badge bg-secondary mt-1">Would be filtered</span>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if affected_users_count == 0 and form.instance.enforce_department_isolation %}
+                    <div class="alert alert-warning mt-3 mb-0">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>No users will be affected</strong> because no users have departments assigned yet.
+                        Assign departments to users first for this setting to have an effect.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Settings Form -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h5 class="mb-0">
+                        <i class="bi bi-shield-lock me-2"></i>Access Control Settings
+                    </h5>
+                </div>
+                
+                <div class="card-body p-4">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {% for error in form.non_field_errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Department Isolation Toggle -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                {{ form.enforce_department_isolation }}
+                                <label class="form-check-label ms-2" for="{{ form.enforce_department_isolation.id_for_label }}">
+                                    <strong>Enforce Department-Level Access Control</strong>
+                                </label>
+                            </div>
+                            {% if form.enforce_department_isolation.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ form.enforce_department_isolation.errors.0 }}
+                                </div>
+                            {% endif %}
+                            <div class="form-text mt-2">
+                                {{ form.enforce_department_isolation.help_text }}
+                            </div>
+                        </div>
+                        
+                        <!-- Current Status -->
+                        <div class="alert {% if form.instance.enforce_department_isolation %}alert-success{% else %}alert-secondary{% endif %} mb-4">
+                            <strong>Current Status:</strong> 
+                            {% if form.instance.enforce_department_isolation %}
+                                <span class="badge bg-success ms-2">ENABLED</span>
+                                <p class="mb-0 mt-2 small">
+                                    Users can only access their own department's data. TMO/Finance Officers/TMA Admin have full access.
+                                </p>
+                            {% else %}
+                                <span class="badge bg-secondary ms-2">DISABLED</span>
+                                <p class="mb-0 mt-2 small">
+                                    All users can access all departments within your organization.
+                                </p>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Impact Warning -->
+                        {% if affected_users_count > 0 %}
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            <strong>Impact:</strong> This will affect <strong>{{ affected_users_count }}</strong> user(s) with assigned departments.
+                            {% if not form.instance.enforce_department_isolation %}
+                                Enabling this will restrict their access to only their department's data.
+                            {% else %}
+                                Disabling this will allow them to see all departments.
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Actions -->
+                        <div class="d-flex justify-content-end gap-2 pt-3 border-top">
+                            <a href="{% url 'home' %}" class="btn btn-light border">
+                                Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary px-4">
+                                <i class="bi bi-check-circle me-1"></i>Save Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Use Cases -->
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="bi bi-lightbulb text-warning me-2"></i>When to Enable Department Isolation
+                    </h6>
+                    <ul class="small mb-0">
+                        <li class="mb-2">
+                            <strong>Large TMAs with many departments:</strong> Prevent users from seeing sensitive data from other departments
+                        </li>
+                        <li class="mb-2">
+                            <strong>Department autonomy:</strong> Each department manages its own bills and budgets independently
+                        </li>
+                        <li class="mb-2">
+                            <strong>Security requirements:</strong> Need strict data segregation between departments
+                        </li>
+                        <li>
+                            <strong>Keep disabled if:</strong> Small TMA, collaborative workflow, or centralized finance management
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,546 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ page_title }} - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <h2>
+                <i class="fas fa-building text-primary"></i> {{ property.property_code }}
+            </h2>
+            <p class="text-muted">{{ property.ownership_title }}</p>
+        </div>
+        <div class="col-md-6 text-right">
+            {% if property.current_lease %}
+                <a href="{% url 'property:lease_detail' property.current_lease.pk %}" class="btn btn-info">
+                    <i class="bi bi-file-earmark-text"></i> View Lease
+                </a>
+            {% else %}
+                <a href="{% url 'property:lease_create' %}?property={{ property.pk }}" class="btn btn-success">
+                    <i class="bi bi-plus-circle"></i> Create Lease
+                </a>
+            {% endif %}
+            <a href="{% url 'property:update' property.pk %}" class="btn btn-warning">
+                <i class="fas fa-edit"></i> Edit
+            </a>
+            <a href="{% url 'property:list' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-list"></i> Back to List
+            </a>
+            <a href="{% url 'property:dashboard' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-home"></i> Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Status Badges -->
+    <div class="row mb-3">
+        <div class="col-12">
+            {% if property.status == 'ACTIVE' %}
+                <span class="badge badge-success badge-lg">{{ property.get_status_display }}</span>
+            {% elif property.status == 'INACTIVE' %}
+                <span class="badge badge-secondary badge-lg">{{ property.get_status_display }}</span>
+            {% elif property.status == 'UNDER_MAINTENANCE' %}
+                <span class="badge badge-warning badge-lg">{{ property.get_status_display }}</span>
+            {% elif property.status == 'DISPOSED' %}
+                <span class="badge badge-danger badge-lg">{{ property.get_status_display }}</span>
+            {% endif %}
+            
+            {% if property.is_rented %}
+                <span class="badge badge-info badge-lg"><i class="fas fa-key"></i> Rented</span>
+            {% else %}
+                <span class="badge badge-secondary badge-lg"><i class="fas fa-door-open"></i> Vacant</span>
+            {% endif %}
+            
+            {% if property.has_litigation %}
+                <span class="badge badge-danger badge-lg"><i class="fas fa-gavel"></i> Under Litigation</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Left Column: Property Details -->
+        <div class="col-md-8">
+            <!-- Location Information -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 bg-primary text-white">
+                    <h6 class="m-0 font-weight-bold">
+                        <i class="fas fa-map-marker-alt"></i> Location Information
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <strong>District:</strong>
+                            <p>{{ property.district.name }}</p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong>Mauza (Revenue Estate):</strong>
+                            <p>{{ property.mauza.name }}</p>
+                        </div>
+                        {% if property.village %}
+                        <div class="col-md-6 mb-3">
+                            <strong>Village/Mohalla:</strong>
+                            <p>{{ property.village.name }}</p>
+                        </div>
+                        {% endif %}
+                        <div class="col-md-6 mb-3">
+                            <strong>Address:</strong>
+                            <p>{{ property.address|default:"Not specified" }}</p>
+                        </div>
+                        {% if property.latitude and property.longitude %}
+                        <div class="col-md-12 mb-3">
+                            <strong>GPS Coordinates:</strong>
+                            <p>
+                                Lat: {{ property.latitude }}, Long: {{ property.longitude }}
+                                <a href="https://www.google.com/maps?q={{ property.latitude }},{{ property.longitude }}" 
+                                   target="_blank" 
+                                   class="btn btn-sm btn-outline-primary ml-2">
+                                    <i class="fas fa-external-link-alt"></i> View on Map
+                                </a>
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Property Details -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 bg-success text-white">
+                    <h6 class="m-0 font-weight-bold">
+                        <i class="fas fa-info-circle"></i> Property Details
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <strong>Property Type:</strong>
+                            <p>{{ property.get_property_type_display }}</p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong>Subtype:</strong>
+                            <p>{{ property.get_property_subtype_display|default:"Not specified" }}</p>
+                        </div>
+                        <div class="col-md-12 mb-3">
+                            <strong>Area:</strong>
+                            <p class="mb-0">
+                                <span class="badge badge-primary badge-lg">{{ property.area_marlas }} Marlas</span>
+                                <span class="badge badge-info badge-lg">{{ property.area_sqft|floatformat:0 }} Sq.ft</span>
+                                <span class="badge badge-secondary badge-lg">{{ property.area_sqm|floatformat:0 }} Sq.m</span>
+                            </p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong>Deed Number:</strong>
+                            <p>{{ property.deed_number|default:"Not specified" }}</p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong>Acquisition Date:</strong>
+                            <p>{{ property.acquisition_date|date:"d M, Y"|default:"Not specified" }}</p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong>Acquisition Cost:</strong>
+                            <p>{% if property.acquisition_cost %}Rs. {{ property.acquisition_cost|floatformat:2|intcomma }}{% else %}Not specified{% endif %}</p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong>Current Market Value:</strong>
+                            <p>{% if property.current_market_value %}Rs. {{ property.current_market_value|floatformat:2|intcomma }}{% else %}Not specified{% endif %}</p>
+                        </div>
+                        {% if property.last_valuation_date %}
+                        <div class="col-md-6 mb-3">
+                            <strong>Last Valuation Date:</strong>
+                            <p>{{ property.last_valuation_date|date:"d M, Y" }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rental Information -->
+            <div class="card shadow mb-4 border-info">
+                <div class="card-header py-3 bg-info text-white">
+                    <h6 class="m-0 font-weight-bold">
+                        <i class="bi bi-cash-coin"></i> Rental Information
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <strong><i class="bi bi-calendar-year"></i> Annual Rent:</strong>
+                            <p class="mb-0">
+                                {% if property.annual_rent %}
+                                    <span class="badge badge-success badge-lg" style="font-size: 1.1rem;">Rs. {{ property.annual_rent|floatformat:2|intcomma }}</span>
+                                {% else %}
+                                    <span class="badge badge-secondary">Not Set</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong><i class="bi bi-calendar-month"></i> Monthly Rent:</strong>
+                            <p class="mb-0">
+                                {% if property.monthly_rent %}
+                                    <span class="badge badge-primary badge-lg" style="font-size: 1.1rem;">Rs. {{ property.monthly_rent|floatformat:2|intcomma }}</span>
+                                {% else %}
+                                    <span class="badge badge-secondary">Not Set</span>
+                                {% endif %}
+                            </p>
+                            {% if property.annual_rent and property.monthly_rent %}
+                                <small class="text-muted">* Auto-calculated from annual rent</small>
+                            {% endif %}
+                        </div>
+                        {% if property.annual_rent %}
+                        <div class="col-md-12">
+                            <div class="alert alert-info mb-0">
+                                <i class="bi bi-info-circle"></i> 
+                                <strong>Note:</strong> This is the expected/assessed annual rent for this property. 
+                                {% if property.current_lease %}
+                                    The actual lease agreement may have different terms (see Current Lease section below).
+                                {% else %}
+                                    This value will be used when creating a new lease agreement.
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Current Lease Information -->
+            {% if property.current_lease %}
+            <div class="card shadow mb-4 border-success">
+                <div class="card-header py-3 bg-success text-white d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold">
+                        <i class="bi bi-file-earmark-text"></i> Current Lease Agreement
+                    </h6>
+                    <a href="{% url 'property:lease_detail' property.current_lease.pk %}" class="btn btn-sm btn-light">
+                        <i class="bi bi-eye"></i> View Full Details
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <div class="alert alert-info" style="display: inline-block;">
+                                <i class="bi bi-info-circle"></i> Lease Number: <strong>{{ property.current_lease.lease_number }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong><i class="bi bi-person"></i> Tenant Name:</strong>
+                            <p>
+                                <a href="{% url 'revenue:payer_detail' property.current_lease.tenant.pk %}" class="text-primary">
+                                    {{ property.current_lease.tenant.name }}
+                                </a>
+                            </p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong><i class="bi bi-phone"></i> Contact:</strong>
+                            <p>{{ property.current_lease.tenant.contact_number|default:"N/A" }}</p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong><i class="bi bi-calendar-check"></i> Lease Start:</strong>
+                            <p>{{ property.current_lease.lease_start_date|date:"d M, Y" }}</p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong><i class="bi bi-calendar-x"></i> Lease End:</strong>
+                            <p>
+                                {% if property.current_lease.lease_end_date %}
+                                    {{ property.current_lease.lease_end_date|date:"d M, Y" }}
+                                {% else %}
+                                    <span class="badge bg-secondary">Month-to-Month</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong><i class="bi bi-cash-coin"></i> Monthly Rent:</strong>
+                            <p class="text-success"><strong>Rs. {{ property.current_lease.monthly_rent|floatformat:2|intcomma }}</strong></p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong><i class="bi bi-shield-check"></i> Security Deposit:</strong>
+                            <p>Rs. {{ property.current_lease.security_deposit|floatformat:2|intcomma }}</p>
+                        </div>
+                        {% if property.current_lease.annual_increment_percentage > 0 %}
+                        <div class="col-md-6 mb-3">
+                            <strong><i class="bi bi-graph-up-arrow"></i> Annual Increment:</strong>
+                            <p>{{ property.current_lease.annual_increment_percentage }}%</p>
+                        </div>
+                        {% endif %}
+                        <div class="col-md-6 mb-3">
+                            <strong><i class="bi bi-toggles"></i> Status:</strong>
+                            <p><span class="badge bg-success">{{ property.current_lease.get_status_display }}</span></p>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-12">
+                            <a href="{% url 'property:lease_update' property.current_lease.pk %}" class="btn btn-sm btn-warning">
+                                <i class="bi bi-pencil"></i> Edit Lease
+                            </a>
+                            <a href="{% url 'property:lease_terminate' property.current_lease.pk %}" class="btn btn-sm btn-danger">
+                                <i class="bi bi-x-circle"></i> Terminate Lease
+                            </a>
+                            {% if property.current_lease.agreement_document %}
+                                <a href="{{ property.current_lease.agreement_document.url }}" target="_blank" class="btn btn-sm btn-info">
+                                    <i class="bi bi-file-earmark-pdf"></i> View Agreement
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% elif property.status == 'VACANT' %}
+            <div class="card shadow mb-4 border-warning">
+                <div class="card-header py-3 bg-warning text-dark">
+                    <h6 class="m-0 font-weight-bold">
+                        <i class="bi bi-exclamation-triangle"></i> Property Vacant - No Active Lease
+                    </h6>
+                </div>
+                <div class="card-body text-center">
+                    <p class="mb-3">This property doesn't have an active lease agreement.</p>
+                    <a href="{% url 'property:lease_create' %}?property={{ property.pk }}" class="btn btn-success">
+                        <i class="bi bi-plus-circle"></i> Create New Lease
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Lease History -->
+            {% if property.leases.all %}
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 bg-white">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-clock-history"></i> Lease History ({{ property.leases.count }})
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Lease #</th>
+                                    <th>Tenant</th>
+                                    <th>Period</th>
+                                    <th>Rent</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for lease in property.leases.all %}
+                                <tr {% if lease.status == 'ACTIVE' %}class="table-success"{% endif %}>
+                                    <td>{{ lease.lease_number }}</td>
+                                    <td>{{ lease.tenant.name|truncatewords:3 }}</td>
+                                    <td>
+                                        <small>{{ lease.lease_start_date|date:"d M Y" }}</small><br>
+                                        <small class="text-muted">to {{ lease.lease_end_date|date:"d M Y"|default:"Month-to-month" }}</small>
+                                    </td>
+                                    <td>Rs. {{ lease.monthly_rent|floatformat:0|intcomma }}</td>
+                                    <td>
+                                        {% if lease.status == 'ACTIVE' %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% elif lease.status == 'EXPIRED' %}
+                                            <span class="badge bg-secondary">Expired</span>
+                                        {% elif lease.status == 'TERMINATED' %}
+                                            <span class="badge bg-danger">Terminated</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">{{ lease.get_status_display }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'property:lease_detail' lease.pk %}" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Litigation Information (if applicable) -->
+            {% if property.has_litigation %}
+            <div class="card shadow mb-4 border-danger">
+                <div class="card-header py-3 bg-danger text-white">
+                    <h6 class="m-0 font-weight-bold">
+                        <i class="fas fa-gavel"></i> Litigation Information
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <strong>Case Number:</strong>
+                            <p>{{ property.court_case_number }}</p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <strong>Case Status:</strong>
+                            <p>
+                                <span class="badge badge-warning">{{ property.get_court_case_status_display }}</span>
+                            </p>
+                        </div>
+                        {% if property.case_filing_date %}
+                        <div class="col-md-6 mb-3">
+                            <strong>Filing Date:</strong>
+                            <p>{{ property.case_filing_date|date:"d M, Y" }}</p>
+                        </div>
+                        {% endif %}
+                        {% if property.next_hearing_date %}
+                        <div class="col-md-6 mb-3">
+                            <strong>Next Hearing:</strong>
+                            <p class="text-danger"><strong>{{ property.next_hearing_date|date:"d M, Y" }}</strong></p>
+                        </div>
+                        {% endif %}
+                        {% if property.case_description %}
+                        <div class="col-md-12 mb-3">
+                            <strong>Case Description:</strong>
+                            <p>{{ property.case_description }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Additional Notes -->
+            {% if property.notes %}
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-sticky-note"></i> Additional Notes
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p>{{ property.notes|linebreaks }}</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Column: Photos, Documents, History -->
+        <div class="col-md-4">
+            <!-- Property Photos -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-images"></i> Photos ({{ photos.count }})
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if photos %}
+                        {% for photo in photos %}
+                        <div class="mb-3">
+                            <img src="{{ photo.photo.url }}" 
+                                 alt="{{ photo.caption }}" 
+                                 class="img-fluid rounded shadow-sm mb-2"
+                                 style="width: 100%;">
+                            {% if photo.caption %}
+                                <small class="text-muted">{{ photo.caption }}</small>
+                            {% endif %}
+                            {% if photo.is_primary %}
+                                <span class="badge badge-primary">Primary</span>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted text-center">No photos uploaded yet</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Property Documents -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-file-alt"></i> Documents ({{ documents.count }})
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if documents %}
+                        <ul class="list-unstyled">
+                            {% for doc in documents %}
+                            <li class="mb-2">
+                                <a href="{{ doc.document.url }}" target="_blank" class="text-decoration-none">
+                                    <i class="fas fa-file-pdf text-danger"></i> 
+                                    {{ doc.get_document_type_display }}
+                                </a>
+                                <br>
+                                {% if doc.description %}
+                                    <small class="text-muted">{{ doc.description }}</small><br>
+                                {% endif %}
+                                <small class="text-muted">{{ doc.uploaded_at|date:"d M, Y" }}</small>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted text-center">No documents uploaded yet</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Recent History -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-history"></i> Recent History
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if history %}
+                        <ul class="list-unstyled timeline">
+                            {% for entry in history %}
+                            <li class="mb-3">
+                                <div>
+                                    <strong>{{ entry.get_action_display }}</strong>
+                                    {% if entry.action == 'CREATED' %}
+                                        <span class="badge badge-success">New</span>
+                                    {% elif entry.action == 'UPDATED' %}
+                                        <span class="badge badge-info">Edit</span>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted">
+                                    {{ entry.changed_by.get_full_name|default:entry.changed_by.username }}
+                                    - {{ entry.changed_at|date:"d M, Y H:i" }}
+                                </small>
+                                {% if entry.description %}
+                                    <p class="mb-0 text-muted"><small>{{ entry.description }}</small></p>
+                                {% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted text-center">No history available</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- System Information -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-info-circle"></i> System Info
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <small class="text-muted">
+                        <strong>Created:</strong> {{ property.created_at|date:"d M, Y H:i" }}<br>
+                        <strong>Last Updated:</strong> {{ property.updated_at|date:"d M, Y H:i" }}<br>
+                        {% if property.created_by %}
+                            <strong>Created By:</strong> {{ property.created_by.get_full_name|default:property.created_by.username }}
+                        {% else %}
+                            <strong>Created By:</strong> <span class="text-muted">System</span>
+                        {% endif %}
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .badge-lg {
+        font-size: 0.9rem;
+        padding: 0.5rem 0.75rem;
+    }
+</style>
+{% endblock %}

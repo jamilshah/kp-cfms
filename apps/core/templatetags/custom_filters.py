@@ -43,3 +43,16 @@ def intcomma(value):
         return '{:,}'.format(int(value))
     except (ValueError, TypeError):
         return value
+
+
+@register.filter(name='get_item')
+def get_item(dictionary, key):
+    """
+    Access dictionary item by key in templates.
+    
+    Usage: {{ my_dict|get_item:key_var }}
+    Result: value from dictionary
+    """
+    if dictionary is None:
+        return None
+    return dictionary.get(key)

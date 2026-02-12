@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <!-- Page Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="mb-1">
+                    <i class="bi bi-diagram-3 me-2"></i>{{ page_title }}
+                </h2>
+                <p class="text-muted mb-0">
+                    Level 5: Sub-Head (Optional subdivisions of NAM Heads)
+                </p>
+            </div>
+            <a href="{% url 'finance:subhead_list' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Back to List
+            </a>
+        </div>
+
+        <!-- Info Alert -->
+        <div class="alert alert-info mb-4">
+            <div class="d-flex">
+                <i class="bi bi-info-circle-fill fs-4 me-3"></i>
+                <div>
+                    <strong>What are Sub-Heads?</strong>
+                    <p class="mb-2 mt-1">
+                        Sub-Heads provide optional subdivisions of NAM Heads (Level 4) for more granular internal tracking.
+                    </p>
+                    <ul class="mb-0 small">
+                        <li><strong>Example:</strong> A01101 (Basic Pay - Officers) can have sub-heads:
+                            <ul>
+                                <li>A01101-01: Grade 17-22 Officers</li>
+                                <li>A01101-02: Grade 11-16 Officers</li>
+                            </ul>
+                        </li>
+                        <li><strong>Effect:</strong> When you create sub-heads, the parent NAM Head becomes a rollup-only head (no direct posting)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Card -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h5 class="mb-0">
+                    <i class="bi bi-pencil-square me-2"></i>Sub-Head Details
+                </h5>
+            </div>
+            
+            <div class="card-body p-4">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Parent NAM Head -->
+                    <div class="mb-4">
+                        <label for="{{ form.nam_head.id_for_label }}" class="form-label fw-bold">
+                            {{ form.nam_head.label }} <span class="text-danger">*</span>
+                        </label>
+                        {{ form.nam_head }}
+                        <div class="form-text">{{ form.nam_head.help_text }}</div>
+                        {% if form.nam_head.errors %}
+                            <div class="text-danger small mt-1">{{ form.nam_head.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="row g-3 mb-4">
+                        <!-- Sub Code -->
+                        <div class="col-md-3">
+                            <label for="{{ form.sub_code.id_for_label }}" class="form-label fw-bold">
+                                {{ form.sub_code.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.sub_code }}
+                            <div class="form-text">{{ form.sub_code.help_text }}</div>
+                            {% if form.sub_code.errors %}
+                                <div class="text-danger small mt-1">{{ form.sub_code.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Name -->
+                        <div class="col-md-9">
+                            <label for="{{ form.name.id_for_label }}" class="form-label fw-bold">
+                                {{ form.name.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.name }}
+                            <div class="form-text">{{ form.name.help_text }}</div>
+                            {% if form.name.errors %}
+                                <div class="text-danger small mt-1">{{ form.name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Description -->
+                    <div class="mb-4">
+                        <label for="{{ form.description.id_for_label }}" class="form-label fw-bold">
+                            {{ form.description.label }}
+                        </label>
+                        {{ form.description }}
+                        <div class="form-text">{{ form.description.help_text }}</div>
+                        {% if form.description.errors %}
+                            <div class="text-danger small mt-1">{{ form.description.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Active Status -->
+                    <div class="mb-4">
+                        <div class="form-check">
+                            {{ form.is_active }}
+                            <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                <strong>Active Status</strong>
+                                <span class="text-muted small d-block">Inactive sub-heads won't appear in selection lists</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Preview of Full Code -->
+                    {% if form.instance.pk %}
+                    <div class="alert alert-light border mb-4">
+                        <strong>Full Code:</strong> <code class="fs-5">{{ form.instance.code }}</code>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Actions -->
+                    <div class="d-flex justify-content-end gap-2 pt-3 border-top">
+                        <a href="{% url 'finance:subhead_list' %}" class="btn btn-light border">
+                            Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary px-4">
+                            <i class="bi bi-check-circle me-1"></i>{{ submit_text }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Initialize Select2 -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Select2 for NAM head dropdown
+    if (typeof $.fn.select2 !== 'undefined') {
+        $('#id_nam_head').select2({
+            theme: 'bootstrap-5',
+            width: '100%',
+            placeholder: 'Select parent NAM Head...',
+            allowClear: false,
+            templateResult: function(state) {
+                if (!state.id) return state.text;
+                var $state = $(
+                    '<div>' +
+                        '<strong>' + state.text.split(' - ')[0] + '</strong>' +
+                        '<div class="small text-muted">' + state.text.split(' - ').slice(1).join(' - ') + '</div>' +
+                    '</div>'
+                );
+                return $state;
+            }
+        });
+    }
+    
+    // Auto-format sub-code to 2 digits
+    const subCodeInput = document.getElementById('id_sub_code');
+    if (subCodeInput) {
+        subCodeInput.addEventListener('blur', function() {
+            let value = this.value.trim();
+            if (value && value.length === 1 && !isNaN(value)) {
+                this.value = '0' + value;
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

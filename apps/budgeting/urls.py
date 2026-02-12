@@ -39,7 +39,9 @@ from apps.budgeting.views import (
     SupplementaryGrantListView, SupplementaryGrantCreateView, SupplementaryGrantDetailView, SupplementaryGrantApproveView,
     ReappropriationListView, ReappropriationCreateView, ReappropriationDetailView, ReappropriationApproveView,
     # Phase 4: Reporting
-    PrintBudgetBookView
+    PrintBudgetBookView,
+    # AJAX views for cascading dropdowns
+    load_budget_functions, load_budget_heads_for_estimate
 )
 from apps.budgeting.views_salary_budget import (
     SalaryBudgetDashboardView,
@@ -96,6 +98,10 @@ urlpatterns = [
     
     # Form BDC-1: Expenditure Estimates
     path('expenditure/create/', ExpenditureEstimateCreateView.as_view(), name='expenditure_create'),
+    
+    # AJAX endpoints for cascading dropdowns in budget estimate forms
+    path('ajax/load-functions/', load_budget_functions, name='load_budget_functions'),
+    path('ajax/load-budget-heads/', load_budget_heads_for_estimate, name='load_budget_heads_for_estimate'),
     
     # Form BDC-2: Schedule of Establishment
     path('establishment/', ScheduleOfEstablishmentListView.as_view(), name='establishment_list'),

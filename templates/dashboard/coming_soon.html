@@ -1,0 +1,166 @@
+{% extends "base_public.html" %}
+{% load static %}
+
+{% block title %}Coming Soon - {{ module_name }} - e-Baldia{% endblock %}
+
+{% block extra_css %}
+<style>
+    main {
+        min-height: calc(100vh - 200px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 0;
+    }
+    
+    .coming-soon-container {
+        background: white;
+        border-radius: 20px;
+        padding: 60px 40px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        text-align: center;
+        max-width: 600px;
+        margin: auto;
+    }
+    
+    .icon-container {
+        font-size: 6rem;
+        margin-bottom: 30px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.1);
+        }
+    }
+    
+    .coming-soon-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #2c3e50;
+        margin-bottom: 20px;
+    }
+    
+    .coming-soon-subtitle {
+        font-size: 1.25rem;
+        color: #7f8c8d;
+        margin-bottom: 40px;
+    }
+    
+    .feature-list {
+        text-align: left;
+        margin-bottom: 40px;
+        padding: 0 20px;
+    }
+    
+    .feature-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 15px;
+        color: #2c3e50;
+    }
+    
+    .feature-item i {
+        font-size: 1.5rem;
+        margin-right: 15px;
+        color: #667eea;
+    }
+    
+    .btn-back {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        color: white;
+        padding: 12px 30px;
+        border-radius: 25px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-back:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        color: white;
+    }
+    
+    .timeline {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 30px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="coming-soon-container">
+        <!-- Icon -->
+        <div class="icon-container">
+            {{ module_icon|safe }}
+        </div>
+        
+        <!-- Title -->
+        <h1 class="coming-soon-title">Coming Soon!</h1>
+        <h4 class="coming-soon-subtitle">{{ module_name }}</h4>
+        
+        <!-- Description -->
+        <p class="lead text-muted mb-4">
+            {{ module_description }}
+        </p>
+        
+        <!-- Features -->
+        {% if module_features %}
+        <div class="feature-list">
+            <h5 class="mb-3 text-center" style="color: #667eea;">
+                <i class="bi bi-star-fill"></i> Planned Features
+            </h5>
+            {% for feature in module_features %}
+            <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>{{ feature }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        <!-- Status -->
+        <div class="alert alert-info" role="alert">
+            <i class="bi bi-info-circle"></i>
+            <strong>Development Status:</strong> 
+            This module is currently under planning and will be available in a future release.
+        </div>
+        
+        <!-- Timeline -->
+        {% if estimated_release %}
+        <div class="timeline">
+            <small class="text-muted d-block mb-2">
+                <i class="bi bi-calendar-event"></i> Estimated Release
+            </small>
+            <h5 class="mb-0 text-primary">{{ estimated_release }}</h5>
+        </div>
+        {% endif %}
+        
+        <!-- Actions -->
+        <div class="mt-4">
+            <a href="{% url 'dashboard:ebaldia' %}" class="btn btn-back">
+                <i class="bi bi-arrow-left"></i> Back to e-Baldia Dashboard
+            </a>
+        </div>
+        
+        <!-- Contact Info -->
+        <div class="mt-4 text-muted">
+            <small>
+                For more information, please contact the CFMS development team.
+            </small>
+        </div>
+    </div>
+</div>
+{% endblock %}

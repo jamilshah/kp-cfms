@@ -18,16 +18,21 @@
             <h2><i class="bi bi-diagram-3 me-2"></i>Global Heads</h2>
             <p class="text-muted mb-0">Master Inventory of PIFRA Object Codes (Chart of Accounts)</p>
         </div>
-        <a href="{% url 'system_admin:global_head_create' %}" class="btn btn-primary">
-            <i class="bi bi-plus-circle me-1"></i> Add Global Head
-        </a>
+        <div>
+            <a href="{% url 'finance:dept_func_config_matrix' %}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-gear me-1"></i> Configure Dept-Func Mappings
+            </a>
+            <a href="{% url 'system_admin:global_head_create' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-1"></i> Add Global Head
+            </a>
+        </div>
     </div>
 
     <!-- Search/Filter Card -->
     <div class="card shadow-sm mb-4">
         <div class="card-body">
             <form method="get" class="row g-3 align-items-end">
-                <div class="col-md-6">
+                <div class="col-md-5">
                     <label for="search" class="form-label">Search</label>
                     <div class="input-group">
                         <span class="input-group-text bg-light">
@@ -39,11 +44,21 @@
                                class="form-control" 
                                placeholder="Search by code, name, or minor head..."
                                value="{{ search_query }}">
-                        <button type="submit" class="btn btn-primary">Search</button>
-                        {% if search_query %}
-                            <a href="{% url 'system_admin:global_head_list' %}" class="btn btn-outline-secondary">Clear</a>
-                        {% endif %}
                     </div>
+                </div>
+                <div class="col-md-3">
+                    <label for="scope" class="form-label">Scope</label>
+                    <select name="scope" id="scope" class="form-select">
+                        <option value="">All Scopes</option>
+                        <option value="UNIVERSAL" {% if selected_scope == 'UNIVERSAL' %}selected{% endif %}>Universal (All Departments)</option>
+                        <option value="DEPARTMENTAL" {% if selected_scope == 'DEPARTMENTAL' %}selected{% endif %}>Department-Specific</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <button type="submit" class="btn btn-primary">Apply Filters</button>
+                    {% if search_query or selected_scope %}
+                        <a href="{% url 'system_admin:global_head_list' %}" class="btn btn-outline-secondary">Clear</a>
+                    {% endif %}
                 </div>
             </form>
         </div>
@@ -61,6 +76,8 @@
                             <th>Minor Head</th>
                             <th>Major Head</th>
                             <th>Type</th>
+                            <th>Scope</th>
+                            <th>Departments</th>
                             <th class="text-end pe-4">Actions</th>
                         </tr>
                     </thead>
@@ -88,6 +105,26 @@
                                         <span class="badge bg-info text-dark">Asset</span>
                                     {% else %}
                                         <span class="badge bg-secondary">{{ head.get_account_type_display }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if head.scope == 'UNIVERSAL' %}
+                                        <span class="badge bg-success"><i class="bi bi-globe"></i> Universal</span>
+                                    {% else %}
+                                        <span class="badge bg-info"><i class="bi bi-building"></i> Departmental</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if head.scope == 'UNIVERSAL' %}
+                                        <span class="text-muted small">All</span>
+                                    {% else %}
+                                        {% with dept_count=head.applicable_departments.count %}
+                                            {% if dept_count > 0 %}
+                                                <span class="badge bg-secondary">{{ dept_count }} dept{{ dept_count|pluralize }}</span>
+                                            {% else %}
+                                                <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> None</span>
+                                            {% endif %}
+                                        {% endwith %}
                                     {% endif %}
                                 </td>
                                 <td class="text-end pe-4">

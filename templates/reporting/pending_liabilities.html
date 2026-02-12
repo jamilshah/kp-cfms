@@ -86,8 +86,8 @@
                     <tbody>
                         {% for item in pending_items %}
                         <tr>
-                            <td class="ps-4 font-monospace fw-bold">{{ item.head.global_head.code }}</td>
-                            <td>{{ item.head.global_head.name }}</td>
+                            <td class="ps-4 font-monospace fw-bold">{{ item.code }}</td>
+                            <td>{{ item.name }}</td>
                             <td>
                                 {% if item.head.function %}
                                     <span class="badge bg-secondary">{{ item.head.function.code }}</span>

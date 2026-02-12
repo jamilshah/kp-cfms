@@ -208,145 +208,34 @@
                 </div>
                 <div class="card-body">
                     <p class="card-text text-muted small">
-                        Import PIFRA Objects and create Budget Heads with functional context.
+                        Manage CoA structure and configure Department-Function-Head mappings.
                     </p>
                     <div class="d-grid gap-2">
-                        <a href="{% url 'finance:coa_department_mapping' %}" class="btn btn-primary btn-sm">
-                            <i class="bi bi-diagram-3 me-1"></i> CoA Department Mapping
+                        <a href="{% url 'finance:coa_hub' %}" class="btn btn-primary btn-sm">
+                            <i class="bi bi-diagram-3 me-1"></i> CoA Management Hub
                         </a>
-                        <a href="{% url 'finance:budget_head_list' %}" class="btn btn-outline-primary btn-sm">
-                            <i class="bi bi-list-ul me-1"></i> View & Manage Budget Heads
+                        <a href="{% url 'finance:global_head_csv_import' %}" class="btn btn-outline-success btn-sm">
+                            <i class="bi bi-upload me-1"></i> Import Master CoA (CSV)
+                        </a>
+                        <a href="{% url 'finance:subhead_csv_import' %}" class="btn btn-outline-success btn-sm">
+                            <i class="bi bi-upload me-1"></i> Import Sub-Heads (CSV)
                         </a>
                         <a href="{% url 'system_admin:global_head_list' %}" class="btn btn-outline-primary btn-sm">
-                            <i class="bi bi-globe me-1"></i> View & Manage Global Heads
+                            <i class="bi bi-globe me-1"></i> View Global Heads
+                        </a>
+                        <a href="{% url 'system_admin:function_code_list' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-diagram-2 me-1"></i> Manage Function Codes
+                        </a>
+                        <a href="{% url 'finance:budget_head_list' %}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-list-ul me-1"></i> View Budget Heads
                         </a>
                     </div>
                 </div>
                 <div class="card-footer bg-light">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <a href="{% url 'system_admin:budget_heads_template' %}" class="btn btn-outline-secondary btn-sm">
-                            <i class="bi bi-download me-1"></i> CSV Template
-                        </a>
-                        <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#importCoaModal">
-                            <i class="bi bi-upload me-1"></i> Import CoA
-                        </button>
+                    <div class="alert alert-info small py-2 mb-0">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Use the <strong>CoA Management Hub</strong> for step-by-step CoA setup workflow.
                     </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- CoA Import Modal -->
-        <div class="modal fade" id="importCoaModal" tabindex="-1" aria-labelledby="importCoaModalLabel" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header bg-dark text-white">
-                        <h5 class="modal-title" id="importCoaModalLabel">
-                            <i class="bi bi-list-nested me-2"></i>Import Chart of Accounts
-                        </h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <form method="post">
-                        {% csrf_token %}
-                        <input type="hidden" name="command" value="import_coa">
-                        <div class="modal-body">
-                            <div class="alert alert-info small py-2">
-                                <i class="bi bi-info-circle me-1"></i>
-                                This imports PIFRA Objects and creates Budget Heads for the selected Fund and Function.
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label for="coa_fund" class="form-label">Fund</label>
-                                <select name="fund" id="coa_fund" class="form-select" required>
-                                    {% for fund in funds %}
-                                    <option value="{{ fund.code }}" {% if fund.code == 'GEN' %}selected{% endif %}>
-                                        {{ fund.code }} - {{ fund.name }}
-                                    </option>
-                                    {% empty %}
-                                    <option value="GEN" selected>GEN - General Fund</option>
-                                    {% endfor %}
-                                </select>
-                                <div class="form-text">Select the fund for Budget Head creation.</div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label d-block fw-bold">Import Scope</label>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="scope_type" id="scopeFunction" value="function" checked onchange="toggleScope()">
-                                    <label class="form-check-label" for="scopeFunction">Single Function</label>
-                                </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="scope_type" id="scopeDepartment" value="department" onchange="toggleScope()">
-                                    <label class="form-check-label" for="scopeDepartment">Department (All Related Functions)</label>
-                                </div>
-                            </div>
-
-                            <div class="mb-3" id="functionSelectDiv">
-                                <label for="coa_function" class="form-label">Function</label>
-                                <select name="function" id="coa_function" class="form-select">
-                                    <option value="" selected disabled>Select Function</option>
-                                    {% for func in functions %}
-                                    <option value="{{ func.code }}">
-                                        {{ func.code }} - {{ func.name }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                <div class="form-text">Select a specific function code.</div>
-                            </div>
-
-                            <div class="mb-3 d-none" id="departmentSelectDiv">
-                                <label for="coa_department" class="form-label">Department</label>
-                                <select name="department" id="coa_department" class="form-select">
-                                    <option value="" selected disabled>Select Department</option>
-                                    {% for dept in departments %}
-                                    <option value="{{ dept.id }}">
-                                        {{ dept.name }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                                <div class="form-text">All functions linked to this department in Setup will be imported.</div>
-                            </div>
-
-                            <script>
-                                function toggleScope() {
-                                    const isFunction = document.getElementById('scopeFunction').checked;
-                                    const funcDiv = document.getElementById('functionSelectDiv');
-                                    const deptDiv = document.getElementById('departmentSelectDiv');
-                                    const funcSelect = document.getElementById('coa_function');
-                                    const deptSelect = document.getElementById('coa_department');
-
-                                    if (isFunction) {
-                                        funcDiv.classList.remove('d-none');
-                                        deptDiv.classList.add('d-none');
-                                        funcSelect.required = true;
-                                        deptSelect.required = false;
-                                        deptSelect.value = "";
-                                    } else {
-                                        funcDiv.classList.add('d-none');
-                                        deptDiv.classList.remove('d-none');
-                                        funcSelect.required = false;
-                                        deptSelect.required = true;
-                                        funcSelect.value = "";
-                                    }
-                                }
-                                // Initialize
-                                document.addEventListener('DOMContentLoaded', toggleScope);
-                            </script>
-                            
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="skip_budget_heads" id="skipBudgetHeads">
-                                <label class="form-check-label" for="skipBudgetHeads">
-                                    <strong>Master Data Only</strong>
-                                    <small class="text-muted d-block">Import only Major/Minor/Global Heads, skip Budget Head creation.</small>
-                                </label>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-success">
-                                <i class="bi bi-upload me-1"></i> Import
-                            </button>
-                        </div>
-                    </form>
                 </div>
             </div>
         </div>

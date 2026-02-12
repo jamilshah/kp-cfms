@@ -1,0 +1,410 @@
+{% extends "base_public.html" %}
+{% load static %}
+
+{% block title %}e-Baldia - Digital Municipal Services{% endblock %}
+
+{% block extra_css %}
+<style>
+    main {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: calc(100vh - 200px);
+    }
+    
+    .e-baldia-header {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 15px;
+        padding: 30px;
+        margin-bottom: 30px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    
+    .module-card {
+        background: white;
+        border-radius: 15px;
+        padding: 30px;
+        margin-bottom: 25px;
+        transition: all 0.3s ease;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        border: none;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .module-card:before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 5px;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .module-card:hover {
+        transform: translateY(-10px);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+    }
+    
+    .module-card.active:hover {
+        cursor: pointer;
+    }
+    
+    .module-card.coming-soon {
+        opacity: 0.7;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    }
+    
+    .module-icon {
+        font-size: 3.5rem;
+        margin-bottom: 15px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .module-card.coming-soon .module-icon {
+        background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .module-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+        color: #2c3e50;
+    }
+    
+    .module-description {
+        color: #7f8c8d;
+        font-size: 0.9rem;
+        margin-bottom: 15px;
+    }
+    
+    .status-badge {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        font-size: 0.75rem;
+        padding: 5px 12px;
+        border-radius: 20px;
+    }
+    
+    .badge-active {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        color: white;
+    }
+    
+    .badge-coming {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+    }
+    
+    .org-info {
+        background: rgba(102, 126, 234, 0.1);
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+    
+    .stats-container {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        margin-top: 30px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    
+    @media (max-width: 768px) {
+        .module-icon {
+            font-size: 2.5rem;
+        }
+        .module-title {
+            font-size: 1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="e-baldia-header">
+        <div class="row align-items-center">
+            <div class="col-12 text-center">
+                <h1 class="display-4 mb-2" style="color: #2c3e50; font-weight: 700;">
+                    <i class="bi bi-building" style="color: #667eea;"></i>
+                    e-Baldia
+                </h1>
+                <h5 class="text-muted mb-3">Digital Municipal Services Platform</h5>
+                <p class="lead mb-0" style="color: #7f8c8d;">
+                    Comprehensive financial and administrative management system for 
+                    TMAs & CMGP
+                </p>
+                {% if not user.is_authenticated %}
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i> 
+                        Login required to access CFMS and Property Management modules
+                    </small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Module Grid -->
+    <div class="row">
+        <!-- CFMS - Active -->
+        <div class="col-lg-4 col-md-6">
+            <a href="{% url 'dashboard:index' %}" class="text-decoration-none">
+                <div class="module-card active">
+                    <span class="status-badge badge-active">
+                        <i class="bi bi-check-circle"></i> Active
+                    </span>
+                    <div class="text-center">
+                        <div class="module-icon">
+                            <i class="bi bi-calculator-fill"></i>
+                        </div>
+                        <h4 class="module-title">CFMS</h4>
+                        <p class="module-description">
+                            Computerized Financial Management System - Budget, Revenue, Expenditure & Finance
+                        </p>
+                        <div class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-box-arrow-up-right"></i> Open Module
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Immoveable Property Management - Active -->
+        <div class="col-lg-4 col-md-6">
+            <a href="{% url 'property:dashboard' %}" class="text-decoration-none">
+                <div class="module-card active">
+                    <span class="status-badge badge-active">
+                        <i class="bi bi-tools"></i> In Development
+                    </span>
+                    <div class="text-center">
+                        <div class="module-icon">
+                            <i class="bi bi-geo-alt-fill"></i>
+                        </div>
+                        <h4 class="module-title">Immoveable Property Management</h4>
+                        <p class="module-description">
+                            GIS-enabled property tracking, rent management & mapping system
+                        </p>
+                        <div class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-box-arrow-up-right"></i> Open Module
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- ADP Project Management - Coming Soon -->
+        <div class="col-lg-4 col-md-6">
+            <a href="{% url 'dashboard:coming_soon' %}?module=adp" class="text-decoration-none">
+                <div class="module-card coming-soon">
+                    <span class="status-badge badge-coming">
+                        <i class="bi bi-clock-history"></i> Coming Soon
+                    </span>
+                    <div class="text-center">
+                        <div class="module-icon">
+                            <i class="bi bi-diagram-3-fill"></i>
+                        </div>
+                        <h4 class="module-title">ADP Project Management</h4>
+                        <p class="module-description">
+                            Annual Development Program planning, monitoring & execution
+                        </p>
+                        <div class="btn btn-outline-secondary btn-sm" disabled>
+                            <i class="bi bi-hourglass-split"></i> Under Development
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Pension Management - Coming Soon -->
+        <div class="col-lg-4 col-md-6">
+            <a href="{% url 'dashboard:coming_soon' %}?module=pension" class="text-decoration-none">
+                <div class="module-card coming-soon">
+                    <span class="status-badge badge-coming">
+                        <i class="bi bi-clock-history"></i> Coming Soon
+                    </span>
+                    <div class="text-center">
+                        <div class="module-icon">
+                            <i class="bi bi-person-badge-fill"></i>
+                        </div>
+                        <h4 class="module-title">Pension Management System</h4>
+                        <p class="module-description">
+                            Retiree database, pension calculation & disbursement tracking
+                        </p>
+                        <div class="btn btn-outline-secondary btn-sm" disabled>
+                            <i class="bi bi-hourglass-split"></i> Under Development
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Human Resource Management - Coming Soon -->
+        <div class="col-lg-4 col-md-6">
+            <a href="{% url 'dashboard:coming_soon' %}?module=hrm" class="text-decoration-none">
+                <div class="module-card coming-soon">
+                    <span class="status-badge badge-coming">
+                        <i class="bi bi-clock-history"></i> Coming Soon
+                    </span>
+                    <div class="text-center">
+                        <div class="module-icon">
+                            <i class="bi bi-people-fill"></i>
+                        </div>
+                        <h4 class="module-title">Human Resource Management</h4>
+                        <p class="module-description">
+                            Employee database, attendance, leave management & payroll
+                        </p>
+                        <div class="btn btn-outline-secondary btn-sm" disabled>
+                            <i class="bi bi-hourglass-split"></i> Under Development
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Moveable Asset Management - Coming Soon -->
+        <div class="col-lg-4 col-md-6">
+            <a href="{% url 'dashboard:coming_soon' %}?module=assets" class="text-decoration-none">
+                <div class="module-card coming-soon">
+                    <span class="status-badge badge-coming">
+                        <i class="bi bi-clock-history"></i> Coming Soon
+                    </span>
+                    <div class="text-center">
+                        <div class="module-icon">
+                            <i class="bi bi-truck"></i>
+                        </div>
+                        <h4 class="module-title">Moveable Asset Management</h4>
+                        <p class="module-description">
+                            Vehicle, furniture, equipment tracking & maintenance
+                        </p>
+                        <div class="btn btn-outline-secondary btn-sm" disabled>
+                            <i class="bi bi-hourglass-split"></i> Under Development
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- E-billing for Taxation - Coming Soon -->
+        <div class="col-lg-4 col-md-6">
+            <a href="{% url 'dashboard:coming_soon' %}?module=ebilling" class="text-decoration-none">
+                <div class="module-card coming-soon">
+                    <span class="status-badge badge-coming">
+                        <i class="bi bi-clock-history"></i> Coming Soon
+                    </span>
+                    <div class="text-center">
+                        <div class="module-icon">
+                            <i class="bi bi-receipt-cutoff"></i>
+                        </div>
+                        <h4 class="module-title">E-billing for Taxation & Fees</h4>
+                        <p class="module-description">
+                            Property tax, water tax, trade license billing & online payment
+                        </p>
+                        <div class="btn btn-outline-secondary btn-sm" disabled>
+                            <i class="bi bi-hourglass-split"></i> Under Development
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Complaint Management - Coming Soon -->
+        <div class="col-lg-4 col-md-6">
+            <a href="{% url 'dashboard:coming_soon' %}?module=complaints" class="text-decoration-none">
+                <div class="module-card coming-soon">
+                    <span class="status-badge badge-coming">
+                        <i class="bi bi-clock-history"></i> Coming Soon
+                    </span>
+                    <div class="text-center">
+                        <div class="module-icon">
+                            <i class="bi bi-megaphone-fill"></i>
+                        </div>
+                        <h4 class="module-title">Citizen Complaint Management</h4>
+                        <p class="module-description">
+                            Public grievance system, complaint tracking & resolution
+                        </p>
+                        <div class="btn btn-outline-secondary btn-sm" disabled>
+                            <i class="bi bi-hourglass-split"></i> Under Development
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Procurement Management - Coming Soon -->
+        <div class="col-lg-4 col-md-6">
+            <a href="{% url 'dashboard:coming_soon' %}?module=procurement" class="text-decoration-none">
+                <div class="module-card coming-soon">
+                    <span class="status-badge badge-coming">
+                        <i class="bi bi-clock-history"></i> Coming Soon
+                    </span>
+                    <div class="text-center">
+                        <div class="module-icon">
+                            <i class="bi bi-cart-check-fill"></i>
+                        </div>
+                        <h4 class="module-title">Procurement Management</h4>
+                        <p class="module-description">
+                            Purchase requisitions, tenders, vendor management & contracts
+                        </p>
+                        <div class="btn btn-outline-secondary btn-sm" disabled>
+                            <i class="bi bi-hourglass-split"></i> Under Development
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- System Stats -->
+    <div class="stats-container">
+        <div class="row text-center">
+            <div class="col-md-3">
+                <h2 class="text-primary mb-0">2</h2>
+                <p class="text-muted mb-0">Active Modules</p>
+            </div>
+            <div class="col-md-3">
+                <h2 class="text-warning mb-0">7</h2>
+                <p class="text-muted mb-0">Under Development</p>
+            </div>
+            <div class="col-md-3">
+                <h2 class="text-success mb-0">{{ total_users|default:"0" }}</h2>
+                <p class="text-muted mb-0">System Users</p>
+            </div>
+            <div class="col-md-3">
+                <h2 class="text-info mb-0">{{ total_orgs|default:"0" }}</h2>
+                <p class="text-muted mb-0">Organizations</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Add subtle animation on load
+    document.addEventListener('DOMContentLoaded', function() {
+        const cards = document.querySelectorAll('.module-card');
+        cards.forEach((card, index) => {
+            setTimeout(() => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                setTimeout(() => {
+                    card.style.transition = 'all 0.5s ease';
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, 50);
+            }, index * 50);
+        });
+    });
+</script>
+{% endblock %}

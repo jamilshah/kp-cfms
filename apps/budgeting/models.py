@@ -190,6 +190,13 @@ class FiscalYear(AuditLogMixin):
             start_date__lte=today,
             end_date__gte=today
         ).first()
+    
+    def can_edit_budget(self) -> bool:
+        """
+        Check if budget entries can be created/modified.
+        Returns True if either planning or revision window is open.
+        """
+        return self.is_planning_active or self.is_revision_active
 
 
 class BudgetProposalStatus(models.TextChoices):
@@ -349,26 +356,35 @@ class BudgetProposal(AuditLogMixin, TenantAwareMixin):
     def get_total_receipts(self) -> Decimal:
         """Calculate total budgeted receipts for this TMA's fiscal year."""
         from apps.finance.models import AccountType
+        from django.db.models import Q
         result = self.fiscal_year.allocations.filter(
             organization=self.organization,
-            budget_head__global_head__account_type=AccountType.REVENUE
+        ).filter(
+            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__account_type=AccountType.REVENUE) |
+            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__account_type=AccountType.REVENUE)
         ).aggregate(total=Sum('original_allocation'))
         return result['total'] or Decimal('0.00')
     
     def get_total_expenditure(self) -> Decimal:
         """Calculate total budgeted expenditure for this TMA's fiscal year."""
         from apps.finance.models import AccountType
+        from django.db.models import Q
         result = self.fiscal_year.allocations.filter(
             organization=self.organization,
-            budget_head__global_head__account_type=AccountType.EXPENDITURE
+        ).filter(
+            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__account_type=AccountType.EXPENDITURE) |
+            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__account_type=AccountType.EXPENDITURE)
         ).aggregate(total=Sum('original_allocation'))
         return result['total'] or Decimal('0.00')
     
     def get_contingency_amount(self) -> Decimal:
         """Get the contingency/reserve allocation amount for this TMA."""
+        from django.db.models import Q
         result = self.fiscal_year.allocations.filter(
             organization=self.organization,
-            budget_head__global_head__code__startswith='A09'
+        ).filter(
+            Q(budget_head__nam_head__isnull=False, budget_head__nam_head__code__startswith='A09') |
+            Q(budget_head__sub_head__isnull=False, budget_head__sub_head__nam_head__code__startswith='A09')
         ).aggregate(total=Sum('original_allocation'))
         return result['total'] or Decimal('0.00')
 
@@ -450,7 +466,7 @@ class BudgetAllocation(AuditLogMixin, TenantAwareMixin):
     class Meta:
         verbose_name = _('Budget Allocation')
         verbose_name_plural = _('Budget Allocations')
-        ordering = ['fiscal_year', 'budget_head__global_head__code']
+        ordering = ['fiscal_year']  # Removed code ordering (complex with nam_head/sub_head)
         unique_together = ['organization', 'fiscal_year', 'budget_head']
         indexes = [
             models.Index(fields=['fiscal_year', 'budget_head']),

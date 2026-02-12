@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Bulk Create Budget Heads - KP-CFMS{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'finance:coa_hub' %}">CoA Hub</a></li>
+            <li class="breadcrumb-item active">Bulk Create Budget Heads</li>
+        </ol>
+    </nav>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white py-3">
+                    <h4 class="mb-0">
+                        <i class="bi bi-lightning-charge me-2"></i>Bulk Create Budget Heads from Configuration
+                    </h4>
+                </div>
+                
+                <div class="card-body p-4">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>How it works:</strong> This tool automatically creates budget heads based on your 
+                        Department-Function-NAM Head configurations. Each configured NAM head will become a budget head 
+                        for the selected fund.
+                    </div>
+
+                    <!-- Statistics -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <div class="border rounded p-3 text-center">
+                                <div class="display-6 fw-bold text-primary">{{ configs_count }}</div>
+                                <small class="text-muted">Department-Function Configurations</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="border rounded p-3 text-center">
+                                <div class="display-6 fw-bold text-success">{{ total_nam_heads }}</div>
+                                <small class="text-muted">Total NAM Heads Configured</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if configs_count == 0 %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>No configurations found!</strong> You need to configure Department-Function-NAM Head 
+                        mappings first.
+                        <a href="{% url 'finance:dept_func_config_matrix' %}" class="alert-link">Go to Configuration Matrix</a>
+                    </div>
+                    {% else %}
+                    
+                    <!-- Form -->
+                    <form id="bulkCreateForm">
+                        {% csrf_token %}
+                        
+                        <div class="mb-4">
+                            <label for="fund" class="form-label fw-bold">
+                                Select Fund <span class="text-danger">*</span>
+                            </label>
+                            <select id="fund" name="fund" class="form-select" required>
+                                <option value="">-- Select Fund --</option>
+                                {% for fund in funds %}
+                                <option value="{{ fund.code }}">{{ fund.code }} - {{ fund.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">
+                                Budget heads will be created for this fund across all configured department-function combinations.
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="form-check">
+                                <input type="checkbox" id="overwrite" name="overwrite" class="form-check-input">
+                                <label for="overwrite" class="form-check-label">
+                                    <strong>Overwrite existing budget heads</strong>
+                                    <small class="d-block text-muted">
+                                        If checked, existing budget heads will be marked as active. 
+                                        Otherwise, they will be skipped.
+                                    </small>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Progress and Results -->
+                        <div id="progressSection" class="mb-4" style="display: none;">
+                            <div class="progress" style="height: 30px;">
+                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" style="width: 0%">
+                                    Processing...
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="resultsSection" class="mb-4" style="display: none;">
+                            <!-- Results will be displayed here -->
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="d-flex justify-content-between align-items-center mt-4">
+                            <a href="{% url 'finance:coa_hub' %}" class="btn btn-light border">
+                                <i class="bi bi-arrow-left me-1"></i> Back to CoA Hub
+                            </a>
+                            <button type="submit" id="submitBtn" class="btn btn-primary btn-lg px-5">
+                                <i class="bi bi-lightning-charge me-2"></i>Create Budget Heads
+                            </button>
+                        </div>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('bulkCreateForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const fundSelect = document.getElementById('fund');
+    const overwriteCheck = document.getElementById('overwrite');
+    const submitBtn = document.getElementById('submitBtn');
+    const progressSection = document.getElementById('progressSection');
+    const progressBar = document.getElementById('progressBar');
+    const resultsSection = document.getElementById('resultsSection');
+    
+    // Validate
+    if (!fundSelect.value) {
+        alert('Please select a fund');
+        return;
+    }
+    
+    // Disable form
+    submitBtn.disabled = true;
+    fundSelect.disabled = true;
+    overwriteCheck.disabled = true;
+    
+    // Show progress
+    progressSection.style.display = 'block';
+    resultsSection.style.display = 'none';
+    progressBar.style.width = '100%';
+    
+    try {
+        const response = await fetch('{% url "finance:create_budget_heads_from_config_ui" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                fund: fundSelect.value,
+                overwrite: overwriteCheck.checked
+            })
+        });
+        
+        const data = await response.json();
+        
+        // Hide progress
+        progressSection.style.display = 'none';
+        
+        // Show results
+        resultsSection.style.display = 'block';
+        
+        if (data.success) {
+            resultsSection.innerHTML = `
+                <div class="alert alert-success">
+                    <h5 class="alert-heading">
+                        <i class="bi bi-check-circle me-2"></i>Success!
+                    </h5>
+                    <hr>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <div class="h2 fw-bold text-success">${data.created}</div>
+                                <small>Created</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <div class="h2 fw-bold text-info">${data.updated}</div>
+                                <small>Updated</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <div class="h2 fw-bold text-muted">${data.skipped}</div>
+                                <small>Skipped</small>
+                            </div>
+                        </div>
+                    </div>
+                    ${data.errors && data.errors.length > 0 ? `
+                    <hr>
+                    <div class="mt-3">
+                        <strong>Errors:</strong>
+                        <ul class="mb-0 mt-2">
+                            ${data.errors.map(err => `<li class="text-danger small">${err}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
+                    <hr>
+                    <div class="mt-3">
+                        <a href="{% url 'budgeting:setup_coa_list' %}" class="btn btn-primary">
+                            <i class="bi bi-list-ul me-1"></i>View Budget Heads
+                        </a>
+                        <a href="{% url 'finance:coa_hub' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>Back to CoA Hub
+                        </a>
+                    </div>
+                </div>
+            `;
+        } else {
+            resultsSection.innerHTML = `
+                <div class="alert alert-danger">
+                    <h5 class="alert-heading">
+                        <i class="bi bi-exclamation-triangle me-2"></i>Error
+                    </h5>
+                    <p class="mb-0">${data.error}</p>
+                </div>
+            `;
+            // Re-enable form
+            submitBtn.disabled = false;
+            fundSelect.disabled = false;
+            overwriteCheck.disabled = false;
+        }
+        
+    } catch (error) {
+        progressSection.style.display = 'none';
+        resultsSection.style.display = 'block';
+        resultsSection.innerHTML = `
+            <div class="alert alert-danger">
+                <h5 class="alert-heading">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Error
+                </h5>
+                <p class="mb-0">An error occurred: ${error.message}</p>
+            </div>
+        `;
+        // Re-enable form
+        submitBtn.disabled = false;
+        fundSelect.disabled = false;
+        overwriteCheck.disabled = false;
+    }
+});
+</script>
+
+{% endblock %}
