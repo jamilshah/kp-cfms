@@ -529,7 +529,7 @@
     <div id="map"></div>
     
     <!-- Exit Fullscreen Button -->
-    <button id="exit-fullscreen" onclick="window.location.href='/property/map/'">
+    <button id="exit-fullscreen" onclick="window.location.href='{% url 'property:map' %}'">
         <i class="bi bi-x-lg"></i> Exit Fullscreen
     </button>
     
@@ -731,7 +731,7 @@
     
     <script>
     // Constants
-    const API_ENDPOINT = '/property/api/geojson/';
+    const API_ENDPOINT = "{% url 'property:api_geojson' %}";
     
     // Global variables
     let map;
@@ -867,41 +867,34 @@
                 fillOpacity: 0.8
             });
             
-            marker.on('click', function() {
-                fetch(`/property/api/property/${props.id}/`)
-                    .then(response => response.json())
-                    .then(data => {
-                        const name = escapeHtml(data.name || 'N/A');
-                        const type = escapeHtml(data.type || 'N/A');
-                        const status = escapeHtml(data.status || 'N/A');
-                        const area = escapeHtml(data.area_marlas || '0');
-                        const rent = escapeHtml(data.annual_rent || 'N/A');
-                        const district = escapeHtml(data.district || 'N/A');
-                        const mauza = escapeHtml(data.mauza || 'N/A');
-                        const popupContent = `
-                            <div style="padding: 12px; min-width: 250px;">
-                                <h6 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600;">${name}</h6>
-                                <div style="font-size: 12px; line-height: 1.8;">
-                                    <div><strong>Type:</strong> ${type}</div>
-                                    <div><strong>Status:</strong> <span style="color: ${props.color}; font-weight: 600;">${status}</span></div>
-                                    <div><strong>Area:</strong> ${area} marlas</div>
-                                    <div><strong>Annual Rent:</strong> PKR ${rent}</div>
-                                    <div><strong>District:</strong> ${district}</div>
-                                    <div><strong>Mauza:</strong> ${mauza}</div>
-                                </div>
-                                <div style="margin-top: 12px; display: flex; gap: 8px;">
-                                    <a href="/property/properties/${props.id}/" style="flex: 1; padding: 6px; background: #667eea; color: white; text-align: center; text-decoration: none; border-radius: 4px; font-size: 12px;">View</a>
-                                    <a href="/property/properties/${props.id}/edit/" style="flex: 1; padding: 6px; background: white; color: #667eea; border: 1px solid #667eea; text-align: center; text-decoration: none; border-radius: 4px; font-size: 12px;">Edit</a>
-                                </div>
-                            </div>
-                        `;
-                        marker.bindPopup(popupContent, { maxWidth: 300 }).openPopup();
-                    })
-                    .catch(error => {
-                        console.error('Error loading property details:', error);
-                        marker.bindPopup('<p>Error loading details</p>').openPopup();
-                    });
-            });
+            // Pre-bind popup with GeoJSON data for immediate display
+            const name = escapeHtml(props.name || 'N/A');
+            const type = escapeHtml(props.property_type_display || 'N/A');
+            const status = escapeHtml(props.status_display || 'N/A');
+            const area = escapeHtml(props.area_marlas || '0');
+            const rent = props.annual_rent ? `PKR ${Number(props.annual_rent).toLocaleString()}` : 'N/A';
+            const district = escapeHtml(props.district_name || 'N/A');
+            const mauza = escapeHtml(props.mauza_name || 'N/A');
+            
+            const popupContent = `
+                <div style="padding: 12px; min-width: 250px;">
+                    <h6 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600;">${name}</h6>
+                    <div style="font-size: 12px; line-height: 1.8;">
+                        <div><strong>Type:</strong> ${type}</div>
+                        <div><strong>Status:</strong> <span style="color: ${props.color}; font-weight: 600;">${status}</span></div>
+                        <div><strong>Area:</strong> ${area} marlas</div>
+                        <div><strong>Annual Rent:</strong> ${rent}</div>
+                        <div><strong>District:</strong> ${district}</div>
+                        <div><strong>Mauza:</strong> ${mauza}</div>
+                    </div>
+                    <div style="margin-top: 12px; display: flex; gap: 8px;">
+                        <a href="${'{% url "property:detail" 0 %}'.replace('/0/', `/${props.id}/`)}" style="flex: 1; padding: 6px; background: #667eea; color: white; text-align: center; text-decoration: none; border-radius: 4px; font-size: 12px;">View</a>
+                        <a href="${'{% url "property:update" 0 %}'.replace('/0/', `/${props.id}/`)}" style="flex: 1; padding: 6px; background: white; color: #667eea; border: 1px solid #667eea; text-align: center; text-decoration: none; border-radius: 4px; font-size: 12px;">Edit</a>
+                    </div>
+                </div>
+            `;
+            
+            marker.bindPopup(popupContent, { maxWidth: 300 });
             
             marker.bindTooltip(escapeHtml(props.name), {
                 permanent: false,
@@ -1157,7 +1150,7 @@
                     <strong>${escapeHtml(props.name)}</strong><br>
                     <small>Status: ${props.status_code || 'Unknown'}</small><br>
                     <small>Revenue: PKR ${(props.annual_rent || 0).toLocaleString()}</small><br>
-                    <a href="/property/properties/${props.id}/" style="margin-top: 8px; display: inline-block; padding: 4px 12px; background: ${color}; color: white; text-decoration: none; border-radius: 4px; font-size: 12px;">Investigate</a>
+                    <a href="${'{% url "property:detail" 0 %}'.replace('/0/', `/${props.id}/`)}" style="margin-top: 8px; display: inline-block; padding: 4px 12px; background: ${color}; color: white; text-decoration: none; border-radius: 4px; font-size: 12px;">Investigate</a>
                 </div>
             `);
             

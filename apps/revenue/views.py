@@ -242,7 +242,7 @@ class DemandListView(LoginRequiredMixin, ListView):
         ).select_related(
             'payer',
             'budget_head',
-            'budget_head__global_head',
+            'budget_head__nam_head',
             'budget_head__function',
             'fiscal_year',
             'posted_by',
@@ -546,7 +546,7 @@ class CollectionListView(LoginRequiredMixin, ListView):
             'demand',
             'demand__payer',
             'demand__budget_head',
-            'demand__budget_head__global_head',
+            'demand__budget_head__nam_head',
             'demand__fiscal_year',
             'bank_account',
             'bank_account__gl_code',
@@ -832,10 +832,10 @@ def load_revenue_heads(request):
     
     # Base queryset
     budget_heads = BudgetHead.objects.filter(
-        global_head__account_type=AccountType.REVENUE,
+        nam_head__account_type=AccountType.REVENUE,
         posting_allowed=True,
         is_active=True
-    ).select_related('global_head', 'function', 'department').order_by('global_head__name', 'global_head__code')
+    ).select_related('nam_head', 'function', 'department').order_by('nam_head__name', 'nam_head__code')
     
     # PRIMARY FILTER: Use both department + function for most precise results
     if department_id and function_id:
@@ -898,7 +898,7 @@ class DemandExportView(LoginRequiredMixin, View):
         ).select_related(
             'payer',
             'budget_head',
-            'budget_head__global_head',
+            'budget_head__nam_head',
             'fiscal_year',
             'posted_by'
         ).order_by('-issue_date')
@@ -960,8 +960,8 @@ class DemandExportView(LoginRequiredMixin, View):
                 demand.fiscal_year.year_name,
                 demand.payer.name,
                 demand.payer.cnic_ntn or '',
-                demand.budget_head.global_head.code,
-                demand.budget_head.global_head.name,
+                demand.budget_head.nam_head.code,
+                demand.budget_head.nam_head.name,
                 demand.issue_date.strftime('%Y-%m-%d'),
                 demand.due_date.strftime('%Y-%m-%d'),
                 float(demand.amount),
@@ -1016,8 +1016,8 @@ class DemandExportView(LoginRequiredMixin, View):
             ws.cell(row=row_num, column=2).value = demand.fiscal_year.year_name
             ws.cell(row=row_num, column=3).value = demand.payer.name
             ws.cell(row=row_num, column=4).value = demand.payer.cnic_ntn or ''
-            ws.cell(row=row_num, column=5).value = demand.budget_head.global_head.code
-            ws.cell(row=row_num, column=6).value = demand.budget_head.global_head.name
+            ws.cell(row=row_num, column=5).value = demand.budget_head.nam_head.code
+            ws.cell(row=row_num, column=6).value = demand.budget_head.nam_head.name
             ws.cell(row=row_num, column=7).value = demand.issue_date
             ws.cell(row=row_num, column=8).value = demand.due_date
             ws.cell(row=row_num, column=9).value = float(demand.amount)
@@ -1076,7 +1076,7 @@ class CollectionExportView(LoginRequiredMixin, View):
             'demand',
             'demand__payer',
             'demand__budget_head',
-            'demand__budget_head__global_head',
+            'demand__budget_head__nam_head',
             'demand__fiscal_year',
             'bank_account',
             'posted_by'
@@ -1137,7 +1137,7 @@ class CollectionExportView(LoginRequiredMixin, View):
                 collection.receipt_date.strftime('%Y-%m-%d'),
                 collection.demand.challan_no,
                 collection.demand.payer.name,
-                collection.demand.budget_head.global_head.name,
+                collection.demand.budget_head.nam_head.name,
                 collection.bank_account.title,
                 collection.get_instrument_type_display(),
                 collection.instrument_no or '',
@@ -1190,7 +1190,7 @@ class CollectionExportView(LoginRequiredMixin, View):
             ws.cell(row=row_num, column=2).value = collection.receipt_date
             ws.cell(row=row_num, column=3).value = collection.demand.challan_no
             ws.cell(row=row_num, column=4).value = collection.demand.payer.name
-            ws.cell(row=row_num, column=5).value = collection.demand.budget_head.global_head.name
+            ws.cell(row=row_num, column=5).value = collection.demand.budget_head.nam_head.name
             ws.cell(row=row_num, column=6).value = collection.bank_account.title
             ws.cell(row=row_num, column=7).value = collection.get_instrument_type_display()
             ws.cell(row=row_num, column=8).value = collection.instrument_no or ''

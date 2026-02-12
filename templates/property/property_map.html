@@ -362,7 +362,7 @@
         <button class="map-btn" id="locate-me">
             <i class="bi bi-geo-alt"></i> My Location
         </button>
-        <button class="map-btn" id="fullscreen" onclick="window.location.href='/property/map/fullscreen/'">
+        <button class="map-btn" id="fullscreen" onclick="window.location.href='{% url 'property:map_fullscreen' %}'">
             <i class="bi bi-arrows-fullscreen"></i> Fullscreen Mode
         </button>
     </div>
@@ -784,67 +784,58 @@
                 fillOpacity: 0.8
             });
             
-            // Lazy popup creation - only build when user clicks
-            marker.on('click', function() {
-                // Fetch full property details on-demand
-                fetch(`/property/api/property/${props.id}/`)
-                    .then(response => response.json())
-                    .then(data => {
-                        const name = escapeHtml(data.name || 'N/A');
-                        const type = escapeHtml(data.type || 'N/A');
-                        const status = escapeHtml(data.status || 'N/A');
-                        const area = escapeHtml(data.area_marlas || '0');
-                        const rent = escapeHtml(data.annual_rent || 'N/A');
-                        const district = escapeHtml(data.district || 'N/A');
-                        const mauza = escapeHtml(data.mauza || 'N/A');
-                        const popupContent = `
-                            <div class="popup-header">
-                                <h6 class="mb-0">${name}</h6>
-                            </div>
-                            <div class="popup-body">
-                                <div class="popup-row">
-                                    <span class="popup-label">Type:</span>
-                                    <span class="popup-value">${type}</span>
-                                </div>
-                                <div class="popup-row">
-                                    <span class="popup-label">Status:</span>
-                                    <span class="popup-value badge" style="background: ${props.color};">${status}</span>
-                                </div>
-                                <div class="popup-row">
-                                    <span class="popup-label">Area:</span>
-                                    <span class="popup-value">${area} marlas</span>
-                                </div>
-                                <div class="popup-row">
-                                    <span class="popup-label">Annual Rent:</span>
-                                    <span class="popup-value">PKR ${rent}</span>
-                                </div>
-                                <div class="popup-row">
-                                    <span class="popup-label">District:</span>
-                                    <span class="popup-value">${district}</span>
-                                </div>
-                                <div class="popup-row">
-                                    <span class="popup-label">Mauza:</span>
-                                    <span class="popup-value">${mauza}</span>
-                                </div>
-                            </div>
-                            <div class="popup-actions">
-                                <a href="/property/properties/${props.id}/" class="btn btn-sm btn-primary flex-fill">
-                                    <i class="bi bi-eye"></i> View
-                                </a>
-                                <a href="/property/properties/${props.id}/edit/" class="btn btn-sm btn-outline-primary flex-fill">
-                                    <i class="bi bi-pencil"></i> Edit
-                                </a>
-                            </div>
-                        `;
-                        marker.bindPopup(popupContent, {
-                            maxWidth: 300,
-                            className: 'custom-popup'
-                        }).openPopup();
-                    })
-                    .catch(error => {
-                        console.error('Error loading property details:', error);
-                        marker.bindPopup(`<p>Error loading details</p>`).openPopup();
-                    });
+            // Pre-bind popup with GeoJSON data for immediate display
+            const name = escapeHtml(props.name || 'N/A');
+            const type = escapeHtml(props.property_type_display || 'N/A');
+            const status = escapeHtml(props.status_display || 'N/A');
+            const area = escapeHtml(props.area_marlas || '0');
+            const rent = props.annual_rent ? `PKR ${Number(props.annual_rent).toLocaleString()}` : 'N/A';
+            const district = escapeHtml(props.district_name || 'N/A');
+            const mauza = escapeHtml(props.mauza_name || 'N/A');
+            
+            const popupContent = `
+                <div class="popup-header">
+                    <h6 class="mb-0">${name}</h6>
+                </div>
+                <div class="popup-body">
+                    <div class="popup-row">
+                        <span class="popup-label">Type:</span>
+                        <span class="popup-value">${type}</span>
+                    </div>
+                    <div class="popup-row">
+                        <span class="popup-label">Status:</span>
+                        <span class="popup-value badge" style="background: ${props.color};">${status}</span>
+                    </div>
+                    <div class="popup-row">
+                        <span class="popup-label">Area:</span>
+                        <span class="popup-value">${area} marlas</span>
+                    </div>
+                    <div class="popup-row">
+                        <span class="popup-label">Annual Rent:</span>
+                        <span class="popup-value">${rent}</span>
+                    </div>
+                    <div class="popup-row">
+                        <span class="popup-label">District:</span>
+                        <span class="popup-value">${district}</span>
+                    </div>
+                    <div class="popup-row">
+                        <span class="popup-label">Mauza:</span>
+                        <span class="popup-value">${mauza}</span>
+                    </div>
+                </div>
+                <div class="popup-actions">
+                    <a href="${'{% url "property:detail" 0 %}'.replace('/0/', `/${props.id}/`)}" class="btn btn-sm btn-primary flex-fill">
+                        <i class="bi bi-eye"></i> View
+                    </a>
+                    <a href="${'{% url "property:update" 0 %}'.replace('/0/', `/${props.id}/`)}" class="btn btn-sm btn-outline-primary flex-fill">
+                        <i class="bi bi-pencil"></i> Edit
+                    </a>
+                </div>
+            `;
+            
+            marker.bindPopup(popupContent, {
+                maxWidth: 300,
+                className: 'custom-popup'
             });
             
             // Add simple tooltip for quick info (no API call needed)
@@ -1062,17 +1053,17 @@
                         <strong>${escapeHtml(feature.properties.name)}</strong><br>
                         <span style="color: ${borderColor};">Severity: ${severity}</span><br>
                         <hr style="margin: 8px 0;">
-                        Status: <strong>${escapeHtml(feature.properties.status || 'N/A')}</strong><br>
+                        Status: <strong>${escapeHtml(feature.properties.status_display || 'N/A')}</strong><br>
                         Annual Rent: <strong>PKR ${rent.toLocaleString()}</strong><br>
-                        Type: ${escapeHtml(feature.properties.type || 'N/A')}<br>
-                        District: ${escapeHtml(feature.properties.district || 'N/A')}<br>
+                        Type: ${escapeHtml(feature.properties.property_type_display || 'N/A')}<br>
+                        District: ${escapeHtml(feature.properties.district_name || 'N/A')}<br>
                         <hr style="margin: 8px 0;">
                         <small style="color: #666;">
                             ${rent === 0 ? '⚠️ No revenue generated' : ''}
                             ${status === 'VACANT' ? '⚠️ Property vacant' : ''}
                         </small>
                         <div style="margin-top: 10px;">
-                            <a href="/property/properties/${feature.properties.id}/" class="btn btn-sm btn-outline-danger" style="text-decoration: none;">
+                            <a href="${'{% url "property:detail" 0 %}'.replace('/0/', `/${feature.properties.id}/`)}" class="btn btn-sm btn-outline-danger" style="text-decoration: none;">
                                 Investigate →
                             </a>
                         </div>
