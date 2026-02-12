@@ -1085,10 +1085,14 @@ class PropertyMapFullscreenView(LoginRequiredMixin, PropertyManagerRequiredMixin
         return context
 
 
-class PropertyGeoJSONAPIView(LoginRequiredMixin, PropertyManagerRequiredMixin, View):
+class PropertyGeoJSONAPIView(LoginRequiredMixin, View):
     """API endpoint to return properties as GeoJSON for map rendering."""
     
     def get(self, request, *args, **kwargs):
+        # Check permissions - return JSON for permission errors
+        if not (request.user.is_superuser or request.user.has_any_role(['PROPERTY_MANAGER', 'SUPER_ADMIN'])):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
         try:
             user = request.user
             
@@ -1128,9 +1132,11 @@ class PropertyGeoJSONAPIView(LoginRequiredMixin, PropertyManagerRequiredMixin, V
             # Filter only properties with valid GPS coordinates
             properties = properties.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
             
-            # Add pagination - limit to 1000 properties for performance
-            limit = int(request.GET.get('limit', 1000))
-            properties = properties[:limit]
+            # Apply pagination limit if specified, otherwise load all (organization filtering keeps this manageable)
+            # Note: With 132 TMAs, total properties could reach 400K+, but TMA users only see their own properties
+            limit = request.GET.get('limit')
+            if limit:
+                properties = properties[:int(limit)]
             
             # Optimize query - select only needed fields
             properties = properties.select_related('district', 'mauza', 'organization').only(
@@ -1169,12 +1175,13 @@ class PropertyGeoJSONAPIView(LoginRequiredMixin, PropertyManagerRequiredMixin, V
                             'id': prop.id,
                             'name': prop.name or 'N/A',
                             'status_code': prop.status or '',
-                            'status': prop.get_status_display() if prop.status else '',
-                            'type': prop.get_property_type_display() if prop.property_type else '',
+                            'status_display': prop.get_status_display() if prop.status else 'N/A',
+                            'property_type_display': prop.get_property_type_display() if prop.property_type else 'N/A',
+                            'area_marlas': str(prop.area_marlas) if prop.area_marlas else '0',
                             'annual_rent': float(annual_rent_val),
                             'color': color,
-                            'district': prop.district.name if prop.district else '',
-                            'mauza': prop.mauza.name if prop.mauza else '',
+                            'district_name': prop.district.name if prop.district else 'N/A',
+                            'mauza_name': prop.mauza.name if prop.mauza else 'N/A',
                         }
                     }
                     features.append(feature)
@@ -1199,10 +1206,14 @@ class PropertyGeoJSONAPIView(LoginRequiredMixin, PropertyManagerRequiredMixin, V
             }, status=500)
 
 
-class PropertyDetailAPIView(LoginRequiredMixin, PropertyManagerRequiredMixin, View):
+class PropertyDetailAPIView(LoginRequiredMixin, View):
     """API endpoint to return detailed property information."""
     
     def get(self, request, pk, *args, **kwargs):
+        # Check permissions - return JSON for permission errors
+        if not (request.user.is_superuser or request.user.has_any_role(['PROPERTY_MANAGER', 'SUPER_ADMIN'])):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
         try:
             prop = Property.objects.select_related(
                 'district', 'mauza', 'village', 'organization'
@@ -1250,8 +1261,15 @@ class PropertyDetailAPIView(LoginRequiredMixin, PropertyManagerRequiredMixin, Vi
             return JsonResponse({'error': 'Failed to load property details', 'details': str(e)}, status=500)
 
 
-class PropertyStatsAPIView(LoginRequiredMixin, PropertyManagerRequiredMixin, View):
+class PropertyStatsAPIView(LoginRequiredMixin, View):
     """API endpoint to return property statistics for dashboard widgets."""
+    
+    def get(self, request, *args, **kwargs):
+        # Check permissions - return JSON for permission errors
+        if not (request.user.is_superuser or request.user.has_any_role(['PROPERTY_MANAGER', 'SUPER_ADMIN'])):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+        return super().get(request, *args, **kwargs)
     
     def get(self, request, *args, **kwargs):
         try:

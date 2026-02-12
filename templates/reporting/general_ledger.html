@@ -24,7 +24,7 @@
                         <option value="">All Accounts</option>
                         {% if selected_budget_head %}
                         <option value="{{ selected_budget_head.id }}" selected>
-                            {{ selected_budget_head.global_head.code }} - {{ selected_budget_head.global_head.name }}
+                            {{ selected_budget_head.nam_head.code }} - {{ selected_budget_head.nam_head.name }}
                         </option>
                         {% endif %}
                     </select>
@@ -53,7 +53,7 @@
     <div class="card">
         <div class="card-header bg-white d-flex justify-content-between align-items-center">
             <div>
-                <strong>{{ selected_budget_head.global_head.code }} - {{ selected_budget_head.global_head.name }}</strong>
+                <strong>{{ selected_budget_head.nam_head.code }} - {{ selected_budget_head.nam_head.name }}</strong>
                 <br>
                 <small class="text-muted">
                     {% if filter_date_from and filter_date_to %}
@@ -62,7 +62,7 @@
                 </small>
             </div>
             <div>
-                <span class="badge bg-info">{{ selected_budget_head.global_head.account_type }}</span>
+                <span class="badge bg-info">{{ selected_budget_head.nam_head.account_type }}</span>
             </div>
         </div>
         <div class="card-body">
@@ -171,8 +171,8 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <small class="text-muted">{{ item.entry.budget_head.global_head.code }}</small><br>
-                                {{ item.entry.budget_head.global_head.name|truncatewords:8 }}
+                                <small class="text-muted">{{ item.entry.budget_head.nam_head.code }}</small><br>
+                                {{ item.entry.budget_head.nam_head.name|truncatewords:8 }}
                             </td>
                             <td>{{ item.entry.description|truncatewords:12 }}</td>
                             <td class="text-end">

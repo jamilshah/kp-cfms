@@ -52,12 +52,12 @@ class GeneralLedgerView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
         if budget_head_id:
             try:
                 budget_head = BudgetHead.objects.select_related(
-                    'global_head', 'fund', 'function'
+                    'nam_head', 'fund', 'function'
                 ).get(pk=budget_head_id)
                 context['selected_budget_head'] = budget_head
                 
                 # Cache account type to avoid repeated lookups
-                account_type = budget_head.global_head.account_type
+                account_type = budget_head.nam_head.account_type
                 is_debit_account = account_type in ['AST', 'EXP']
                 
                 # Build query with optimized select_related
@@ -106,7 +106,7 @@ class GeneralLedgerView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
             entries_query = JournalEntry.objects.filter(
                 voucher__is_posted=True,
                 voucher__organization=organization
-            ).select_related('voucher', 'budget_head', 'budget_head__global_head', 'budget_head__function')
+            ).select_related('voucher', 'budget_head', 'budget_head__nam_head', 'budget_head__function')
             
             # Apply date filters
             if date_from:
@@ -161,7 +161,7 @@ class TrialBalanceView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
         # IMPORTANT: Include inactive heads ONLY if they have posted transactions
         # This maintains trial balance integrity while hiding unused inactive accounts
         budget_heads = BudgetHead.objects.select_related(
-            'global_head', 'fund', 'function'
+            'nam_head', 'fund', 'function'
         ).annotate(
             total_debit=Coalesce(
                 Sum('journal_entries__debit',
@@ -179,7 +179,7 @@ class TrialBalanceView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
             )
         ).filter(
             Q(total_debit__gt=0) | Q(total_credit__gt=0)
-        ).order_by('fund', 'function__code', 'global_head__code')
+        ).order_by('fund', 'function__code', 'nam_head__code')
         
         # Calculate balances and categorize
         accounts_data = []
@@ -188,7 +188,7 @@ class TrialBalanceView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
         
         for head in budget_heads:
             # Calculate net balance based on account type
-            if head.global_head.account_type in ['AST', 'EXP']:
+            if head.nam_head.account_type in ['AST', 'EXP']:
                 # Debit balance accounts
                 balance = head.total_debit - head.total_credit
                 if balance > 0:
@@ -258,7 +258,7 @@ class AccountStatementView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
         if budget_head_id and date_from and date_to:
             try:
                 budget_head = BudgetHead.objects.select_related(
-                    'global_head', 'fund', 'function'
+                    'nam_head', 'fund', 'function'
                 ).get(pk=budget_head_id)
                 context['selected_budget_head'] = budget_head
                 context['filter_date_from'] = date_from
@@ -279,7 +279,7 @@ class AccountStatementView(LoginRequiredMixin, TenantAwareMixin, TemplateView):
                 )
                 
                 # Cache account type
-                account_type = budget_head.global_head.account_type
+                account_type = budget_head.nam_head.account_type
                 is_debit_account = account_type in ['AST', 'EXP']
                 
                 if is_debit_account:
